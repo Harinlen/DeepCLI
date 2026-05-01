@@ -1,0 +1,83 @@
+# Ad-hoc scripts dumping ground (not version-controlled)
+scripts/
+!src/cli/scripts/
+!src/cli/scripts/**
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Node
+node_modules/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# uv
+uv.lock
+
+# Testing & coverage
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+.pytest_kernel_stderr*.log
+.pytest_repl_kernel_stderr.log
+
+# Type checking
+.mypy_cache/
+.pyright/
+.pytype/
+
+# Linting
+.ruff_cache/
+
+# IDE / AI agents
+.vscode/
+.idea/
+.codex
+.claude/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# MCP config (local dev, not committed)
+.mcp.json
+
+# Mustang runtime (worktrees, state, secrets)
+.mustang/
+
+# Local config (not checked in)
+MUSTANG.local.md
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# SQLite databases (session storage)
+*.db
+*.db-journal
+*.db-wal
+
+# Local test scripts — MCP servers, fixtures, throwaway scripts (see docs/planning/test-scripts.md)
+.test_scripts/
+
+# Daemon
+.auth_token
+
+# Local reference-project paths (per-machine, see .mustang-refs.example.yaml)
+.mustang-refs.yaml

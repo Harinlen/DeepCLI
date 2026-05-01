@@ -1,0 +1,1 @@
+For simple, directed codebase searches (e.g. for a specific file/class/function) use the Glob or Grep directly.

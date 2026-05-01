@@ -1,0 +1,94 @@
+/**
+ * DeepCLI — ACP TUI client.
+ *
+ * Runtime boundary: the CLI talks to the kernel only through WebSocket ACP.
+ */
+
+import chalk from "chalk";
+import { KernelNotRunning } from "@/acp/client.js";
+import { ConfigError, loadCliConfig } from "@/config/loader.js";
+import { InteractiveMode } from "@/modes/interactive.js";
+import { SessionService } from "@/sessions/service.js";
+import { connectKernel } from "@/startup/connect.js";
+import { ArgError, parseCliArgs, usage } from "@/startup/args.js";
+import { resolveStartupSession } from "@/startup/session-startup.js";
+import { applyThemeConfig } from "@/startup/theme.js";
+
+async function main(): Promise<void> {
+  let args;
+  try {
+    args = parseCliArgs();
+  } catch (error) {
+    if (error instanceof ArgError) {
+      console.error(chalk.red(error.message));
+      console.error(usage());
+      process.exit(2);
+    }
+    throw error;
+  }
+
+  if (args.help) {
+    console.log(usage());
+    return;
+  }
+
+  let loaded;
+  try {
+    loaded = loadCliConfig({ args });
+  } catch (error) {
+    if (error instanceof ConfigError) {
+      console.error(chalk.red(error.message));
+      process.exit(1);
+    }
+    throw error;
+  }
+
+  const themeResult = await applyThemeConfig(loaded.config);
+  if (themeResult.warning) console.error(chalk.yellow(themeResult.warning));
+
+  let connection;
+  try {
+    connection = await connectKernel(loaded.config);
+  } catch (error) {
+    if (error instanceof KernelNotRunning) {
+      console.error(chalk.red(error.message));
+    } else {
+      console.error(chalk.red(`Connection failed: ${(error as Error).message}`));
+    }
+    process.exit(1);
+  }
+
+  const service = new SessionService(connection.client);
+  const startup = await resolveStartupSession(service, args, loaded.config);
+  if (startup.warning) console.error(chalk.yellow(startup.warning));
+
+  if (args.prompt || args.print) {
+    await runPrintPrompt(startup.session, args.prompt ?? "");
+    connection.client.close();
+    connection.autostarted?.stop();
+    return;
+  }
+
+  await new InteractiveMode(connection.client, startup.session, {
+    sessionService: service,
+    recentSessions: startup.recentSessions.slice(0, loaded.config.ui.welcome_recent),
+    theme: loaded.config.ui,
+  }).run();
+
+  connection.autostarted?.stop();
+}
+
+async function runPrintPrompt(session: { prompt(text: string, onUpdate: (update: any) => void): Promise<unknown> }, prompt: string): Promise<void> {
+  if (!prompt.trim()) return;
+  await session.prompt(prompt, (update) => {
+    if (update.sessionUpdate === "agent_message_chunk" && typeof update.content?.text === "string") {
+      process.stdout.write(update.content.text);
+    }
+  });
+  process.stdout.write("\n");
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

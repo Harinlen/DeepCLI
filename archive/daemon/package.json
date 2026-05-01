@@ -1,0 +1,8 @@
+{
+  "name": "mustang-daemon-runtime",
+  "private": true,
+  "description": "Native runtime dependencies for the Mustang daemon (browser tool, etc.)",
+  "dependencies": {
+    "agent-browser": "^0.25.3"
+  }
+}

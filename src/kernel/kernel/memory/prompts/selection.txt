@@ -1,0 +1,19 @@
+You are selecting memories relevant to a user's query.
+
+Given the following memory manifest organized by category, select the most relevant memories.
+
+## Memory Manifest
+{{MANIFEST}}
+
+## User Query
+{{QUERY}}
+
+## Instructions
+- Select up to {{TOP_N}} most relevant memories
+- Return a JSON array: [{"alias": <int>, "relevance": <1-5>, "reason": "<one line>"}]
+- relevance 5 = critical to answering the query, 1 = barely relevant
+- Newer memories preferred when relevance is similar
+- Ensure topic diversity across categories — avoid selecting multiple memories about the same topic
+- Profile memories are almost always relevant for personalization queries
+- Cross-validate: if two memories contradict each other, note it in the reason field
+- Return ONLY the JSON array, no other text

@@ -1,0 +1,1 @@
+Delete a scheduled cron job by ID.

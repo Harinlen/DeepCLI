@@ -1,0 +1,1 @@
+Start a background monitor that streams stdout events from a shell command. Each batch of new output lines becomes a system reminder notification, allowing you to continue working while receiving real-time updates. Use for tail -f, kubectl logs, watch, or any long-running stream.

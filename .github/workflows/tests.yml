@@ -1,0 +1,45 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      - name: Run tests with coverage
+        run: uv run pytest tests/ -q --tb=short --cov=kernel --cov-report=json:coverage.json
+
+      - name: Update coverage badge
+        if: github.ref == 'refs/heads/main'
+        run: |
+          COV=$(python3 -c "import json; print(round(json.load(open('coverage.json'))['totals']['percent_covered'], 1))")
+          echo "Coverage: ${COV}%"
+
+          if python3 -c "exit(0 if float('$COV') >= 80 else 1)"; then COLOR=brightgreen
+          elif python3 -c "exit(0 if float('$COV') >= 60 else 1)"; then COLOR=green
+          elif python3 -c "exit(0 if float('$COV') >= 40 else 1)"; then COLOR=yellow
+          else COLOR=red; fi
+
+          curl -s -X PATCH \
+            -H "Authorization: token ${{ secrets.GIST_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/gists/1b23b9cda527690c61fb08082ac7e1b3" \
+            -d @- <<PAYLOAD
+          {"files":{"coverage.json":{"content":"{\"schemaVersion\":1,\"label\":\"Coverage\",\"message\":\"${COV}%\",\"color\":\"${COLOR}\"}"}}}
+          PAYLOAD

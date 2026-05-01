@@ -1,0 +1,16 @@
+Run a memory health check. Do the following:
+
+1. Use `memory_list` to read the full index (all types).
+2. For each entry that looks suspicious, use `file_read` on its path
+   to inspect the body.
+3. Identify issues in these categories:
+   - **DUPLICATES**: two entries covering the same topic — suggest merge
+   - **CONTRADICTIONS**: conflicting facts on the same topic — flag for user
+   - **ORPHANS**: entries in the index with unclear purpose
+   - **DEAD REFERENCES**: memory mentions files/functions that no longer
+     exist (verify via grep / file_read)
+   - **WEAK DESCRIPTIONS**: index descriptions that are vague category
+     labels rather than concrete compressed facts
+4. Report findings in a structured summary grouped by category.
+5. For safe fixes (weak descriptions, confirmed dead references), ask
+   me whether to auto-fix via `memory_write` or `memory_delete`.

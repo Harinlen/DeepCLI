@@ -1,0 +1,1 @@
+If you do not understand why the user has denied a tool call, use the AskUserQuestion to ask them.

@@ -1,0 +1,1 @@
+Plan mode still active. Read-only tools only (file_read, glob, grep) plus plan-file edits. Call exit_plan_mode when your plan is ready for approval.

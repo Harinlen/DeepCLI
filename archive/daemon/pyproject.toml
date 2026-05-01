@@ -1,0 +1,27 @@
+[project]
+name = "mustang-daemon"
+version = "0.1.0"
+description = "Mustang daemon — local AI assistant backend"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "pydantic>=2.10",
+    "pyyaml>=6.0",
+    "openai>=1.60",
+    "anthropic>=0.40",
+    "boto3>=1.35",
+    "httpx>=0.28",
+    "Pillow>=10",
+    "beautifulsoup4>=4.12",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["daemon"]
+
+[project.scripts]
+mustang-daemon = "daemon.app:main"

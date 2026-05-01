@@ -1,0 +1,1 @@
+Send a message to a named agent (running or stopped) or to another session.  Use this to continue a conversation with a previously spawned background agent.

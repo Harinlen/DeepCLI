@@ -1,0 +1,1477 @@
+{
+  "version": 1,
+  "description": "Manifest for on-demand oh-my-pi files ported into DeepCLI. Phase B0 intentionally ports no UI files.",
+  "upstreamRoot": "/home/saki/Documents/alex/oh-my-pi",
+  "managedRoots": [
+    "src/cli/src/active-port"
+  ],
+  "bulkVendorDenylist": [
+    "src/cli/vendor",
+    "src/cli/third_party",
+    "src/cli/oh-my-pi",
+    "src/cli/packages"
+  ],
+  "localAssets": [
+    "src/cli/src/active-port/coding-agent/modes/components/welcome-logo.txt"
+  ],
+  "ports": [
+    {
+      "upstream": "packages/coding-agent/src/config/keybindings.ts",
+      "target": "src/cli/src/active-port/coding-agent/config/keybindings.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/config/model-registry.ts",
+      "target": "src/cli/src/active-port/coding-agent/config/model-registry.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/config/model-resolver.ts",
+      "target": "src/cli/src/active-port/coding-agent/config/model-resolver.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/config/settings-schema.ts",
+      "target": "src/cli/src/active-port/coding-agent/config/settings-schema.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/config/settings.ts",
+      "target": "src/cli/src/active-port/coding-agent/config/settings.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/debug/index.ts",
+      "target": "src/cli/src/active-port/coding-agent/debug/index.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/debug/log-formatting.ts",
+      "target": "src/cli/src/active-port/coding-agent/debug/log-formatting.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/debug/log-viewer.ts",
+      "target": "src/cli/src/active-port/coding-agent/debug/log-viewer.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/debug/profiler.ts",
+      "target": "src/cli/src/active-port/coding-agent/debug/profiler.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/debug/report-bundle.ts",
+      "target": "src/cli/src/active-port/coding-agent/debug/report-bundle.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/debug/system-info.ts",
+      "target": "src/cli/src/active-port/coding-agent/debug/system-info.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/edit/index.ts",
+      "target": "src/cli/src/active-port/coding-agent/edit/index.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/export/custom-share.ts",
+      "target": "src/cli/src/active-port/coding-agent/export/custom-share.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/extensibility/extensions/index.ts",
+      "target": "src/cli/src/active-port/coding-agent/extensibility/extensions/index.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/extensibility/extensions/types.ts",
+      "target": "src/cli/src/active-port/coding-agent/extensibility/extensions/types.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/extensibility/slash-commands.ts",
+      "target": "src/cli/src/active-port/coding-agent/extensibility/slash-commands.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/internal-urls/index.ts",
+      "target": "src/cli/src/active-port/coding-agent/internal-urls/index.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/ipy/gateway-coordinator.ts",
+      "target": "src/cli/src/active-port/coding-agent/ipy/gateway-coordinator.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/lsp/startup-events.ts",
+      "target": "src/cli/src/active-port/coding-agent/lsp/startup-events.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/mcp/index.ts",
+      "target": "src/cli/src/active-port/coding-agent/mcp/index.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/agent-dashboard.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/agent-dashboard.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/assistant-message.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/assistant-message.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/bash-execution.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/bash-execution.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/bordered-loader.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/bordered-loader.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/countdown-timer.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/countdown-timer.ts",
+      "phase": "B1",
+      "notes": "hook input runtime dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/custom-editor.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/custom-editor.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/diff.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/diff.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/dynamic-border.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/dynamic-border.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/extensions/extension-dashboard.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/extensions/extension-dashboard.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/extensions/extension-list.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/extensions/extension-list.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/extensions/index.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/extensions/index.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/extensions/inspector-panel.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/extensions/inspector-panel.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/extensions/state-manager.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/extensions/state-manager.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/extensions/types.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/extensions/types.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/history-search.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/history-search.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/hook-editor.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/hook-editor.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/hook-input.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/hook-input.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/hook-selector.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/hook-selector.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/model-selector.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/model-selector.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/oauth-selector.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/oauth-selector.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/plugin-selector.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/plugin-selector.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/python-execution.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/python-execution.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/read-tool-group.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/read-tool-group.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/session-observer-overlay.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/session-observer-overlay.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/session-selector.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/session-selector.ts",
+      "phase": "D2",
+      "notes": "DeepCLI ACP adapter; no upstream FileSessionStorage calls"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/settings-selector.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/settings-selector.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/status-line.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/status-line.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/status-line/context-thresholds.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/status-line/context-thresholds.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/status-line/git-utils.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/status-line/git-utils.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/status-line/presets.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/status-line/presets.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/status-line/segments.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/status-line/segments.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/status-line/separators.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/status-line/separators.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/status-line/token-rate.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/status-line/token-rate.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/status-line/types.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/status-line/types.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/todo-reminder.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/todo-reminder.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/tool-execution.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/tool-execution.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/tree-selector.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/tree-selector.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/ttsr-notification.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/ttsr-notification.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/user-message-selector.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/user-message-selector.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/visual-truncate.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/visual-truncate.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/components/welcome.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/welcome.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/controllers/btw-controller.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/controllers/btw-controller.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/controllers/command-controller.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/controllers/command-controller.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/controllers/event-controller.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/controllers/event-controller.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/controllers/extension-ui-controller.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/controllers/extension-ui-controller.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/controllers/input-controller.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/controllers/input-controller.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/controllers/mcp-command-controller.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/controllers/mcp-command-controller.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/controllers/selector-controller.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/controllers/selector-controller.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/controllers/ssh-command-controller.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/controllers/ssh-command-controller.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/interactive-mode.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/interactive-mode.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/oauth-manual-input.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/oauth-manual-input.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/prompt-action-autocomplete.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/prompt-action-autocomplete.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/session-observer-registry.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/session-observer-registry.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/shared.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/shared.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/dark.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/dark.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/alabaster.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/alabaster.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/amethyst.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/amethyst.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/anthracite.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/anthracite.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/basalt.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/basalt.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/birch.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/birch.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-abyss.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-abyss.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-arctic.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-arctic.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-aurora.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-aurora.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-catppuccin.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-catppuccin.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-cavern.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-cavern.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-copper.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-copper.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-cosmos.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-cosmos.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-cyberpunk.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-cyberpunk.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-dracula.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-dracula.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-eclipse.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-eclipse.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-ember.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-ember.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-equinox.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-equinox.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-forest.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-forest.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-github.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-github.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-gruvbox.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-gruvbox.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-lavender.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-lavender.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-lunar.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-lunar.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-midnight.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-midnight.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-monochrome.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-monochrome.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-monokai.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-monokai.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-nebula.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-nebula.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-nord.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-nord.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-ocean.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-ocean.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-one.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-one.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-poimandres.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-poimandres.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-rainforest.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-rainforest.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-reef.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-reef.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-retro.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-retro.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-rose-pine.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-rose-pine.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-sakura.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-sakura.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-slate.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-slate.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-solarized.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-solarized.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-solstice.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-solstice.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-starfall.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-starfall.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-sunset.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-sunset.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-swamp.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-swamp.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-synthwave.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-synthwave.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-taiga.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-taiga.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-terminal.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-terminal.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-tokyo-night.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-tokyo-night.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-tundra.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-tundra.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-twilight.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-twilight.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/dark-volcanic.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/dark-volcanic.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/graphite.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/graphite.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/index.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/index.ts",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-arctic.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-arctic.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-aurora-day.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-aurora-day.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-canyon.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-canyon.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-catppuccin.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-catppuccin.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-cirrus.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-cirrus.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-coral.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-coral.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-cyberpunk.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-cyberpunk.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-dawn.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-dawn.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-dunes.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-dunes.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-eucalyptus.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-eucalyptus.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-forest.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-forest.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-frost.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-frost.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-github.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-github.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-glacier.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-glacier.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-gruvbox.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-gruvbox.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-haze.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-haze.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-honeycomb.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-honeycomb.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-lagoon.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-lagoon.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-lavender.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-lavender.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-meadow.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-meadow.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-mint.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-mint.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-monochrome.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-monochrome.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-ocean.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-ocean.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-one.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-one.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-opal.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-opal.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-orchard.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-orchard.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-paper.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-paper.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-poimandres.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-poimandres.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-prism.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-prism.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-retro.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-retro.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-sand.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-sand.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-savanna.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-savanna.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-solarized.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-solarized.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-soleil.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-soleil.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-sunset.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-sunset.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-synthwave.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-synthwave.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-tokyo-night.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-tokyo-night.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-wetland.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-wetland.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/light-zenith.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/light-zenith.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/limestone.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/limestone.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/mahogany.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/mahogany.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/marble.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/marble.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/obsidian.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/obsidian.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/onyx.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/onyx.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/pearl.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/pearl.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/porcelain.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/porcelain.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/quartz.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/quartz.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/sandstone.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/sandstone.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/defaults/titanium.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/defaults/titanium.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/light.json",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/light.json",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/mermaid-cache.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/mermaid-cache.ts",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/theme/theme.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/theme/theme.ts",
+      "phase": "B1",
+      "notes": "theme active-port for omp visual parity"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/types.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/types.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/utils/hotkeys-markdown.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/utils/hotkeys-markdown.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/utils/keybinding-matchers.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/utils/keybinding-matchers.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/utils/tools-markdown.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/utils/tools-markdown.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/modes/utils/ui-helpers.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/utils/ui-helpers.ts",
+      "phase": "B1",
+      "notes": "coding-agent interactive tui mirror"
+    },
+    {
+      "upstream": "packages/coding-agent/src/plan-mode/approved-plan.ts",
+      "target": "src/cli/src/active-port/coding-agent/plan-mode/approved-plan.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/session/agent-session.ts",
+      "target": "src/cli/src/active-port/coding-agent/session/agent-session.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/session/compaction/compaction.ts",
+      "target": "src/cli/src/active-port/coding-agent/session/compaction/compaction.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/session/history-storage.ts",
+      "target": "src/cli/src/active-port/coding-agent/session/history-storage.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/session/messages.ts",
+      "target": "src/cli/src/active-port/coding-agent/session/messages.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/session/session-manager.ts",
+      "target": "src/cli/src/active-port/coding-agent/session/session-manager.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/session/session-storage.ts",
+      "target": "src/cli/src/active-port/coding-agent/session/session-storage.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/slash-commands/builtin-registry.ts",
+      "target": "src/cli/src/active-port/coding-agent/slash-commands/builtin-registry.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/stt/index.ts",
+      "target": "src/cli/src/active-port/coding-agent/stt/index.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/thinking.ts",
+      "target": "src/cli/src/active-port/coding-agent/thinking.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/tools/bash.ts",
+      "target": "src/cli/src/active-port/coding-agent/tools/bash.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/tools/index.ts",
+      "target": "src/cli/src/active-port/coding-agent/tools/index.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/tools/json-tree.ts",
+      "target": "src/cli/src/active-port/coding-agent/tools/json-tree.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/tools/output-meta.ts",
+      "target": "src/cli/src/active-port/coding-agent/tools/output-meta.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/tools/path-utils.ts",
+      "target": "src/cli/src/active-port/coding-agent/tools/path-utils.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/tools/python.ts",
+      "target": "src/cli/src/active-port/coding-agent/tools/python.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/tools/render-utils.ts",
+      "target": "src/cli/src/active-port/coding-agent/tools/render-utils.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/tools/renderers.ts",
+      "target": "src/cli/src/active-port/coding-agent/tools/renderers.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/tui/index.ts",
+      "target": "src/cli/src/active-port/coding-agent/tui/index.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/utils/changelog.ts",
+      "target": "src/cli/src/active-port/coding-agent/utils/changelog.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/utils/clipboard.ts",
+      "target": "src/cli/src/active-port/coding-agent/utils/clipboard.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/utils/command-args.ts",
+      "target": "src/cli/src/active-port/coding-agent/utils/command-args.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/utils/event-bus.ts",
+      "target": "src/cli/src/active-port/coding-agent/utils/event-bus.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/utils/external-editor.ts",
+      "target": "src/cli/src/active-port/coding-agent/utils/external-editor.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/utils/fuzzy.ts",
+      "target": "src/cli/src/active-port/coding-agent/utils/fuzzy.ts",
+      "phase": "B-repair",
+      "notes": "R1/R3 upstream parity dependency"
+    },
+    {
+      "upstream": "packages/coding-agent/src/utils/git.ts",
+      "target": "src/cli/src/active-port/coding-agent/utils/git.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/utils/image-convert.ts",
+      "target": "src/cli/src/active-port/coding-agent/utils/image-convert.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/utils/image-loading.ts",
+      "target": "src/cli/src/active-port/coding-agent/utils/image-loading.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/utils/image-resize.ts",
+      "target": "src/cli/src/active-port/coding-agent/utils/image-resize.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/utils/lang-from-path.ts",
+      "target": "src/cli/src/active-port/coding-agent/utils/lang-from-path.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/utils/open.ts",
+      "target": "src/cli/src/active-port/coding-agent/utils/open.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/utils/session-color.ts",
+      "target": "src/cli/src/active-port/coding-agent/utils/session-color.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/coding-agent/src/utils/sixel.ts",
+      "target": "src/cli/src/active-port/coding-agent/utils/sixel.ts",
+      "phase": "B1",
+      "notes": "same-path facade source"
+    },
+    {
+      "upstream": "packages/tui/src/autocomplete.ts",
+      "target": "src/cli/src/active-port/tui/autocomplete.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/bracketed-paste.ts",
+      "target": "src/cli/src/active-port/tui/bracketed-paste.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/components/box.ts",
+      "target": "src/cli/src/active-port/tui/components/box.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/components/cancellable-loader.ts",
+      "target": "src/cli/src/active-port/tui/components/cancellable-loader.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/components/editor.ts",
+      "target": "src/cli/src/active-port/tui/components/editor.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/components/image.ts",
+      "target": "src/cli/src/active-port/tui/components/image.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/components/input.ts",
+      "target": "src/cli/src/active-port/tui/components/input.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/components/loader.ts",
+      "target": "src/cli/src/active-port/tui/components/loader.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/components/markdown.ts",
+      "target": "src/cli/src/active-port/tui/components/markdown.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/components/select-list.ts",
+      "target": "src/cli/src/active-port/tui/components/select-list.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/components/settings-list.ts",
+      "target": "src/cli/src/active-port/tui/components/settings-list.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/components/spacer.ts",
+      "target": "src/cli/src/active-port/tui/components/spacer.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/components/tab-bar.ts",
+      "target": "src/cli/src/active-port/tui/components/tab-bar.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/components/text.ts",
+      "target": "src/cli/src/active-port/tui/components/text.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/components/truncated-text.ts",
+      "target": "src/cli/src/active-port/tui/components/truncated-text.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/editor-component.ts",
+      "target": "src/cli/src/active-port/tui/editor-component.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/fuzzy.ts",
+      "target": "src/cli/src/active-port/tui/fuzzy.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/index.ts",
+      "target": "src/cli/src/active-port/tui/index.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/keybindings.ts",
+      "target": "src/cli/src/active-port/tui/keybindings.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/keys.ts",
+      "target": "src/cli/src/active-port/tui/keys.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/kill-ring.ts",
+      "target": "src/cli/src/active-port/tui/kill-ring.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/stdin-buffer.ts",
+      "target": "src/cli/src/active-port/tui/stdin-buffer.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/symbols.ts",
+      "target": "src/cli/src/active-port/tui/symbols.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/terminal-capabilities.ts",
+      "target": "src/cli/src/active-port/tui/terminal-capabilities.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/terminal.ts",
+      "target": "src/cli/src/active-port/tui/terminal.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/ttyid.ts",
+      "target": "src/cli/src/active-port/tui/ttyid.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/tui.ts",
+      "target": "src/cli/src/active-port/tui/tui.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    },
+    {
+      "upstream": "packages/tui/src/utils.ts",
+      "target": "src/cli/src/active-port/tui/utils.ts",
+      "phase": "B1",
+      "notes": "tui runtime mirror"
+    }
+  ]
+}

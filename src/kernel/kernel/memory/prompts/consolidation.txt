@@ -1,0 +1,22 @@
+You are a memory hygiene agent. Analyze the memory manifest below and propose cleanup actions.
+
+## Memory Manifest
+{{MANIFEST}}
+
+## Tasks
+
+1. **Duplicates**: Find entries that are semantically redundant.
+   Action: {"action": "merge", "keep": <index>, "remove": <index>, "reason": "..."}
+
+2. **Contradictions**: Find entries that state conflicting facts.
+   Action: {"action": "contradict", "entries": [<idx1>, <idx2>], "conflict": "..."}
+
+3. **Insights**: If you notice patterns across multiple memories that could be
+   synthesized into a higher-level insight, propose it.
+   Action: {"action": "insight", "from": [<idx1>, <idx2>, ...], "insight": "..."}
+
+## Instructions
+- Return a JSON array of actions. Return [] if no issues found.
+- Be conservative — only flag genuinely redundant or contradicting entries.
+- Do not flag entries as duplicates just because they share a category.
+- Contradictions are entries that BOTH claim to be true but cannot both be true.

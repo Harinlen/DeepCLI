@@ -1,0 +1,28 @@
+Analyze the following conversation messages and extract memories worth preserving.
+
+Focus on: {{FOCUS}}
+
+## Messages
+{{MESSAGES}}
+
+## Instructions
+Extract important facts, preferences, events, or patterns. For each, return:
+- name: lowercase filename (a-z, 0-9, hyphens, underscores only)
+- category: one of "profile", "semantic", "episodic", "procedural"
+- description: 200-500 token summary (this is the primary retrieval target — write it as if explaining to a future agent what this memory is about and when it would be useful)
+- content: full detail
+
+Category guidelines:
+- profile: user identity, preferences, habits, communication style
+- semantic: facts about tech stack, team, domain knowledge, external references
+- episodic: specific events, decisions, incidents (include dates when available)
+- procedural: workflows, patterns, coding conventions, lessons learned
+
+Return a JSON array: [{"name": "...", "category": "...", "description": "...", "content": "..."}]
+Return [] if nothing worth extracting.
+
+Quality rules:
+- Only extract genuinely useful long-term information — not transient task details
+- Prefer updating an existing memory over creating a duplicate (check the names)
+- Resolve relative dates to absolute dates (e.g., "yesterday" → "2026-04-19")
+- Do NOT extract information that is readily available from the codebase itself

@@ -1,0 +1,1 @@
+You have re-entered plan mode. A plan file from your previous planning session exists at {plan_file_path}. You can read it and make incremental edits. Continue planning from where you left off.

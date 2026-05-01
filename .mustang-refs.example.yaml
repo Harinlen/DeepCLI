@@ -1,0 +1,29 @@
+# Local paths to reference projects that agents consult while working
+# on Mustang.  Copy this file to `.mustang-refs.yaml` and fill in the
+# paths for your machine.  The real file is gitignored.
+#
+# Format: logical-name -> absolute path (on your machine).
+#
+# Agents look these up via:
+#   ./resolve-ref.sh <logical-name>
+# or by reading this YAML directly.
+
+# Claude Code source — the implementation blueprint.  Every new
+# feature in Mustang is planned by first finding its counterpart in
+# Claude Code's source, then adapting.
+claude-code: /path/to/claude-code-main
+
+# OpenClaw — architecture patterns (daemon/client split, plugin
+# system, policy pipeline, session routing).
+openclaw: /path/to/openclaw
+
+# Hermes Agent — Python AI harness with mature ACP adapter and a
+# multi-platform messaging gateway (discord, telegram, slack,
+# whatsapp, feishu, matrix, …).  Closest stack-match to Mustang;
+# primary reference for protocol/transport and GatewayManager work.
+hermes-agent: /path/to/hermes-agent
+
+# oh-my-pi — CLI/TUI active-port source of truth.  Used for the copied
+# terminal runtime, coding-agent controllers/components, and OMP-first
+# parity checks.
+oh-my-pi: /path/to/oh-my-pi

@@ -1,0 +1,21 @@
+export const AcpMethod = {
+  sessionNew: "session/new",
+  sessionLoad: "session/load",
+  sessionResume: "session/resume",
+  sessionList: "session/list",
+  sessionPrompt: "session/prompt",
+  sessionCancel: "session/cancel",
+  sessionSetMode: "session/set_mode",
+} as const;
+
+export const MustangMethod = {
+  sessionExecuteShell: "_mustang.agent/session/execute_shell",
+  sessionExecutePython: "_mustang.agent/session/execute_python",
+  sessionCancelExecution: "_mustang.agent/session/cancel_execution",
+  sessionExecutionUpdate: "_mustang.agent/session/execution_update",
+  sessionRename: "_mustang.agent/session/rename",
+  sessionArchive: "_mustang.agent/session/archive",
+  sessionDelete: "_mustang.agent/session/delete",
+  modelProfileList: "_mustang.agent/model/profile_list",
+  modelSetDefault: "_mustang.agent/model/set_default",
+} as const;

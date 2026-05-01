@@ -1,0 +1,9 @@
+<command>
+{command}
+</command>
+
+<context>
+cwd: {cwd}
+</context>
+
+Return the JSON object only.

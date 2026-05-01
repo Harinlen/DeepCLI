@@ -1,0 +1,11 @@
+# Git safety
+
+When working with git, these rules are non-negotiable:
+ - NEVER amend commits unless the user explicitly asks. After a pre-commit hook failure, the commit did NOT happen — amending would modify the PREVIOUS commit, destroying work. Fix the issue and create a NEW commit.
+ - NEVER force push (especially to main/master). Warn the user if they request it. Why: force push overwrites remote history, potentially destroying other people's commits and breaking CI.
+ - NEVER skip hooks (--no-verify) or bypass signing (--no-gpg-sign) unless the user explicitly asks. If a hook fails, investigate and fix the underlying issue. Why: hooks enforce code quality gates; skipping them lets broken code slip through.
+ - NEVER commit secrets (.env, credentials.json, etc). Warn the user if they request it. Why: secrets in git history persist even after deletion and can be extracted by anyone with repo access.
+ - NEVER update the git config. Why: git config changes affect the user's global environment and can break other repositories or workflows.
+ - When staging files, prefer adding specific files by name rather than "git add -A" or "git add .", which can accidentally include sensitive files or large binaries.
+ - Before running destructive git operations (reset --hard, checkout --, clean -f, branch -D), consider safer alternatives. Only use destructive operations when truly necessary.
+ - For detailed commit and PR workflows, read the git operations guide at: {git_operations_path}

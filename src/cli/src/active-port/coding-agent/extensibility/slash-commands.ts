@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { SlashCommand } from "@/tui/index.js";
+import { getAvailableThemesSync } from "../modes/theme/theme";
 
 type Item = { value: string; label?: string; description?: string };
 
@@ -33,7 +34,6 @@ export const BUILTIN_SLASH_COMMANDS: SlashCommand[] = [
 	{ name: "clear", description: "Clear the current conversation view" },
 	{ name: "compact", description: "Compact conversation context" },
 	{ name: "cost", description: "Show usage and cost" },
-	{ name: "cron", description: "Manage scheduled tasks" },
 	{ name: "exit", description: "Exit DeepCLI" },
 	{ name: "help", description: "Show available commands" },
 	{ name: "memory", description: "List, show, or delete memories" },
@@ -73,7 +73,10 @@ function completePlanArguments(argumentPrefix: string): Item[] | null {
 }
 
 function completeThemeArguments(argumentPrefix: string): Item[] | null {
-	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
+	const [subcommand = "", value = ""] = argumentPrefix.split(/\s+/, 2);
+	if (argumentPrefix.includes(" ") && subcommand === "set") {
+		return filterCompletions(value, getAvailableThemesSync().map(name => ({ value: name, label: name })));
+	}
 	if (argumentPrefix.includes(" ")) return null;
 	return filterCompletions(subcommand, THEME_ACTIONS);
 }

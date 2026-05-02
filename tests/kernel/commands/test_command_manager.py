@@ -81,8 +81,9 @@ async def test_command_manager_startup_registers_builtins(
     cmds = mgr.list_commands()
     names = [c.name for c in cmds]
     # All documented built-in commands must be present.
-    for expected in ("help", "model", "plan", "compact", "session", "cost", "memory"):
+    for expected in ("help", "model", "plan", "compact", "session", "cost", "memory", "auth"):
         assert expected in names, f"Expected built-in command {expected!r} missing"
+    assert "cron" not in names
 
 
 async def test_command_manager_lookup_hit(module_table: MagicMock) -> None:

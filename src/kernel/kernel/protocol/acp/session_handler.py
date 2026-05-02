@@ -109,6 +109,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_HUB_RUNTIME_RETRY_ATTEMPTS = 24
+_HUB_RUNTIME_RETRY_DELAY_SECONDS = 0.25
+
 
 # ---------------------------------------------------------------------------
 # Concrete ClientSender
@@ -660,18 +663,26 @@ class AcpSessionHandler:
             RequestPermissionRequest,
             RequestPermissionResponse,
         )
+        from kernel.protocol.acp.schemas.updates import SessionUpdateNotification
 
         method = str(frame.payload.get("method", ""))
         params = frame.payload.get("params", {})
         try:
-            if method != "session/request_permission":
+            if method == "session/update":
+                await sender.notify(
+                    "session/update",
+                    SessionUpdateNotification.model_validate(params),
+                )
+                payload = {"ok": True, "result": {}}
+            elif method == "session/request_permission":
+                result = await sender.request(
+                    method,
+                    RequestPermissionRequest.model_validate(params),
+                    result_type=RequestPermissionResponse,
+                )
+                payload = {"ok": True, "result": result.model_dump(by_alias=True)}
+            else:
                 raise InternalError(f"unsupported runtime client request: {method}")
-            result = await sender.request(
-                method,
-                RequestPermissionRequest.model_validate(params),
-                result_type=RequestPermissionResponse,
-            )
-            payload = {"ok": True, "result": result.model_dump(by_alias=True)}
         except Exception as exc:
             payload = {
                 "ok": False,
@@ -755,18 +766,29 @@ class AcpSessionHandler:
             session_id=session_id,
             payload={"method": contract},
         )
-        response = await request_hub(
-            hub_endpoint,
-            HubFrame(
-                frame_id=f"access-agent-{uuid.uuid4().hex}",
-                frame_type=HubFrameType.REQUEST,
-                contract=contract,
-                payload={
-                    "routerFrame": router_frame.model_dump(),
-                    "params": params,
-                },
-            ),
-        )
+        response = None
+        for attempt in range(1, _HUB_RUNTIME_RETRY_ATTEMPTS + 1):
+            response = await request_hub(
+                hub_endpoint,
+                HubFrame(
+                    frame_id=f"access-agent-{uuid.uuid4().hex}",
+                    frame_type=HubFrameType.REQUEST,
+                    contract=contract,
+                    payload={
+                        "routerFrame": router_frame.model_dump(),
+                        "params": params,
+                    },
+                ),
+            )
+            if response.payload.get("error") != "runtime_not_registered":
+                break
+            if attempt == _HUB_RUNTIME_RETRY_ATTEMPTS:
+                break
+            await asyncio.sleep(_HUB_RUNTIME_RETRY_DELAY_SECONDS)
+
+        if response is None:  # pragma: no cover - loop always runs
+            raise InternalError(f"{contract} failed")
+
         if response.payload.get("ok") is not True:
             error = response.payload.get("error", f"{contract} failed")
             message = response.payload.get("message")

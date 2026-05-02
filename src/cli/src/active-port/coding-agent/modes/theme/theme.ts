@@ -1559,6 +1559,22 @@ export async function getAvailableThemes(): Promise<string[]> {
 	return Array.from(themes).sort();
 }
 
+export function getAvailableThemesSync(): string[] {
+	const themes = new Set<string>(Object.keys(getBuiltinThemes()));
+	const customThemesDir = getCustomThemesDir();
+	try {
+		const files = fs.readdirSync(customThemesDir);
+		for (const file of files) {
+			if (file.endsWith(".json")) {
+				themes.add(file.slice(0, -5));
+			}
+		}
+	} catch {
+		// Directory doesn't exist or isn't readable
+	}
+	return Array.from(themes).sort();
+}
+
 export interface ThemeInfo {
 	name: string;
 	path: string | undefined;

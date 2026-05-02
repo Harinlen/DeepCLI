@@ -18,6 +18,7 @@ from kernel.llm.types import (
     PromptSection,
     StreamError,
     TextChunk,
+    ThoughtChunk,
     ToolSchema,
     ToolUseChunk,
     UsageChunk,
@@ -77,6 +78,7 @@ class OpenAICompatibleProvider(Provider):
             tool_schemas=tool_schemas,
             model_id=model_id,
             temperature=temperature,
+            thinking=thinking,
             max_tokens=max_tokens,
         )
 
@@ -88,20 +90,18 @@ class OpenAICompatibleProvider(Provider):
         tool_schemas: list[ToolSchema],
         model_id: str,
         temperature: float | None,
+        thinking: bool,
         max_tokens: int,
     ) -> AsyncGenerator[LLMChunk, None]:
-        body: dict = {
-            "model": model_id,
-            "messages": messages_to_openai(messages, system),
-            "max_tokens": max_tokens,
-            "stream": True,
-            "stream_options": {"include_usage": True},
-        }
-        if temperature is not None:
-            body["temperature"] = temperature
-        if tool_schemas:
-            body["tools"] = schemas_to_openai(tool_schemas)
-            body["tool_choice"] = "auto"
+        body = self._request_body(
+            system=system,
+            messages=messages,
+            tool_schemas=tool_schemas,
+            model_id=model_id,
+            temperature=temperature,
+            thinking=thinking,
+            max_tokens=max_tokens,
+        )
 
         try:
             async with self._client.stream("POST", self._chat_url, json=body) as resp:
@@ -148,6 +148,9 @@ class OpenAICompatibleProvider(Provider):
                         finish_reason = choice.get("finish_reason")
 
                         text = delta.get("content")
+                        reasoning_text = delta.get("reasoning_content")
+                        if reasoning_text:
+                            yield ThoughtChunk(content=reasoning_text)
                         if text:
                             yield TextChunk(content=text)
 
@@ -202,6 +205,39 @@ class OpenAICompatibleProvider(Provider):
 
     async def models(self) -> list[ModelInfo]:
         return []
+
+    def _request_body(
+        self,
+        *,
+        system: list[PromptSection],
+        messages: list[Message],
+        tool_schemas: list[ToolSchema],
+        model_id: str,
+        temperature: float | None,
+        thinking: bool,
+        max_tokens: int,
+    ) -> dict[str, object]:
+        _ = thinking
+        body: dict[str, object] = {
+            "model": model_id,
+            "messages": self._messages_to_api(messages, system),
+            "max_tokens": max_tokens,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        if temperature is not None:
+            body["temperature"] = temperature
+        if tool_schemas:
+            body["tools"] = schemas_to_openai(tool_schemas)
+            body["tool_choice"] = "auto"
+        return body
+
+    def _messages_to_api(
+        self,
+        messages: list[Message],
+        system: list[PromptSection],
+    ) -> list[dict[str, object]]:
+        return messages_to_openai(messages, system)
 
     async def discover_models(self) -> list[str]:
         """Query ``GET /v1/models`` (standard OpenAI-compatible endpoint)."""

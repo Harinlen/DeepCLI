@@ -1,6 +1,4 @@
-import * as path from "node:path";
-
-const DEFAULT_TERMINAL_TITLE = "pi";
+const DEFAULT_TERMINAL_TITLE = "DeepCLI";
 const TERMINAL_TITLE_CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
 
 function sanitizeTerminalTitlePart(value: string | undefined): string | undefined {
@@ -9,22 +7,14 @@ function sanitizeTerminalTitlePart(value: string | undefined): string | undefine
 	return sanitized || undefined;
 }
 
-function getFallbackTerminalTitle(cwd: string | undefined): string | undefined {
-	if (!cwd) return undefined;
-	const resolvedCwd = path.resolve(cwd);
-	const baseName = path.basename(resolvedCwd);
-	if (!baseName || baseName === path.parse(resolvedCwd).root) return undefined;
-	return sanitizeTerminalTitlePart(baseName);
-}
-
 export function formatSessionTerminalTitle(
 	sessionName: string | undefined,
 	cwd?: string,
 	titleSource?: "auto" | "user" | undefined,
 ): string {
-	const label =
-		sanitizeTerminalTitlePart(titleSource === "auto" ? undefined : sessionName) ?? getFallbackTerminalTitle(cwd);
-	return label ? `${DEFAULT_TERMINAL_TITLE}: ${label}` : DEFAULT_TERMINAL_TITLE;
+	void cwd;
+	void titleSource;
+	return sanitizeTerminalTitlePart(sessionName) ?? DEFAULT_TERMINAL_TITLE;
 }
 
 export function setTerminalTitle(title: string): void {

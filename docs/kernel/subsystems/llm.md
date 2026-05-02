@@ -91,7 +91,7 @@ class ModelSpec(BaseModel):
 
 class ProviderConfig(BaseModel):
     """一个 provider 条目：凭据 + 模型列表。"""
-    type: str                        # "anthropic" | "bedrock" | "openai_compatible" | "nvidia"
+    type: str                        # "anthropic" | "bedrock" | "openai_compatible" | "nvidia" | "deepseek"
     api_key: str | None = None
     base_url: str | None = None
     aws_secret_key: str | None = None
@@ -124,6 +124,7 @@ class LLMConfig(BaseModel):
 | Anthropic | `client.models.list()` 自动填充 |
 | OpenAI Compatible | `GET /v1/models` 自动填充 |
 | Nvidia | 同 OpenAI Compatible |
+| DeepSeek | 同 OpenAI Compatible |
 | Bedrock | 报错，要求手动填写（AWS 无干净的发现 API） |
 
 发现时机：添加 provider 时发现一次，结果持久化到 config。
@@ -202,6 +203,7 @@ kernel/llm_provider/   # Provider 实现（内部，不对外暴露）
   bedrock.py       # discover_models() returns [] (manual only)
   openai_compatible.py  # discover_models() via GET /v1/models
   nvidia.py        # inherits OpenAI Compatible discovery
+  deepseek.py      # inherits OpenAI Compatible discovery
   format/
     anthropic.py
     openai.py

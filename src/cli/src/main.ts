@@ -11,6 +11,7 @@ import { InteractiveMode } from "@/modes/interactive.js";
 import { SessionService } from "@/sessions/service.js";
 import { connectKernel } from "@/startup/connect.js";
 import { ArgError, parseCliArgs, usage } from "@/startup/args.js";
+import { fetchKernelVersion } from "@/startup/health.js";
 import { resolveStartupSession } from "@/startup/session-startup.js";
 import { applyThemeConfig } from "@/startup/theme.js";
 
@@ -61,6 +62,7 @@ async function main(): Promise<void> {
   const service = new SessionService(connection.client);
   const startup = await resolveStartupSession(service, args, loaded.config);
   if (startup.warning) console.error(chalk.yellow(startup.warning));
+  const kernelVersion = await fetchKernelVersion(loaded.config.kernel.health_url);
 
   if (args.prompt || args.print) {
     await runPrintPrompt(startup.session, args.prompt ?? "");
@@ -73,6 +75,7 @@ async function main(): Promise<void> {
     sessionService: service,
     recentSessions: startup.recentSessions.slice(0, loaded.config.ui.welcome_recent),
     theme: loaded.config.ui,
+    version: kernelVersion ?? undefined,
   }).run();
 
   connection.autostarted?.stop();

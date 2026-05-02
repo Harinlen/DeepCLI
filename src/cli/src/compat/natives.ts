@@ -148,8 +148,364 @@ export function encodeSixel(_data: Uint8Array, ..._rest: unknown[]): string { re
 export function detectMacOSAppearance(): "dark" | "light" { return "dark"; }
 export class MacAppearanceObserver { start(): void {}; stop(): void {}; onChange(_cb: unknown): void {} }
 export type HighlightColors = Record<string, string>;
-export function highlightCode(code: string): string { return code; }
-export function supportsLanguage(_language: string): boolean { return false; }
+
+const RESET = "\x1b[0m";
+
+const LANGUAGE_ALIASES: Record<string, string> = {
+	c: "c",
+	cc: "cpp",
+	cxx: "cpp",
+	cpp: "cpp",
+	"c++": "cpp",
+	h: "cpp",
+	hh: "cpp",
+	hpp: "cpp",
+	hxx: "cpp",
+	js: "javascript",
+	jsx: "javascript",
+	javascript: "javascript",
+	mjs: "javascript",
+	cjs: "javascript",
+	ts: "typescript",
+	tsx: "typescript",
+	typescript: "typescript",
+	py: "python",
+	python: "python",
+	sh: "shell",
+	bash: "shell",
+	zsh: "shell",
+	shell: "shell",
+	json: "json",
+	jsonc: "json",
+	yaml: "yaml",
+	yml: "yaml",
+};
+
+const C_LIKE_KEYWORDS = new Set([
+	"asm",
+	"auto",
+	"break",
+	"case",
+	"catch",
+	"class",
+	"concept",
+	"const",
+	"constexpr",
+	"continue",
+	"decltype",
+	"default",
+	"delete",
+	"do",
+	"else",
+	"enum",
+	"explicit",
+	"export",
+	"extern",
+	"for",
+	"friend",
+	"goto",
+	"if",
+	"inline",
+	"namespace",
+	"new",
+	"noexcept",
+	"operator",
+	"private",
+	"protected",
+	"public",
+	"requires",
+	"return",
+	"sizeof",
+	"static",
+	"struct",
+	"switch",
+	"template",
+	"this",
+	"throw",
+	"try",
+	"typedef",
+	"typeid",
+	"typename",
+	"using",
+	"virtual",
+	"while",
+]);
+
+const C_LIKE_TYPES = new Set([
+	"bool",
+	"char",
+	"double",
+	"float",
+	"int",
+	"long",
+	"short",
+	"signed",
+	"size_t",
+	"std",
+	"string",
+	"uint32_t",
+	"uint64_t",
+	"unsigned",
+	"void",
+	"vector",
+]);
+
+const JS_KEYWORDS = new Set([
+	"async",
+	"await",
+	"break",
+	"case",
+	"catch",
+	"class",
+	"const",
+	"continue",
+	"default",
+	"delete",
+	"do",
+	"else",
+	"export",
+	"extends",
+	"finally",
+	"for",
+	"from",
+	"function",
+	"if",
+	"import",
+	"in",
+	"instanceof",
+	"let",
+	"new",
+	"of",
+	"return",
+	"static",
+	"switch",
+	"throw",
+	"try",
+	"type",
+	"typeof",
+	"var",
+	"while",
+	"yield",
+]);
+
+const PYTHON_KEYWORDS = new Set([
+	"and",
+	"as",
+	"assert",
+	"async",
+	"await",
+	"break",
+	"class",
+	"continue",
+	"def",
+	"del",
+	"elif",
+	"else",
+	"except",
+	"False",
+	"finally",
+	"for",
+	"from",
+	"global",
+	"if",
+	"import",
+	"in",
+	"is",
+	"lambda",
+	"None",
+	"nonlocal",
+	"not",
+	"or",
+	"pass",
+	"raise",
+	"return",
+	"True",
+	"try",
+	"while",
+	"with",
+	"yield",
+]);
+
+function normalizeLanguage(language: string | undefined): string | undefined {
+	const key = String(language ?? "").trim().toLowerCase();
+	return key ? LANGUAGE_ALIASES[key] : undefined;
+}
+
+function color(text: string, ansi: string | undefined): string {
+	return ansi ? `${ansi}${text}${RESET}` : text;
+}
+
+function readString(line: string, start: number, quote: string): number {
+	let index = start + 1;
+	while (index < line.length) {
+		if (line[index] === "\\") {
+			index += 2;
+			continue;
+		}
+		if (line[index] === quote) return index + 1;
+		index++;
+	}
+	return line.length;
+}
+
+function highlightCLike(code: string, colors: HighlightColors): string {
+	let inBlockComment = false;
+	return code
+		.split("\n")
+		.map(line => {
+			let output = "";
+			let index = 0;
+			while (index < line.length) {
+				if (inBlockComment) {
+					const end = line.indexOf("*/", index);
+					const next = end === -1 ? line.length : end + 2;
+					output += color(line.slice(index, next), colors.comment);
+					index = next;
+					if (end !== -1) inBlockComment = false;
+					continue;
+				}
+
+				const rest = line.slice(index);
+				if (rest.startsWith("//")) {
+					output += color(rest, colors.comment);
+					break;
+				}
+				if (rest.startsWith("/*")) {
+					const end = line.indexOf("*/", index + 2);
+					const next = end === -1 ? line.length : end + 2;
+					output += color(line.slice(index, next), colors.comment);
+					index = next;
+					inBlockComment = end === -1;
+					continue;
+				}
+				if (line[index] === "\"" || line[index] === "'") {
+					const end = readString(line, index, line[index]);
+					output += color(line.slice(index, end), colors.string);
+					index = end;
+					continue;
+				}
+
+				const numberMatch = rest.match(/^(?:0x[\da-fA-F]+|\d+(?:\.\d+)?)(?:[uUlLfF]+)?/);
+				if (numberMatch) {
+					output += color(numberMatch[0], colors.number);
+					index += numberMatch[0].length;
+					continue;
+				}
+
+				const identMatch = rest.match(/^[A-Za-z_][A-Za-z0-9_]*/);
+				if (identMatch) {
+					const word = identMatch[0];
+					const after = line.slice(index + word.length);
+					if (C_LIKE_KEYWORDS.has(word) || (word.startsWith("#") && word.length > 1)) {
+						output += color(word, colors.keyword);
+					} else if (C_LIKE_TYPES.has(word)) {
+						output += color(word, colors.type);
+					} else if (/^\s*\(/.test(after)) {
+						output += color(word, colors.function);
+					} else {
+						output += word;
+					}
+					index += word.length;
+					continue;
+				}
+
+				const char = line[index];
+				output += /[{}()[\],.;:]/.test(char)
+					? color(char, colors.punctuation)
+					: /[+\-*/%=!<>&|^~?]/.test(char)
+						? color(char, colors.operator)
+						: char;
+				index++;
+			}
+			return output;
+		})
+		.join("\n");
+}
+
+function highlightScriptLike(code: string, colors: HighlightColors, keywords: Set<string>, commentPrefix = "#"): string {
+	return code
+		.split("\n")
+		.map(line => {
+			let output = "";
+			let index = 0;
+			while (index < line.length) {
+				const rest = line.slice(index);
+				if (rest.startsWith(commentPrefix)) {
+					output += color(rest, colors.comment);
+					break;
+				}
+				if (line[index] === "\"" || line[index] === "'" || line[index] === "`") {
+					const end = readString(line, index, line[index]);
+					output += color(line.slice(index, end), colors.string);
+					index = end;
+					continue;
+				}
+				const numberMatch = rest.match(/^\d+(?:\.\d+)?/);
+				if (numberMatch) {
+					output += color(numberMatch[0], colors.number);
+					index += numberMatch[0].length;
+					continue;
+				}
+				const identMatch = rest.match(/^[A-Za-z_$][A-Za-z0-9_$]*/);
+				if (identMatch) {
+					const word = identMatch[0];
+					const after = line.slice(index + word.length);
+					if (keywords.has(word)) {
+						output += color(word, colors.keyword);
+					} else if (/^\s*\(/.test(after)) {
+						output += color(word, colors.function);
+					} else {
+						output += word;
+					}
+					index += word.length;
+					continue;
+				}
+				const char = line[index];
+				output += /[{}()[\],.;:]/.test(char)
+					? color(char, colors.punctuation)
+					: /[+\-*/%=!<>&|^~?]/.test(char)
+						? color(char, colors.operator)
+						: char;
+				index++;
+			}
+			return output;
+		})
+		.join("\n");
+}
+
+function highlightData(code: string, colors: HighlightColors): string {
+	return code
+		.replace(/("(?:\\.|[^"\\])*")(\s*:)?/g, (_match, str: string, colon: string | undefined) => {
+			return `${color(str, colors.string)}${colon ? color(colon, colors.punctuation) : ""}`;
+		})
+		.replace(/\b(true|false|null)\b/g, value => color(value, colors.keyword))
+		.replace(/\b-?\d+(?:\.\d+)?\b/g, value => color(value, colors.number));
+}
+
+export function highlightCode(code: string, language?: string, colors: HighlightColors = {}): string {
+	const normalized = normalizeLanguage(language);
+	switch (normalized) {
+		case "c":
+		case "cpp":
+			return highlightCLike(code, colors);
+		case "javascript":
+		case "typescript":
+			return highlightScriptLike(code, colors, JS_KEYWORDS, "//");
+		case "python":
+			return highlightScriptLike(code, colors, PYTHON_KEYWORDS);
+		case "shell":
+			return highlightScriptLike(code, colors, new Set(["case", "do", "done", "elif", "else", "esac", "fi", "for", "function", "if", "in", "then", "while"]));
+		case "json":
+		case "yaml":
+			return highlightData(code, colors);
+		default:
+			return code;
+	}
+}
+
+export function supportsLanguage(language: string): boolean {
+	return normalizeLanguage(language) !== undefined;
+}
 
 export interface ClipboardImage { data: Uint8Array; mimeType: string }
 export async function copyToClipboard(_text: string): Promise<void> {}

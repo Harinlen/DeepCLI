@@ -1,7 +1,7 @@
 import { settings } from "@/active-port/coding-agent/config/settings.js";
 import { setMustangSessionProvider, type SessionInfo } from "@/active-port/coding-agent/session/session-manager.js";
 import type { AgentSessionEvent } from "@/active-port/coding-agent/session/agent-session.js";
-import type { AcpClient, SessionUpdateParams } from "@/acp/client.js";
+import type { AcpClient, KernelConnectionState, SessionUpdateParams } from "@/acp/client.js";
 import { ModelService, type ModelProfile } from "@/models/service.js";
 import { MustangSession } from "@/session.js";
 import { SessionService } from "@/sessions/service.js";
@@ -35,8 +35,13 @@ export class MustangAgentSessionAdapter {
 	readonly configWarnings: string[] = [];
 	readonly autoCompactionEnabled = false;
 	readonly extensionRunner = undefined;
+	readonly providerSessionState = {};
 	readonly modelRegistry = {
-		authStorage: undefined,
+		authStorage: {
+			hasOAuth: (_provider?: string) => false,
+			has: (_provider?: string) => false,
+			hasAuth: (_provider?: string) => false,
+		},
 		isUsingOAuth: () => false,
 		getApiKeyForProvider: async () => undefined,
 	};
@@ -52,12 +57,14 @@ export class MustangAgentSessionAdapter {
 	isGeneratingHandoff = false;
 	isBashRunning = false;
 	isPythonRunning = false;
+	kernelConnectionState: KernelConnectionState = "connected";
 	isTtsrAbortPending = false;
 	retryAttempt = 0;
 	queuedMessageCount = 0;
 
 	#listeners = new Set<Listener>();
 	#activeAssistant: AssistantMessage | undefined;
+	#activeAssistantSegment: AssistantMessage | undefined;
 	#toolNames = new Map<string, string>();
 	#eventTail: Promise<void> = Promise.resolve();
 
@@ -107,15 +114,15 @@ export class MustangAgentSessionAdapter {
 
 		this.isStreaming = true;
 		this.#activeAssistant = { role: "assistant", content: [], timestamp: Date.now() };
+		this.#activeAssistantSegment = undefined;
 		this.messages.push(this.#activeAssistant);
 		this.#emit({ type: "agent_start" });
-		this.#emit({ type: "message_start", message: this.#activeAssistant });
 
 		try {
 			const result = await this.options.session.prompt(text, update => this.#handleUpdate(update));
 			await this.#flushEvents();
 			this.#activeAssistant.stopReason = String((result as { stopReason?: string })?.stopReason ?? "stop");
-			this.#emit({ type: "message_end", message: this.#activeAssistant });
+			this.#endAssistantSegment(this.#activeAssistant.stopReason);
 			await this.#flushEvents();
 			return result;
 		} catch (error) {
@@ -123,16 +130,65 @@ export class MustangAgentSessionAdapter {
 				await this.#flushEvents();
 				this.#activeAssistant.stopReason = "error";
 				this.#activeAssistant["errorMessage"] = (error as Error).message;
-				this.#emit({ type: "message_end", message: this.#activeAssistant });
+				if (!this.#activeAssistantSegment) {
+					this.#startAssistantSegment();
+				}
+				this.#activeAssistantSegment!["errorMessage"] = (error as Error).message;
+				this.#endAssistantSegment("error");
 				await this.#flushEvents();
 			}
 			throw error;
 		} finally {
 			this.isStreaming = false;
 			this.#activeAssistant = undefined;
+			this.#activeAssistantSegment = undefined;
 			this.#emit({ type: "agent_end" });
 			await this.#flushEvents();
 		}
+	}
+
+	getSessionStats(): Record<string, any> {
+		let userMessages = 0;
+		let assistantMessages = 0;
+		let toolCalls = 0;
+		let toolResults = 0;
+		let inputTokens = this.options.session.summary?.totalInputTokens ?? 0;
+		let outputTokens = this.options.session.summary?.totalOutputTokens ?? 0;
+
+		for (const message of this.messages) {
+			if (message?.role === "user") userMessages++;
+			if (message?.role === "assistant") assistantMessages++;
+			if (Array.isArray(message?.content)) {
+				for (const block of message.content) {
+					if (block?.type === "toolCall") toolCalls++;
+					if (block?.type === "toolResult") toolResults++;
+				}
+			}
+			const usage = message?.usage;
+			if (usage && typeof usage === "object") {
+				inputTokens += typeof usage.input === "number" ? usage.input : 0;
+				outputTokens += typeof usage.output === "number" ? usage.output : 0;
+			}
+		}
+
+		return {
+			sessionFile: this.sessionFile,
+			sessionId: this.sessionId,
+			userMessages,
+			assistantMessages,
+			toolCalls,
+			toolResults,
+			totalMessages: this.messages.length,
+			tokens: {
+				input: inputTokens,
+				output: outputTokens,
+				cacheRead: 0,
+				cacheWrite: 0,
+				total: inputTokens + outputTokens,
+			},
+			cost: 0,
+			premiumRequests: 0,
+		};
 	}
 
 	async executeBash(command: string, onChunk: (chunk: string) => void, options: { excludeFromContext?: boolean } = {}): Promise<{ exitCode: number; cancelled: boolean; output: string }> {
@@ -179,6 +235,10 @@ export class MustangAgentSessionAdapter {
 		this.options.session.cancelExecution("python");
 	}
 
+	setKernelConnectionState(state: KernelConnectionState): void {
+		this.kernelConnectionState = state;
+	}
+
 	abortCompaction(): void {}
 	abortRetry(): void {}
 	dispose(): void {}
@@ -192,7 +252,7 @@ export class MustangAgentSessionAdapter {
 	getToolByName(name: string): Record<string, unknown> { return { name, label: name, status: "pending" }; }
 	getTodoPhases(): unknown[] { return []; }
 	isFastModeEnabled(): boolean { return false; }
-	getAsyncJobSnapshot(): { running: unknown[] } { return { running: [] }; }
+	getAsyncJobSnapshot(): { running: unknown[]; recent: unknown[] } { return { running: [], recent: [] }; }
 	buildDisplaySessionContext(): unknown { return this.sessionManager.buildSessionContext(); }
 	resolveRoleModelWithThinking(): { model?: unknown; thinkingLevel?: string; explicitThinkingLevel?: boolean } { return { model: this.model }; }
 	async setModelTemporary(model: any, thinkingLevel?: string): Promise<void> { this.model = model; this.thinkingLevel = thinkingLevel ?? "off"; }
@@ -306,16 +366,10 @@ export class MustangAgentSessionAdapter {
 
 	#appendAssistant(kind: "text" | "thinking", text: string): void {
 		if (!text || !this.#activeAssistant) return;
-		const last = this.#activeAssistant.content[this.#activeAssistant.content.length - 1];
-		if (last?.type === kind) {
-			if (kind === "text") (last as { text: string }).text += text;
-			else (last as { thinking: string }).thinking += text;
-		} else if (kind === "text") {
-			this.#activeAssistant.content.push({ type: "text", text });
-		} else {
-			this.#activeAssistant.content.push({ type: "thinking", thinking: text });
-		}
-		this.#emit({ type: "message_update", message: this.#activeAssistant });
+		appendAssistantContent(this.#activeAssistant, kind, text);
+		const segment = this.#activeAssistantSegment ?? this.#startAssistantSegment();
+		appendAssistantContent(segment, kind, text);
+		this.#emit({ type: "message_update", message: segment });
 	}
 
 	#startTool(update: SessionUpdateParams): void {
@@ -326,8 +380,8 @@ export class MustangAgentSessionAdapter {
 		const args = parseJsonObject(typeof update.rawInput === "string" ? update.rawInput : typeof update.raw_input === "string" ? update.raw_input : "") ?? {};
 		if (this.#activeAssistant) {
 			this.#activeAssistant.content.push({ type: "toolCall", id: toolCallId, name: toolName, arguments: args });
-			this.#emit({ type: "message_update", message: this.#activeAssistant });
 		}
+		this.#endAssistantSegment("tool_use");
 		this.#emit({ type: "tool_execution_start", toolCallId, toolName, args });
 	}
 
@@ -358,6 +412,22 @@ export class MustangAgentSessionAdapter {
 
 	async #flushEvents(): Promise<void> {
 		await this.#eventTail;
+	}
+
+	#startAssistantSegment(): AssistantMessage {
+		const segment: AssistantMessage = { role: "assistant", content: [], timestamp: Date.now() };
+		this.#activeAssistantSegment = segment;
+		this.#emit({ type: "message_start", message: segment });
+		return segment;
+	}
+
+	#endAssistantSegment(stopReason: string): void {
+		const segment = this.#activeAssistantSegment;
+		if (!segment) return;
+		segment.stopReason = stopReason;
+		segment.usage = this.#activeAssistant?.usage;
+		this.#emit({ type: "message_end", message: segment });
+		this.#activeAssistantSegment = undefined;
 	}
 }
 
@@ -424,6 +494,18 @@ function parseJsonObject(value: string): Record<string, unknown> | null {
 		return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
 	} catch {
 		return null;
+	}
+}
+
+function appendAssistantContent(message: AssistantMessage, kind: "text" | "thinking", text: string): void {
+	const last = message.content[message.content.length - 1];
+	if (last?.type === kind) {
+		if (kind === "text") (last as { text: string }).text += text;
+		else (last as { thinking: string }).thinking += text;
+	} else if (kind === "text") {
+		message.content.push({ type: "text", text });
+	} else {
+		message.content.push({ type: "thinking", thinking: text });
 	}
 }
 

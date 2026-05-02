@@ -40,11 +40,15 @@ server.on("connection", (socket) => {
 const client = await AcpClient.connect(`ws://127.0.0.1:${port}`, "dev");
 let disconnected = false;
 let reconnected = false;
+const states: string[] = [];
 client.onDisconnect(() => {
   disconnected = true;
 });
 client.onReconnect(() => {
   reconnected = true;
+});
+client.onConnectionStateChange((state) => {
+  states.push(state);
 });
 
 const pending = client.request("session/list", {}, { timeoutMs: 0 });
@@ -69,6 +73,8 @@ const result = await withTimeout(
 );
 assert(Array.isArray(result.sessions), "request after reconnect should complete");
 assert(reconnected, "reconnect handler should fire");
+assert(states.includes("connecting"), "connection state should expose reconnecting state");
+assert(states.at(-1) === "connected", `connection state should return to connected, got ${states.join(",")}`);
 
 client.close();
 for (const socket of sockets) socket.terminate();

@@ -17,7 +17,7 @@ from kernel.protocol.acp.schemas.permission import (
     RequestPermissionResponse,
     ToolCallUpdate,
 )
-from kernel.protocol.acp.schemas.updates import AgentMessageChunk
+from kernel.protocol.acp.schemas.updates import AgentMessageChunk, SessionUpdateNotification
 from kernel.protocol.acp.schemas.content import AcpTextBlock
 
 
@@ -53,6 +53,35 @@ async def test_collecting_runtime_sender_records_notifications() -> None:
     await sender.notify("session/update", update)
 
     assert sender.notifications == [("session/update", update)]
+
+
+@pytest.mark.anyio
+async def test_collecting_runtime_sender_streams_notifications_to_runtime_client_peer() -> None:
+    peer = _Peer({})
+    sender = CollectingRuntimeSender(client_peer=peer)  # type: ignore[arg-type]
+    notification = SessionUpdateNotification(
+        session_id="s-1",
+        update=AgentMessageChunk(content=AcpTextBlock(type="text", text="hello")),
+    )
+
+    await sender.notify("session/update", notification)
+
+    assert sender.notifications == [("session/update", notification)]
+    assert peer.calls == [
+        {
+            "method": "session/update",
+            "params": {
+                "sessionId": "s-1",
+                "update": {
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": {"type": "text", "text": "hello", "meta": None},
+                    "meta": None,
+                },
+                "meta": None,
+            },
+            "timeout": None,
+        }
+    ]
 
 
 @pytest.mark.anyio

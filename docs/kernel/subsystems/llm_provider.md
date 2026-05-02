@@ -5,7 +5,8 @@
 LLMProviderManager 管理 LLM Provider 实例的生命周期。
 
 它的职责只有一件事：**按凭证缓存和复用 Provider 实例**（`AnthropicProvider`、
-`OpenAICompatibleProvider`、`BedrockProvider`）。它不知道 model 叫什么名字，
+`OpenAICompatibleProvider`、`BedrockProvider`、`NvidiaProvider`、
+`DeepSeekProvider`）。它不知道 model 叫什么名字，
 不做路由，不实现 `LLMProvider` Protocol。
 
 路由和 model 名字解析由上层的 **LLMManager** 负责（见 [`llm.md`](llm.md)）。
@@ -51,11 +52,11 @@ class LLMProviderManager(Subsystem):
     def get_provider(
         self,
         *,
-        provider_type: str,           # "anthropic" | "bedrock" | "openai_compatible" | "nvidia"
+        provider_type: str,           # "anthropic" | "bedrock" | "openai_compatible" | "nvidia" | "deepseek"
         api_key: str | None,
         base_url: str | None,
         prompt_caching: bool = True,  # Anthropic 专有，影响 client 行为
-        thinking: bool = False,       # Anthropic 专有
+        thinking: bool = False,       # provider-specific extended thinking / reasoning
     ) -> Provider:
         """
         返回与凭证匹配的 Provider 实例，按 (type, api_key, base_url) 去重。
@@ -114,6 +115,7 @@ class Provider(ABC):
 | `BedrockProvider` | `bedrock.py` | AWS Bedrock（继承 AnthropicProvider，强制 prompt_caching=False）|
 | `OpenAICompatibleProvider` | `openai_compatible.py` | OpenAI / Ollama / 其他兼容接口 |
 | `NvidiaProvider` | `nvidia.py` | NVIDIA NIM API（继承 OpenAICompatible，默认 base_url 指向 NIM）|
+| `DeepSeekProvider` | `deepseek.py` | DeepSeek API（继承 OpenAICompatible，默认 base_url 指向 DeepSeek，显式控制 thinking）|
 
 `OpenAICompatibleProvider` 使用 `httpx.AsyncClient` + 手动 SSE 解析，
 **不使用 openai SDK**（该 SDK 历史上不稳定）。
@@ -157,6 +159,7 @@ kernel/llm_provider/
   bedrock.py              # BedrockProvider
   openai_compatible.py    # OpenAICompatibleProvider
   nvidia.py               # NvidiaProvider (继承 OpenAICompatible)
+  deepseek.py             # DeepSeekProvider (继承 OpenAICompatible)
   format/
     __init__.py
     anthropic.py          # universal → Anthropic API 格式转换（纯函数）

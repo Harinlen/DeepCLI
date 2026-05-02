@@ -76,10 +76,16 @@ Router、Manager、queue/status/cancel 稳定后重新设计。不要在当前�
 
 **Design**: [`docs/cli/design.md`](../cli/design.md)
 **Docs**: [`docs/cli/README.md`](../cli/README.md)
+**Launcher plan**: [`launcher-subrepo-plan.md`](launcher-subrepo-plan.md)
 
 DeepCLI 的第一个面向用户前端：thin ACP client，TUI 移植自
 [oh-my-pi](https://github.com/can1357/oh-my-pi)（TypeScript/Bun）。
 所有 agent 逻辑在 kernel 侧，CLI 只做 TUI 渲染和用户输入。
+
+The user-facing `deepcli` command should move into a native cross-platform
+launcher sub-repo.  That launcher owns Windows/macOS/Linux background runtime
+startup, per-user singleton locking, port selection, and then invokes this
+TypeScript thin client with ACP connection environment.
 
 | Phase | 内容 | 优先级 |
 |-------|------|--------|

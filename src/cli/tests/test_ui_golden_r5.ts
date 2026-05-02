@@ -96,7 +96,7 @@ const frames: GoldenFrame[] = [
 	{
 		name: "welcome first screen",
 		lines: new WelcomeComponent("0.1.0", "no-model", "ACP", [], []).render(90),
-		mustInclude: ["deepcli v0.1.0", "Welcome back!", "⣿", "Tips", "No LSP servers", "No recent sessions"],
+		mustInclude: ["DeepCLI v0.1.0", "Welcome back!", "⣿", "Tips", "No LSP servers", "No recent sessions"],
 	},
 	{
 		name: "welcome with long model keeps right column",
@@ -106,7 +106,7 @@ const frames: GoldenFrame[] = [
 	{
 		name: "empty status line",
 		lines: [statusLine.getTopBorder(80).content],
-		mustInclude: ["π", "no-model", "0.0%"],
+		mustInclude: ["⏺", "no-model", "0.0%"],
 	},
 	{
 		name: "short editor with status border",

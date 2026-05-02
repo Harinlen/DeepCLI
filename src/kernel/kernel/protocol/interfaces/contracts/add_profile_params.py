@@ -12,7 +12,7 @@ class AddProfileParams(BaseModel):
     """User-chosen logical name for the profile (e.g. ``"my-qwen"``)."""
 
     provider_type: str
-    """Provider backend: ``"anthropic"`` | ``"bedrock"`` | ``"openai_compatible"``."""
+    """Provider backend: ``"anthropic"`` | ``"bedrock"`` | ``"openai_compatible"`` | ``"nvidia"`` | ``"deepseek"``."""
 
     model_id: str
     """Actual API model identifier sent to the provider (e.g. ``"qwen3-32b"``)."""

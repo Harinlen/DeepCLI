@@ -61,7 +61,7 @@ class ModelSpec(BaseModel):
     """Maximum tokens to request per completion."""
 
     thinking: bool = False
-    """Enable extended thinking / reasoning (Anthropic only)."""
+    """Enable extended thinking / reasoning where supported."""
 
     prompt_caching: bool = True
     """Enable prompt caching where supported (Anthropic only)."""
@@ -71,7 +71,7 @@ class ProviderConfig(BaseModel):
     """Configuration for one named provider entry (credentials + models)."""
 
     type: str
-    """Provider type: ``"anthropic"`` | ``"bedrock"`` | ``"openai_compatible"`` | ``"nvidia"``."""
+    """Provider type: ``"anthropic"`` | ``"bedrock"`` | ``"openai_compatible"`` | ``"nvidia"`` | ``"deepseek"``."""
 
     api_key: str | None = None
     """API key.  For ``bedrock``: AWS access key ID."""

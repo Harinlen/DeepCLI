@@ -1,5 +1,6 @@
 import { CombinedAutocompleteProvider, type SlashCommand } from "../src/active-port/tui/autocomplete.js";
 import { KeybindingsManager } from "../src/active-port/coding-agent/config/keybindings.js";
+import { BUILTIN_SLASH_COMMANDS as ACTIVE_PORT_BUILTIN_COMMANDS } from "../src/active-port/coding-agent/extensibility/slash-commands.js";
 import { createPromptActionAutocompleteProvider } from "../src/active-port/coding-agent/modes/prompt-action-autocomplete.js";
 import { BUILTIN_COMMANDS, commandsToSlashCommands, sortCommandsByLabel } from "../src/modes/interactive.js";
 import { assert } from "./helpers.js";
@@ -12,7 +13,6 @@ const commands: SlashCommand[] = [
 	{ name: "session", description: "List, resume, or delete sessions" },
 	{ name: "cost", description: "Show usage and cost" },
 	{ name: "memory", description: "List, show, or delete memories" },
-	{ name: "cron", description: "Manage scheduled tasks" },
 	{ name: "auth", description: "Manage secrets and auth values" },
 	{ name: "quit", description: "Exit DeepCLI" },
 	{ name: "exit", description: "Exit DeepCLI" },
@@ -24,7 +24,7 @@ const all = await provider.getSuggestions(["/"], 0, 1);
 assert(all !== null, "expected slash command suggestions");
 assert(
 	all.items.map(item => item.value).join(",") ===
-		"auth,compact,cost,cron,exit,help,memory,model,plan,quit,session",
+		"auth,compact,cost,exit,help,memory,model,plan,quit,session",
 	"slash commands should be alphabetized when scores tie",
 );
 
@@ -38,7 +38,7 @@ assert(
 const c = await provider.getSuggestions(["/c"], 0, 2);
 assert(c !== null, "expected /c slash command suggestions");
 assert(
-	c.items.map(item => item.value).join(",") === "compact,cost,cron",
+	c.items.map(item => item.value).join(",") === "compact,cost",
 	"slash command filtering should match command names only",
 );
 
@@ -87,6 +87,14 @@ assert(
 const themeArgs = await mustangProvider.getSuggestions(["/theme set l"], 0, 12);
 assert(themeArgs !== null, "expected /theme set suggestions");
 assert(themeArgs.items[0]?.value === "light", "/theme set should complete loaded themes");
+
+const activePortProvider = new CombinedAutocompleteProvider(ACTIVE_PORT_BUILTIN_COMMANDS);
+const activePortThemeArgs = await activePortProvider.getSuggestions(["/theme set l"], 0, 12);
+assert(activePortThemeArgs !== null, "expected active-port /theme set suggestions");
+assert(
+	activePortThemeArgs.items.some(item => item.value === "light"),
+	"active-port /theme set should complete loaded themes",
+);
 
 let copiedPrompt = false;
 const promptActionProvider = createPromptActionAutocompleteProvider({

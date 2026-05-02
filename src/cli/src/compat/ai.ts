@@ -43,6 +43,10 @@ export interface AssistantMessage extends Message {
 export interface Model { id: string; name?: string; provider?: string }
 export interface Api { id?: string; name?: string }
 export type Provider = string;
+export interface ProviderDetails {
+	provider: string;
+	fields: Array<{ label: string; value: string }>;
+}
 
 export const StringEnum = <T extends string[]>(values: T): T => values;
 
@@ -64,7 +68,13 @@ export function calculateRateLimitBackoffMs(): number { return 0; }
 export function parseRateLimitReason(): string | undefined { return undefined; }
 export async function completeSimple(): Promise<string> { return ""; }
 export function getEnvApiKey(name?: string): string | undefined { return name ? process.env[name] : undefined; }
-export function getProviderDetails(provider?: string): Record<string, unknown> {
-	return { id: provider, name: provider ?? "provider" };
+export function getProviderDetails(input?: string | { model?: Model; sessionId?: string }): ProviderDetails {
+	const model = typeof input === "object" ? input.model : undefined;
+	const provider = model?.provider ?? (typeof input === "string" ? input : undefined) ?? "provider";
+	const fields: Array<{ label: string; value: string }> = [];
+	if (model?.name) fields.push({ label: "Model", value: model.name });
+	if (model?.id && model.id !== model.name) fields.push({ label: "Model ID", value: model.id });
+	if (typeof input === "object" && input.sessionId) fields.push({ label: "Session", value: input.sessionId });
+	return { provider, fields };
 }
 export function getOAuthProviders(): unknown[] { return []; }

@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import { readFileSync } from "node:fs";
 
-export const APP_NAME = "deepcli";
+export const APP_NAME = "DeepCLI";
 export const CONFIG_DIR_NAME = ".mustang";
 export const VERSION = "0.1.0";
 

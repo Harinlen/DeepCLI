@@ -110,6 +110,47 @@ class FakeAcpKernel {
 	}
 
 	async #handlePrompt(ws: WebSocket, id: number, sessionId: string, text: string): Promise<void> {
+		if (text.includes("slow stream")) {
+			this.#notify(ws, sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "slow before" } });
+			await sleep(800);
+			this.#notify(ws, sessionId, { sessionUpdate: "tool_call", toolCallId: "slow-tool-1", title: "slowbash", rawInput: "{\"command\":\"echo slow\"}" });
+			this.#notify(ws, sessionId, {
+				sessionUpdate: "tool_call_update",
+				toolCallId: "slow-tool-1",
+				status: "completed",
+				content: "slow-output",
+			});
+			await sleep(1200);
+			this.#notify(ws, sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "slow after" } });
+			return this.#result(ws, id, { stopReason: "stop" });
+		}
+		if (text.includes("permission")) {
+			const outcome = await this.#requestPermission(ws, sessionId);
+			this.permissionOutcome = outcome;
+			if (text.includes("tool")) {
+				this.#notify(ws, sessionId, { sessionUpdate: "tool_call", toolCallId: "perm-tool-1", title: "bash", rawInput: "{\"command\":\"echo permitted\"}" });
+				this.#notify(ws, sessionId, {
+					sessionUpdate: "tool_call_update",
+					toolCallId: "perm-tool-1",
+					status: "completed",
+					content: "permitted-output",
+				});
+			}
+			this.#notify(ws, sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `permission:selected:${outcome}` } });
+			return this.#result(ws, id, { stopReason: "stop" });
+		}
+		if (text.includes("interleaved")) {
+			this.#notify(ws, sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "before tool" } });
+			this.#notify(ws, sessionId, { sessionUpdate: "tool_call", toolCallId: "tool-interleaved", title: "scan", rawInput: "{\"pattern\":\"bar\"}" });
+			this.#notify(ws, sessionId, {
+				sessionUpdate: "tool_call_update",
+				toolCallId: "tool-interleaved",
+				status: "completed",
+				content: "interleaved-result",
+			});
+			this.#notify(ws, sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "after tool" } });
+			return this.#result(ws, id, { stopReason: "stop" });
+		}
 		if (text.includes("tool")) {
 			this.#notify(ws, sessionId, { sessionUpdate: "tool_call", toolCallId: "tool-1", title: "grep", rawInput: "{\"pattern\":\"foo\"}" });
 			this.#notify(ws, sessionId, {
@@ -119,12 +160,6 @@ class FakeAcpKernel {
 				content: Array.from({ length: 18 }, (_, index) => `tool-result-line-${index + 1}`).join("\n"),
 			});
 			this.#notify(ws, sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "tool done" } });
-			return this.#result(ws, id, { stopReason: "stop" });
-		}
-		if (text.includes("permission")) {
-			const outcome = await this.#requestPermission(ws, sessionId);
-			this.permissionOutcome = outcome;
-			this.#notify(ws, sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `permission:selected:${outcome}` } });
 			return this.#result(ws, id, { stopReason: "stop" });
 		}
 		this.#notify(ws, sessionId, { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "thinking" } });
@@ -226,6 +261,10 @@ async function main(): Promise<void> {
 function promptText(prompt: unknown): string {
 	if (!Array.isArray(prompt)) return "";
 	return prompt.map(part => typeof part?.text === "string" ? part.text : "").join("");
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function runPtyDriver(command: string[], env: Record<string, string>): Promise<{ status: number; output: string }> {
@@ -343,6 +382,14 @@ expect("tool rendering collapsed", ["success grep", "tool-result-line-1", "Ctrl+
 expect_order("assistant answer follows tool output", "success grep", "tool done")
 expect_not_after("completed tool is not rebuilt as pending after answer", "tool done", "pending grep")
 expect_not_after("completed tool is not rebuilt after answer", "tool done", "success grep")
+send("show interleaved tool\r")
+expect("interleaved tool renders", ["before tool", "success scan", "interleaved-result", "after tool"])
+expect_order("interleaved intro precedes tool", "before tool", "success scan")
+expect_order("interleaved answer follows tool", "success scan", "after tool")
+send("show slow stream\r")
+expect("slow stream text renders before turn ends", ["slow before"], 0.7)
+expect("slow stream tool renders before turn ends", ["success slowbash", "slow-output"], 1.3)
+expect("slow stream final text renders", ["slow after"], 3)
 send("\x0f")
 expect("ctrl-o expands tool output", ["success grep", "tool-result-line-12"])
 send("/session delete")
@@ -359,6 +406,11 @@ send("ask permission\r")
 expect("permission overlay", ["Allow command?", "Allow once"])
 send("\r")
 expect("permission response returns to CLI", ["permission:selected:allow_once"])
+send("ask permission tool\r")
+expect("permission tool overlay", ["Allow command?", "Allow once"])
+send("\r")
+expect("permission-gated tool result streams before final text", ["success bash", "permitted-output", "permission:selected:allow_once"])
+expect_order("permission-gated tool precedes final text", "success bash", "permission:selected:allow_once")
 cleanup(0)
 `;
 

@@ -7,10 +7,13 @@ const bunBin = process.env.BUN_BIN ?? Bun.which("bun") ?? `${process.env.HOME}/.
 
 const tests = [
 	"test_autocomplete_sort.ts",
+	"test_editor_slash_argument_autocomplete.ts",
+	"test_syntax_highlight_fallback.ts",
 	"test_agent_session_adapter.ts",
 	"test_input_controller_r4.ts",
 	"test_session_selector_omp.ts",
 	"test_status_line.ts",
+	"test_terminal_title.ts",
 	"test_ui_golden_r5.ts",
 ];
 

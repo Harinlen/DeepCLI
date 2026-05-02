@@ -292,6 +292,12 @@
       "notes": "R1/R3 upstream parity dependency"
     },
     {
+      "upstream": "packages/coding-agent/src/modes/components/theme-selector.ts",
+      "target": "src/cli/src/active-port/coding-agent/modes/components/theme-selector.ts",
+      "phase": "theme-command",
+      "notes": "OMP theme selector for /theme list"
+    },
+    {
       "upstream": "packages/coding-agent/src/modes/components/status-line.ts",
       "target": "src/cli/src/active-port/coding-agent/modes/components/status-line.ts",
       "phase": "B1",

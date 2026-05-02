@@ -37,11 +37,20 @@ function normalizePremiumRequests(value: number): number {
 // Segment Implementations
 // ═══════════════════════════════════════════════════════════════════════════
 
-const piSegment: StatusLineSegment = {
+const CONNECTION_SPINNER_FRAMES = ["◐", "◓", "◑", "◒"];
+
+const connectionSegment: StatusLineSegment = {
 	id: "pi",
-	render(_ctx) {
-		const content = theme.icon.pi ? `${theme.icon.pi} ` : "";
-		return { content: theme.fg("accent", content), visible: true };
+	render(ctx) {
+		const state = ctx.session.kernelConnectionState ?? "connected";
+		if (state === "disconnected") {
+			return { content: theme.fg("muted", "○ "), visible: true };
+		}
+		if (state === "connecting") {
+			const frame = CONNECTION_SPINNER_FRAMES[Math.floor(Date.now() / 180) % CONNECTION_SPINNER_FRAMES.length];
+			return { content: theme.fg("warning", `${frame} `), visible: true };
+		}
+		return { content: theme.fg("success", "⏺ "), visible: true };
 	},
 };
 
@@ -374,7 +383,7 @@ const sessionNameSegment: StatusLineSegment = {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const SEGMENTS: Record<StatusLineSegmentId, StatusLineSegment> = {
-	pi: piSegment,
+	pi: connectionSegment,
 	model: modelSegment,
 	plan_mode: planModeSegment,
 	path: pathSegment,

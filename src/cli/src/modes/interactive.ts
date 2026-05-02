@@ -16,7 +16,6 @@ export const BUILTIN_COMMANDS: AutocompleteItem[] = [
   { value: "theme", label: "/theme", description: "Show or switch theme" },
   { value: "cost", label: "/cost", description: "Show usage and cost" },
   { value: "memory", label: "/memory", description: "List, show, or delete memories" },
-  { value: "cron", label: "/cron", description: "Manage scheduled tasks" },
   { value: "auth", label: "/auth", description: "Manage secrets and auth values" },
   { value: "quit", label: "/quit", description: "Exit DeepCLI" },
   { value: "exit", label: "/exit", description: "Exit DeepCLI" },
@@ -133,6 +132,7 @@ export class InteractiveMode {
   private readonly adapter: MustangAgentSessionAdapter;
   private mode: any;
   private resolveDone?: () => void;
+  private connectionIndicatorTimer?: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly client: AcpClient,
@@ -143,6 +143,7 @@ export class InteractiveMode {
       sessionService?: SessionService;
       recentSessions?: CliSessionInfo[];
       theme?: { theme: string; auto_theme: boolean; symbols: string; status_line: boolean; welcome_recent: number };
+      version?: string;
     } = {},
   ) {
     const sessionService = options.sessionService ?? new SessionService(client);
@@ -158,7 +159,9 @@ export class InteractiveMode {
   async run(): Promise<void> {
     await this.adapter.refreshModelProfiles().catch(() => {});
     const { InteractiveMode: OmpInteractiveMode } = await importActivePortInteractiveMode();
-    this.mode = new OmpInteractiveMode(this.adapter as never, "0.1.0");
+    this.mode = new OmpInteractiveMode(this.adapter as never, this.options.version ?? "0.1.0");
+    this.applyConnectionState(this.client.getConnectionState());
+    this.client.onConnectionStateChange((state) => this.applyConnectionState(state));
     this.client.setPermissionHandler((_id, req) => {
       const controller = new PermissionController(this.mode, () => {});
       return controller.handleRequest(req);
@@ -174,6 +177,32 @@ export class InteractiveMode {
     await new Promise<void>((resolve) => {
       this.resolveDone = resolve;
     });
+  }
+
+  private applyConnectionState(state: "connected" | "connecting" | "disconnected"): void {
+    this.adapter.setKernelConnectionState(state);
+    this.mode?.updateEditorTopBorder?.();
+    this.mode?.ui?.requestRender?.();
+    if (state === "connecting") {
+      this.startConnectionIndicatorTimer();
+    } else {
+      this.stopConnectionIndicatorTimer();
+    }
+  }
+
+  private startConnectionIndicatorTimer(): void {
+    if (this.connectionIndicatorTimer) return;
+    this.connectionIndicatorTimer = setInterval(() => {
+      this.mode?.updateEditorTopBorder?.();
+      this.mode?.ui?.requestRender?.();
+    }, 180);
+    this.connectionIndicatorTimer.unref?.();
+  }
+
+  private stopConnectionIndicatorTimer(): void {
+    if (!this.connectionIndicatorTimer) return;
+    clearInterval(this.connectionIndicatorTimer);
+    this.connectionIndicatorTimer = undefined;
   }
 
   private async inputLoop(): Promise<void> {

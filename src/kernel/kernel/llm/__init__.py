@@ -240,7 +240,7 @@ class LLMManager(Subsystem):
         default_ref = self._current_used.default
         profiles: list[ProfileInfo] = []
         for provider_name, pcfg in self._providers.items():
-            for spec in (pcfg.models or []):
+            for spec in pcfg.models or []:
                 is_default = (
                     default_ref.provider == provider_name
                     and default_ref.model == spec.id
@@ -290,8 +290,8 @@ class LLMManager(Subsystem):
         """Add a new provider and persist to config.
 
         For providers that support auto-discovery (anthropic, openai_compatible,
-        nvidia), omitting ``models`` triggers discovery. For bedrock, ``models``
-        is required.
+        nvidia, deepseek), omitting ``models`` triggers discovery. For bedrock,
+        ``models`` is required.
         """
         if params.name in self._providers:
             raise ValueError(

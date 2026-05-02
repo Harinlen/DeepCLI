@@ -32,10 +32,11 @@ class TextChunk:
 
 @dataclass(frozen=True)
 class ThoughtChunk:
-    """Streaming extended-thinking / reasoning delta (Anthropic-specific).
+    """Streaming extended-thinking / reasoning delta.
 
     ``signature`` is the verification token emitted at end of a thinking
-    block; it is empty for mid-block deltas.
+    block by providers that use signed thinking; it is empty for mid-block
+    deltas and for providers that expose unsigned reasoning.
     """
 
     content: str
@@ -151,11 +152,12 @@ class UserMessage:
 
 @dataclass(frozen=True)
 class ThinkingContent:
-    """Anthropic extended-thinking block, persisted in conversation history.
+    """Provider thinking block, persisted in conversation history.
 
-    The Anthropic API requires that thinking blocks from an assistant turn
-    are passed back verbatim (including ``signature``) in subsequent requests.
-    Omitting them causes a 422 error.  Other providers never produce this type.
+    Anthropic requires thinking blocks from an assistant turn to be passed
+    back verbatim (including ``signature``) in subsequent requests.  DeepSeek
+    uses the same internal representation for OpenAI-format
+    ``reasoning_content`` replay during tool-call subturns.
 
     Assembly: the provider yields multiple ``ThoughtChunk`` events per block —
     ``content`` deltas first, then one ``ThoughtChunk(content="", signature=...)``

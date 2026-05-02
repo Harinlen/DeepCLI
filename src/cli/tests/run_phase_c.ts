@@ -16,6 +16,7 @@ const tests = [
   "test_acp_reconnect.ts",
   "test_acp_client_turn_id.ts",
   "test_session_resume_before_prompt.ts",
+  "test_session_resume_retries_transient_internal.ts",
   "test_session_prompt_retries_client_turn.ts",
   "test_permission_auto_mode.ts",
 ];

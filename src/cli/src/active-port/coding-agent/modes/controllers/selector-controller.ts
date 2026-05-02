@@ -10,6 +10,7 @@ import { settings } from "../../config/settings";
 import { DebugSelectorComponent } from "../../debug";
 import {
 	getAvailableThemes,
+	getCurrentThemeName,
 	getSymbolTheme,
 	previewTheme,
 	setColorBlindMode,
@@ -31,6 +32,7 @@ import { OAuthSelectorComponent } from "../components/oauth-selector";
 import { SessionObserverOverlayComponent } from "../components/session-observer-overlay";
 import { SessionSelectorComponent } from "../components/session-selector";
 import { SettingsSelectorComponent } from "../components/settings-selector";
+import { ThemeSelectorComponent } from "../components/theme-selector";
 import { ToolExecutionComponent } from "../components/tool-execution";
 import { TreeSelectorComponent } from "../components/tree-selector";
 import { UserMessageSelectorComponent } from "../components/user-message-selector";
@@ -156,6 +158,48 @@ export class SelectorController {
 				},
 			);
 			return { component, focus: component };
+		});
+	}
+
+	showThemeSelector(): void {
+		getAvailableThemes().then(availableThemes => {
+			const activeThemeBeforePreview = getCurrentThemeName() ?? "dark";
+			const refreshThemeUi = () => {
+				this.ctx.statusLine?.invalidate?.();
+				this.ctx.updateEditorBorderColor?.();
+				this.ctx.updateEditorTopBorder?.();
+				this.ctx.ui.invalidate();
+				this.ctx.ui.requestRender();
+			};
+			this.showSelector(done => {
+				const selector = new ThemeSelectorComponent(
+					activeThemeBeforePreview,
+					availableThemes,
+					themeName => {
+						setTheme(themeName, true).then(result => {
+							refreshThemeUi();
+							done();
+							if (!result.success) {
+								this.ctx.showError(`Failed to load theme "${themeName}": ${result.error}`);
+								return;
+							}
+							this.ctx.showStatus(`Theme set to ${themeName}`);
+						});
+					},
+					() => {
+						setTheme(activeThemeBeforePreview, true).then(() => {
+							refreshThemeUi();
+							done();
+						});
+					},
+					themeName => {
+						previewTheme(themeName).then(result => {
+							if (result.success) refreshThemeUi();
+						});
+					},
+				);
+				return { component: selector, focus: selector.getSelectList() };
+			});
 		});
 	}
 

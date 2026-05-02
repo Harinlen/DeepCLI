@@ -26,8 +26,12 @@ server.on("connection", (socket) => {
 
 const client = await AcpClient.connect(`ws://127.0.0.1:${port}`, "dev");
 let disconnectMessage = "";
+const states: string[] = [];
 client.onDisconnect((error) => {
   disconnectMessage = error.message;
+});
+client.onConnectionStateChange((state) => {
+  states.push(state);
 });
 
 const pending = client.request("session/list", {}, { timeoutMs: 0 });
@@ -46,6 +50,7 @@ assert(
   disconnectMessage.includes("Kernel connection lost"),
   `disconnect handler should receive a clear message, got ${disconnectMessage}`,
 );
+assert(states.includes("connecting"), "connection state should switch to connecting after websocket close");
 
 client.close();
 await new Promise<void>((resolve) => server.close(() => resolve()));

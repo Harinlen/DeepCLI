@@ -1,6 +1,6 @@
 # CommandManager — Design
 
-Status: **landed** — 全部实装。9 个内置命令（`/help`、`/model`、`/plan`、`/compact`、`/session`、`/cost`、`/memory`、`/cron`、`/auth`）。
+Status: **landed** — 全部实装。8 个内置命令（`/help`、`/model`、`/plan`、`/compact`、`/session`、`/cost`、`/memory`、`/auth`）。
 
 ---
 
@@ -33,7 +33,6 @@ CommandManager 是**命令目录提供者**，不是执行者。
 | `/cost` | `session/get_usage` ← 待新增 | `session.usage_stats` | ACP 方法缺失 ⚠️ |
 | `/help` | 本地渲染（从 catalog 生成） | 本地渲染 | 无 |
 | `/memory` | 本地渲染 + file I/O | 同左 | 无 |
-| `/cron` | 本地渲染 | 同左 | 无 |
 | `/auth` | `secrets/auth` | `SecretManager` API | 无 |
 
 ---

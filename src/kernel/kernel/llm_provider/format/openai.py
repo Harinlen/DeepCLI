@@ -21,6 +21,7 @@ from kernel.llm.types import (
     Message,
     PromptSection,
     TextContent,
+    ThinkingContent,
     ToolResultContent,
     ToolSchema,
     ToolUseContent,
@@ -66,12 +67,16 @@ def schemas_to_openai(tool_schemas: list[ToolSchema]) -> list[dict[str, Any]]:
 def messages_to_openai(
     messages: list[Message],
     system: list[PromptSection],
+    *,
+    include_reasoning_content: bool = False,
 ) -> list[dict[str, Any]]:
     """Convert ``Message`` list → OpenAI ``messages`` parameter.
 
     Prepends the system prompt as a ``system`` role message.
     ``ToolResultContent`` blocks (embedded in ``UserMessage``) are split
     out as standalone ``tool`` role messages before any remaining content.
+    ``include_reasoning_content`` preserves provider reasoning for APIs
+    such as DeepSeek that require it during tool-call subturns.
     """
     result: list[dict[str, Any]] = []
 
@@ -80,22 +85,27 @@ def messages_to_openai(
         result.append({"role": "system", "content": system_text})
 
     for message in messages:
-        result.extend(_message(message))
+        result.extend(_message(message, include_reasoning_content=include_reasoning_content))
 
     return result
 
 
-def _message(message: Message) -> list[dict[str, Any]]:
+def _message(message: Message, *, include_reasoning_content: bool) -> list[dict[str, Any]]:
     if isinstance(message, AssistantMessage):
-        return [_assistant_message(message)]
+        return [_assistant_message(message, include_reasoning_content=include_reasoning_content)]
     if isinstance(message, UserMessage):
         return _user_message(message)
     raise TypeError(f"Unknown message type: {type(message)}")
 
 
-def _assistant_message(message: AssistantMessage) -> dict[str, Any]:
+def _assistant_message(
+    message: AssistantMessage,
+    *,
+    include_reasoning_content: bool,
+) -> dict[str, Any]:
     tool_calls: list[dict[str, Any]] = []
     text_parts: list[str] = []
+    reasoning_parts: list[str] = []
 
     for block in message.content:
         if isinstance(block, TextContent):
@@ -111,11 +121,15 @@ def _assistant_message(message: AssistantMessage) -> dict[str, Any]:
                     },
                 }
             )
+        elif isinstance(block, ThinkingContent):
+            reasoning_parts.append(block.thinking)
 
     msg: dict[str, Any] = {
         "role": "assistant",
         "content": "\n".join(text_parts) if text_parts else None,
     }
+    if include_reasoning_content and reasoning_parts:
+        msg["reasoning_content"] = "\n".join(reasoning_parts)
     if tool_calls:
         msg["tool_calls"] = tool_calls
     return msg

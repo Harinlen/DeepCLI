@@ -1,4 +1,9 @@
 // @ts-nocheck
+import {
+	getAvailableThemes,
+	getCurrentThemeName,
+	setTheme,
+} from "../modes/theme/theme";
 
 export interface ParsedBuiltinSlashCommand {
 	name: string;
@@ -17,25 +22,46 @@ export async function executeBuiltinSlashCommand(
 	const ctx = runtime?.ctx as any;
 	if (!parsed || !ctx) return undefined;
 
-	switch (parsed.name) {
-		case "session":
-			return await executeSessionCommand(ctx, parsed.args ?? "");
-		case "model":
-			return await executeModelCommand(ctx, parsed.args ?? "");
-		case "theme":
-			return await executeThemeCommand(ctx, parsed.args ?? "");
-		case "clear":
-			await ctx.handleClearCommand?.();
-			return true;
-		case "help":
-			await ctx.handleHotkeysCommand?.();
-			return true;
-		case "quit":
-		case "exit":
-			await ctx.shutdown?.();
-			return true;
-		default:
-			return undefined;
+	try {
+		switch (parsed.name) {
+			case "auth":
+				ctx.showWarning?.("/auth is not wired in the CLI TUI yet.");
+				return true;
+			case "compact":
+				await ctx.handleCompactCommand?.(parsed.args ?? "");
+				return true;
+			case "cost":
+				await ctx.handleUsageCommand?.();
+				return true;
+			case "memory":
+				await ctx.handleMemoryCommand?.(`/memory ${parsed.args ?? ""}`.trim());
+				return true;
+			case "plan":
+				await ctx.handlePlanModeCommand?.(parsed.args ?? "");
+				return true;
+			case "session":
+				return await executeSessionCommand(ctx, parsed.args ?? "");
+			case "model":
+				return await executeModelCommand(ctx, parsed.args ?? "");
+			case "theme":
+				return await executeThemeCommand(ctx, parsed.args ?? "");
+			case "clear":
+				await ctx.handleClearCommand?.();
+				return true;
+			case "help":
+				await ctx.handleHotkeysCommand?.();
+				return true;
+			case "quit":
+			case "exit":
+				await ctx.shutdown?.();
+				return true;
+			default:
+				return undefined;
+		}
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		ctx.showError?.(`/${parsed.name} failed: ${message}`);
+		return true;
 	}
 }
 
@@ -156,17 +182,34 @@ async function executeThemeCommand(ctx: any, argsText: string): Promise<boolean>
 	const args = splitArgs(argsText);
 	const subcommand = args[0] ?? "current";
 	if (subcommand === "current") {
-		ctx.showStatus?.("Theme command is managed by DeepCLI startup config");
+		ctx.showStatus?.(`Current theme: ${getCurrentThemeName() ?? "unknown"}`);
 		return true;
 	}
 	if (subcommand === "list") {
-		ctx.showStatus?.("Theme list is available through autocomplete");
+		if (ctx.showThemeSelector) {
+			ctx.showThemeSelector();
+			return true;
+		}
+		const current = getCurrentThemeName();
+		const themes = await getAvailableThemes();
+		const lines = themes.map(name => `${name === current ? "*" : " "} ${name}`);
+		ctx.showStatus?.(["Available themes:", ...lines].join("\n"));
 		return true;
 	}
 	if (subcommand === "set") {
 		const name = args[1];
 		if (!name) {
 			ctx.showWarning?.("Usage: /theme set <name>");
+			return true;
+		}
+		const result = await setTheme(name, ctx.enableThemeWatcher ?? true);
+		ctx.statusLine?.invalidate?.();
+		ctx.updateEditorTopBorder?.();
+		ctx.updateEditorBorderColor?.();
+		ctx.ui?.invalidate?.();
+		ctx.ui?.requestRender?.();
+		if (!result.success) {
+			ctx.showError?.(`Failed to load theme "${name}": ${result.error}`);
 			return true;
 		}
 		ctx.showStatus?.(`Theme set to ${name}`);

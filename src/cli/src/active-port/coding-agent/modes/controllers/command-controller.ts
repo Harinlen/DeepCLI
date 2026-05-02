@@ -543,19 +543,9 @@ export class CommandController {
 				await Bun.sleep(10);
 			}
 		}
-		await this.ctx.session.newSession();
-		this.ctx.resetObserverRegistry();
-		setSessionTerminalTitle(
-			this.ctx.sessionManager.getSessionName(),
-			this.ctx.sessionManager.getCwd(),
-			this.ctx.sessionManager.titleSource,
-		);
 
 		this.ctx.statusLine.invalidate();
-		this.ctx.statusLine.setSessionStartTime(Date.now());
 		this.ctx.updateEditorTopBorder();
-		this.ctx.updateEditorBorderColor();
-		this.ctx.ui.requestRender();
 
 		this.ctx.chatContainer.clear();
 		this.ctx.pendingMessagesContainer.clear();
@@ -564,11 +554,7 @@ export class CommandController {
 		this.ctx.streamingMessage = undefined;
 		this.ctx.pendingTools.clear();
 
-		this.ctx.chatContainer.addChild(new Spacer(1));
-		this.ctx.chatContainer.addChild(
-			new Text(`${theme.fg("accent", `${theme.status.success} New session started`)}`, 1, 1),
-		);
-		await this.ctx.reloadTodos();
+		this.ctx.showStatus("Conversation view cleared");
 		this.ctx.ui.requestRender();
 	}
 

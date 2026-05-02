@@ -125,13 +125,19 @@ function mergeConfig(config: CliConfig, parsed: Record<string, unknown>, path: s
 
 function applyEnvironment(config: CliConfig, env: CliEnvironment): void {
   if (env.KERNEL_URL) config.kernel.url = env.KERNEL_URL;
-  if (env.KERNEL_PORT) config.kernel.url = `ws://localhost:${env.KERNEL_PORT}`;
+  if (env.KERNEL_PORT) {
+    config.kernel.url = `ws://localhost:${env.KERNEL_PORT}`;
+    config.kernel.health_url = `http://localhost:${env.KERNEL_PORT}/`;
+  }
   if (env.MUSTANG_TOKEN) config.kernel.token = env.MUSTANG_TOKEN;
 }
 
 function applyArgs(config: CliConfig, args: Partial<CliArgs>): void {
   if (args.kernelUrl) config.kernel.url = args.kernelUrl;
-  if (args.port !== undefined) config.kernel.url = `ws://localhost:${args.port}`;
+  if (args.port !== undefined) {
+    config.kernel.url = `ws://localhost:${args.port}`;
+    config.kernel.health_url = `http://localhost:${args.port}/`;
+  }
   if (args.theme) config.ui.theme = args.theme;
 }
 

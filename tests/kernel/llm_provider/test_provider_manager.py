@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from kernel.llm_provider import LLMProviderManager, _create_provider
+from kernel.llm_provider.deepseek import DeepSeekProvider
 from kernel.llm_provider.nvidia import NvidiaProvider
 from kernel.llm_provider.openai_compatible import OpenAICompatibleProvider
 
@@ -53,16 +54,18 @@ async def test_shutdown_closes_all_cached_providers_and_keeps_going_on_error() -
     assert manager._providers == {}
 
 
-def test_create_provider_openai_compatible_and_nvidia_defaults() -> None:
+def test_create_provider_openai_compatible_vendor_defaults() -> None:
     openai = _create_provider(
         provider_type="openai_compatible",
         api_key="sk-test",
         base_url="https://custom.example/v1",
     )
     nvidia = _create_provider(provider_type="nvidia", api_key="nv-test", base_url=None)
+    deepseek = _create_provider(provider_type="deepseek", api_key="ds-test", base_url=None)
 
     assert isinstance(openai, OpenAICompatibleProvider)
     assert isinstance(nvidia, NvidiaProvider)
+    assert isinstance(deepseek, DeepSeekProvider)
 
 
 def test_create_provider_rejects_unknown_type() -> None:

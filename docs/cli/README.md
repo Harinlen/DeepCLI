@@ -12,6 +12,7 @@ session truth 和本地执行。
 | [design.md](design.md) | CLI 设计：ACP 边界、oh-my-pi active-port、目录和约束 |
 | [history/](history/) | 已实现或历史计划，保留作为实现决策记录 |
 | [../plans/cli-plan.md](../plans/cli-plan.md) | CLI 未完成工作和后续计划 |
+| [../plans/launcher-subrepo-plan.md](../plans/launcher-subrepo-plan.md) | 用户级 `deepcli` launcher：后台 Kernel 单例 + CLI handoff |
 
 ## Current Facts
 
@@ -32,6 +33,8 @@ session truth 和本地执行。
 ## Rules
 
 - New or unfinished CLI work belongs under `docs/plans/`.
+- The user-facing cross-platform `deepcli` command belongs to the planned
+  launcher sub-repo; `src/cli/` remains the thin ACP TUI client.
 - `docs/cli/` is for implemented design facts and history.
 - Keep kernel-side subsystem facts in `docs/kernel/`.
 - If CLI needs new runtime capability, add/extend a kernel ACP method first;

@@ -103,8 +103,12 @@ def _create_provider(
             from kernel.llm_provider.nvidia import NvidiaProvider
 
             return NvidiaProvider(api_key=api_key, base_url=base_url)
+        case "deepseek":
+            from kernel.llm_provider.deepseek import DeepSeekProvider
+
+            return DeepSeekProvider(api_key=api_key, base_url=base_url)
         case _:
             raise ValueError(
                 f"Unknown provider type '{provider_type}'. "
-                f"Supported: anthropic, bedrock, openai_compatible, nvidia"
+                f"Supported: anthropic, bedrock, openai_compatible, nvidia, deepseek"
             )

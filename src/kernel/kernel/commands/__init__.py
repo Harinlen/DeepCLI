@@ -70,13 +70,6 @@ _BUILTIN_COMMANDS: list[CommandDef] = [
         subcommands=["list", "show", "delete"],
     ),
     CommandDef(
-        name="cron",
-        description="Manage scheduled cron jobs",
-        usage="/cron [list | delete <id> | pause <id> | resume <id>]",
-        acp_method=None,
-        subcommands=["list", "delete", "pause", "resume"],
-    ),
-    CommandDef(
         name="auth",
         description="Manage stored credentials",
         usage="/auth set|get|list|delete|import-env ...",

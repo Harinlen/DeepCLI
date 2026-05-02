@@ -30,6 +30,7 @@ try {
     args: { port: 9200, theme: "dark-midnight" },
   });
   assert(loaded.config.kernel.url === "ws://localhost:9200", "argv port should override env and config URL");
+  assert(loaded.config.kernel.health_url === "http://localhost:9200/", "argv port should update health URL");
   assert(loaded.config.kernel.token === "env-token", "env token should override literal config token");
   assert(loaded.config.session.startup === "last", "config session startup should load");
   assert(loaded.config.session.picker_limit === 7, "numeric config field should load");

@@ -221,6 +221,40 @@ class TestSessionNewFlow:
 
 class TestRuntimeClientRequestTunnel:
     @pytest.mark.anyio
+    async def test_session_update_is_forwarded_to_access_client(self, dispatcher) -> None:
+        class _Sender:
+            def __init__(self) -> None:
+                self.notifications = []
+
+            async def notify(self, method, params):
+                self.notifications.append((method, params))
+
+        sender = _Sender()
+        response = await dispatcher._handle_hub_client_request(
+            HubFrame(
+                frame_id="runtime-client-update-1",
+                frame_type=HubFrameType.REQUEST,
+                contract="client.request",
+                payload={
+                    "method": "session/update",
+                    "params": {
+                        "sessionId": "sess-001",
+                        "update": {
+                            "sessionUpdate": "agent_message_chunk",
+                            "content": {"type": "text", "text": "hello"},
+                        },
+                    },
+                },
+            ),
+            sender,
+        )
+
+        assert response.payload["ok"] is True
+        assert sender.notifications[0][0] == "session/update"
+        assert sender.notifications[0][1].session_id == "sess-001"
+        assert sender.notifications[0][1].update.content.text == "hello"
+
+    @pytest.mark.anyio
     async def test_permission_request_is_forwarded_to_access_client(self, dispatcher) -> None:
         class _Sender:
             async def request(self, method, params, *, result_type, timeout=None):
@@ -564,6 +598,53 @@ class TestNotificationErrorHandling:
         )
         frames2 = await _round_trip(codec, dispatcher, auth, raw2)
         assert len(frames2) == 1
+
+
+class TestHubRoutingRetries:
+    @pytest.mark.anyio
+    async def test_runtime_not_registered_is_retried(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_session_handler,
+        auth: AuthContext,
+    ) -> None:
+        mt = _make_module_table(fake_session_handler)
+        mt.agent_hub_endpoint = "ws://hub.test"
+        dispatcher = AcpSessionHandler(mt)
+        monkeypatch.setattr(
+            "kernel.protocol.acp.session_handler._HUB_RUNTIME_RETRY_DELAY_SECONDS",
+            0,
+        )
+        calls = 0
+
+        async def fake_request_hub(_endpoint: str, frame: HubFrame) -> HubFrame:
+            nonlocal calls
+            calls += 1
+            if calls < 3:
+                return HubFrame(
+                    frame_id="hub-response",
+                    frame_type=HubFrameType.RESPONSE,
+                    contract=frame.contract,
+                    payload={"ok": False, "error": "runtime_not_registered"},
+                )
+            return HubFrame(
+                frame_id="hub-response",
+                frame_type=HubFrameType.RESPONSE,
+                contract=frame.contract,
+                payload={"ok": True, "value": "ready"},
+            )
+
+        monkeypatch.setattr("kernel.agent_hub.request_hub", fake_request_hub)
+        conn, _sender = dispatcher._get_or_create_connection(auth)
+        payload = await dispatcher._route_agent_contract_through_hub(
+            contract="agent.resume",
+            params={"sessionId": "sess-001", "cwd": "/tmp"},
+            session_id="sess-001",
+            conn=conn,
+        )
+
+        assert calls == 3
+        assert payload["value"] == "ready"
 
 
 class TestInvalidParams:

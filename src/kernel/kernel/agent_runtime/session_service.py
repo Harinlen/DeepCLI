@@ -79,6 +79,11 @@ class CollectingRuntimeSender:
 
     async def notify(self, method: str, params: BaseModel) -> None:
         self.notifications.append((method, params))
+        if self.client_peer is not None:
+            await self.client_peer.request_client(
+                method=method,
+                params=params.model_dump(by_alias=True),
+            )
 
     async def request(
         self,
@@ -225,7 +230,9 @@ class AgentSessionRuntimeService:
         return {
             "stopReason": result.stop_reason,
             "_meta": result.meta,
-            "updates": [
+            "updates": []
+            if client_peer is not None
+            else [
                 params.model_dump(by_alias=True)
                 for method, params in sender.notifications
                 if method == "session/update"

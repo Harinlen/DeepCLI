@@ -7,6 +7,7 @@ const updates = [
 	{ sessionUpdate: "tool_call", toolCallId: "tool-1", title: "Bash", rawInput: "{\"command\":\"pwd\"}" },
 	{ sessionUpdate: "tool_call_update", toolCallId: "tool-1", status: "in_progress", content: "running" },
 	{ sessionUpdate: "tool_call_update", toolCallId: "tool-1", status: "completed", content: "done" },
+	{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "after" } },
 	{ sessionUpdate: "session_info_update", title: "New title" },
 ];
 
@@ -42,8 +43,23 @@ const adapter = new MustangAgentSessionAdapter({
 });
 
 const events: string[] = [];
+const renderOrder: string[] = [];
 adapter.subscribe(event => {
 	events.push(event.type);
+	const message = event.message as { role?: string; content?: Array<{ type: string; text?: string; thinking?: string }> } | undefined;
+	if (event.type === "message_start" && message?.role === "assistant") {
+		renderOrder.push("assistant:start");
+	}
+	if (event.type === "message_end" && message?.role === "assistant") {
+		const text = (message.content ?? [])
+			.filter((block: { type: string }) => block.type === "text" || block.type === "thinking")
+			.map((block: { text?: string; thinking?: string }) => block.text ?? block.thinking ?? "")
+			.join("");
+		renderOrder.push(`assistant:end:${text}`);
+	}
+	if (event.type === "tool_execution_start") {
+		renderOrder.push(`tool:${event.toolCallId}`);
+	}
 });
 
 await adapter.prompt("hi");
@@ -57,9 +73,24 @@ assert(events.includes("agent_end"), "adapter should emit agent_end");
 assert(adapter.messages.length === 2, "adapter should retain user and assistant messages");
 assert(adapter.sessionManager.getSessionName() === "New title", "session_info_update should refresh local title");
 assert(adapter.isStreaming === false, "adapter should clear streaming flag after prompt");
+const stats = adapter.getSessionStats();
+assert(stats.sessionId === "sess-1", "/session stats should include session id");
+assert(stats.userMessages === 1, "/session stats should count user messages");
+assert(stats.assistantMessages === 1, "/session stats should count assistant messages");
+assert(stats.toolCalls === 1, "/session stats should count tool calls");
+assert(stats.tokens.total === 0, "/session stats should expose token totals");
+assert(adapter.getAsyncJobSnapshot().running.length === 0, "adapter should expose empty async job snapshot");
+assert(adapter.modelRegistry.authStorage.hasOAuth("deepseek") === false, "adapter should expose no-op OAuth auth storage");
+assert(adapter.modelRegistry.authStorage.has("deepseek") === false, "adapter should expose no-op API key auth storage");
+assert(adapter.modelRegistry.authStorage.hasAuth("deepseek") === false, "adapter should expose no-op fallback auth storage");
+assert(
+	renderOrder.join("|") === "assistant:start|assistant:end:thinkinghello|tool:tool-1|assistant:start|assistant:end:after",
+	`adapter should project ACP stream into ordered render blocks, got: ${renderOrder.join("|")}`,
+);
 
 const assistant = adapter.messages.find(message => message.role === "assistant");
 assert(assistant?.content.some((block: { type: string; text?: string }) => block.type === "text" && block.text === "hello"), "assistant text chunk should be appended");
+assert(assistant?.content.some((block: { type: string; text?: string }) => block.type === "text" && block.text === "after"), "assistant text after tool should be appended");
 assert(assistant?.content.some((block: { type: string; thinking?: string }) => block.type === "thinking" && block.thinking === "thinking"), "assistant thinking chunk should be appended");
 assert(assistant?.content.some((block: { type: string; id?: string }) => block.type === "toolCall" && block.id === "tool-1"), "tool call should be appended to assistant message");
 

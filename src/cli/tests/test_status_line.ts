@@ -36,6 +36,7 @@ const statusLine = new StatusLineComponent({
 		],
 		model: { id: "claude-sonnet", name: "sonnet", provider: "anthropic" },
 	},
+	kernelConnectionState: "connected",
 	isFastModeEnabled: () => false,
 	getAsyncJobSnapshot: () => ({ running: [] }),
 	modelRegistry: { isUsingOAuth: () => false },
@@ -43,6 +44,7 @@ const statusLine = new StatusLineComponent({
 
 const border = statusLine.getTopBorder(80);
 assert(border.width > 0, "status line top border should render visible content");
+assert(border.content.includes("⏺"), "status line should show connected kernel state");
 assert(border.content.includes("sonnet"), "status line should include model segment");
 assert(border.content.includes("mustang") || border.content.includes("/tmp"), "status line should include cwd path segment");
 assert(border.content.includes("0.0%") || border.content.includes("◫"), "status line should include context segment");
@@ -65,5 +67,30 @@ assert(noModelStatusLine.getTopBorder(80).content.includes("no-model"), "status 
 
 statusLine.setHookStatus("test", "hook ok");
 assert(statusLine.render(40)[0]?.includes("hook ok"), "status line render should expose hook status rows");
+
+const connectionSession = {
+	model: { id: "claude-sonnet", name: "sonnet", provider: "anthropic" },
+	agent: { state: { messages: [] } },
+	sessionManager: {
+		getCwd: () => "/tmp",
+		getSessionName: () => undefined,
+		getUsageStatistics: () => ({ premiumRequests: 0 }),
+		titleSource: undefined,
+	},
+	state: { messages: [], model: { id: "claude-sonnet", name: "sonnet", provider: "anthropic" } },
+	isFastModeEnabled: () => false,
+	getAsyncJobSnapshot: () => ({ running: [] }),
+	modelRegistry: { isUsingOAuth: () => false },
+};
+const connectingBorder = new StatusLineComponent({
+	...connectionSession,
+	kernelConnectionState: "connecting",
+} as never).getTopBorder(80).content;
+assert(/[◐◓◑◒]/.test(connectingBorder), "status line should show rotating connecting kernel state");
+const disconnectedBorder = new StatusLineComponent({
+	...connectionSession,
+	kernelConnectionState: "disconnected",
+} as never).getTopBorder(80).content;
+assert(disconnectedBorder.includes("○"), "status line should show disconnected kernel state");
 
 console.log("PASS: status line");

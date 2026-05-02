@@ -131,6 +131,7 @@ DeepCLI 会直接实现需要的控制平面能力，不依赖 `acpx` CLI/runtim
 | **Full-system test plan** | [`plans/full-system-test-plan.md`](plans/full-system-test-plan.md) | 覆盖单元测试、闭合缝、真实 Supervisor E2E、CLI/PTY、Probe 验收矩阵 |
 | **Kernel unit-test Phase 1** | [`plans/kernel-unit-test-phase1.md`](plans/kernel-unit-test-phase1.md) | Kernel 每个组件的单元测试补齐任务、优先级、验收命令 |
 | **CLI pending work** | [`plans/cli-plan.md`](plans/cli-plan.md) | CLI future work, reconnect, audits |
+| **Launcher sub-repo** | [`plans/launcher-subrepo-plan.md`](plans/launcher-subrepo-plan.md) | Cross-platform `deepcli` command: background Kernel singleton + CLI handoff |
 | **CLI docs** | [`cli/README.md`](cli/README.md) | CLI implemented design facts and history |
 | **Kernel completed plans archive** | [`kernel/history/plans/`](kernel/history/plans/) | 已完成的 Kernel 计划归档，例如 Session ACP、Session module split、Orchestrator split、prompt alignment |
 | **CLI completed plans archive** | [`cli/history/plans/`](cli/history/plans/) | 已完成的 CLI 计划/审计归档，例如 active-port prune |

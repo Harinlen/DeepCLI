@@ -12,7 +12,7 @@ class AddProviderParams(BaseModel):
     """User-chosen logical name for the provider (e.g. ``"bedrock"``)."""
 
     provider_type: str
-    """Provider backend: ``"anthropic"`` | ``"bedrock"`` | ``"openai_compatible"`` | ``"nvidia"``."""
+    """Provider backend: ``"anthropic"`` | ``"bedrock"`` | ``"openai_compatible"`` | ``"nvidia"`` | ``"deepseek"``."""
 
     api_key: str | None = None
     """API key.  For ``bedrock``: AWS access key ID."""

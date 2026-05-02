@@ -1,9 +1,11 @@
 import { KeybindingsManager } from "../src/active-port/coding-agent/config/keybindings.js";
 import { executeBuiltinSlashCommand } from "../src/active-port/coding-agent/slash-commands/builtin-registry.js";
+import { getCurrentThemeName, initTheme } from "../src/active-port/coding-agent/modes/theme/theme.js";
 import { assert } from "./helpers.js";
 
 const load = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<any>;
 const { InputController } = await load("../src/active-port/coding-agent/modes/controllers/input-controller.ts");
+const { CommandController } = await load("../src/active-port/coding-agent/modes/controllers/command-controller.ts");
 
 class FakeEditor {
 	text = "";
@@ -96,6 +98,9 @@ function makeContext() {
 		toggleThinkingBlockVisibility: () => calls.push("thinking-toggle"),
 		handleHotkeysCommand: () => calls.push("hotkeys"),
 		handlePlanModeCommand: () => calls.push("plan"),
+		handleCompactCommand: () => calls.push("compact"),
+		handleUsageCommand: () => calls.push("usage"),
+		handleMemoryCommand: (text: string) => calls.push(`memory:${text}`),
 		handleClearCommand: () => calls.push("clear-command"),
 		showSessionSelector: () => calls.push("session-selector"),
 		handleSTTToggle: () => calls.push("stt"),
@@ -141,6 +146,16 @@ await editor.onSubmit?.("$ print(1)");
 assert(calls.includes("python:print(1):context"), "$ should route through session.executePython");
 await editor.onSubmit?.("$$ x = 1");
 assert(calls.includes("python:x = 1:excluded"), "$$ should exclude python output from context");
+
+let submittedPrompt = "";
+ctx.onInputCallback = (submission: { text: string }) => {
+	submittedPrompt = submission.text;
+	calls.push(`prompt:${submission.text}`);
+};
+await editor.onSubmit?.("/auth");
+assert(calls.some(item => item === "warning:/auth is not wired in the CLI TUI yet."), "/auth should fail locally until wired");
+assert(submittedPrompt === "", "/auth must not fall through to the LLM prompt path");
+ctx.onInputCallback = undefined;
 
 ctx.session.isBashRunning = true;
 editor.onEscape?.();
@@ -207,5 +222,100 @@ assert(listCalls.includes("session-selector"), "/session list should open the OM
 assert(!listCalls.some(item => item.startsWith("status:") && item.includes("\n")), "/session list must not put multiline output in status");
 await executeBuiltinSlashCommand("/session switch 2", { ctx: listCtx });
 assert(listCalls.includes("load:sess-2"), "/session switch <number> should resolve through the ACP session list");
+
+const failClosedCalls: string[] = [];
+await executeBuiltinSlashCommand("/session", {
+	ctx: {
+		handleSessionCommand: async () => {
+			throw new Error("missing compat");
+		},
+		showError: (message: string) => failClosedCalls.push(`error:${message}`),
+	},
+});
+assert(
+	failClosedCalls.includes("error:/session failed: missing compat"),
+	"builtin slash commands should fail through the TUI error path",
+);
+
+await initTheme(false, "unicode", false, "dark", "dark");
+const themeCalls: string[] = [];
+const themeCtx = {
+	enableThemeWatcher: false,
+	statusLine: { invalidate: () => themeCalls.push("status-invalidate") },
+	ui: {
+		invalidate: () => themeCalls.push("ui-invalidate"),
+		requestRender: () => themeCalls.push("render"),
+	},
+	updateEditorTopBorder: () => themeCalls.push("top-border"),
+	updateEditorBorderColor: () => themeCalls.push("border"),
+	showStatus: (message: string) => themeCalls.push(`status:${message}`),
+	showWarning: (message: string) => themeCalls.push(`warning:${message}`),
+	showError: (message: string) => themeCalls.push(`error:${message}`),
+};
+await executeBuiltinSlashCommand("/theme current", { ctx: themeCtx });
+assert(themeCalls.includes("status:Current theme: dark"), "/theme current should show the active theme");
+await executeBuiltinSlashCommand("/theme list", { ctx: themeCtx });
+assert(
+	themeCalls.some(item => item.startsWith("status:Available themes:") && item.includes("* dark")),
+	"/theme list should list available themes and mark the current theme when no selector is available",
+);
+const themeSelectorCalls: string[] = [];
+await executeBuiltinSlashCommand("/theme list", {
+	ctx: {
+		showThemeSelector: () => themeSelectorCalls.push("theme-selector"),
+		showStatus: (message: string) => themeSelectorCalls.push(`status:${message}`),
+	},
+});
+assert(themeSelectorCalls.includes("theme-selector"), "/theme list should open the OMP theme selector in the TUI");
+assert(
+	!themeSelectorCalls.some(item => item.startsWith("status:Available themes:")),
+	"/theme list should not dump the theme list into the status area when the selector exists",
+);
+await executeBuiltinSlashCommand("/theme set light", { ctx: themeCtx });
+assert(getCurrentThemeName() === "light", "/theme set should switch the active theme");
+assert(themeCalls.includes("status:Theme set to light"), "/theme set should report success");
+assert(themeCalls.includes("status-invalidate"), "/theme set should refresh the status line");
+assert(themeCalls.includes("top-border"), "/theme set should refresh the editor top border");
+await executeBuiltinSlashCommand("/theme set definitely-missing-theme", { ctx: themeCtx });
+assert(
+	themeCalls.some(item => item.startsWith('error:Failed to load theme "definitely-missing-theme"')),
+	"/theme set should report invalid theme errors",
+);
+
+const clearCalls: string[] = [];
+const clearCtx = {
+	loadingAnimation: undefined,
+	statusContainer: { clear: () => clearCalls.push("status-clear") },
+	session: {
+		isCompacting: false,
+		newSession: async () => clearCalls.push("new-session"),
+	},
+	statusLine: {
+		invalidate: () => clearCalls.push("status-invalidate"),
+		setSessionStartTime: () => clearCalls.push("session-start-time"),
+	},
+	updateEditorTopBorder: () => clearCalls.push("top-border"),
+	updateEditorBorderColor: () => clearCalls.push("border"),
+	chatContainer: {
+		clear: () => clearCalls.push("chat-clear"),
+		addChild: () => clearCalls.push("chat-add"),
+	},
+	pendingMessagesContainer: { clear: () => clearCalls.push("pending-clear") },
+	compactionQueuedMessages: ["queued"],
+	streamingComponent: {},
+	streamingMessage: {},
+	pendingTools: { clear: () => clearCalls.push("tools-clear") },
+	showStatus: (message: string) => clearCalls.push(`status:${message}`),
+	ui: { requestRender: () => clearCalls.push("render") },
+	resetObserverRegistry: () => clearCalls.push("reset-observers"),
+	reloadTodos: async () => clearCalls.push("reload-todos"),
+};
+await new CommandController(clearCtx).handleClearCommand();
+assert(clearCalls.includes("chat-clear"), "/clear should clear the visible chat container");
+assert(clearCalls.includes("pending-clear"), "/clear should clear pending visible messages");
+assert(clearCalls.includes("status:Conversation view cleared"), "/clear should report a view clear");
+assert(!clearCalls.includes("new-session"), "/clear must not create a new session");
+assert(!clearCalls.includes("reset-observers"), "/clear must not reset session observers");
+assert(!clearCalls.includes("session-start-time"), "/clear must not reset session timing");
 
 console.log("PASS: input controller R4");

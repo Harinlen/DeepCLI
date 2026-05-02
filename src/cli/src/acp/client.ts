@@ -95,6 +95,8 @@ export class KernelDisconnected extends Error {
 type UpdateHandler = (params: SessionUpdateParams) => void;
 type DisconnectHandler = (error: KernelDisconnected) => void;
 type ReconnectHandler = () => void;
+export type KernelConnectionState = "connected" | "connecting" | "disconnected";
+type ConnectionStateHandler = (state: KernelConnectionState) => void;
 type PermissionHandler = (
   id: number,
   req: PermissionRequest,
@@ -109,9 +111,11 @@ export class AcpClient {
   private updateHandlers = new Set<UpdateHandler>();
   private disconnectHandlers = new Set<DisconnectHandler>();
   private reconnectHandlers = new Set<ReconnectHandler>();
+  private connectionStateHandlers = new Set<ConnectionStateHandler>();
   private permissionHandler?: PermissionHandler;
   private disconnected?: KernelDisconnected;
   private reconnecting?: Promise<void>;
+  private connectionState: KernelConnectionState = "connected";
   private closing = false;
   private healthTimer?: ReturnType<typeof setInterval>;
 
@@ -217,6 +221,7 @@ export class AcpClient {
 
   close(): void {
     this.closing = true;
+    this.setConnectionState("disconnected");
     this.stopHealthTimer();
     this.ws.close();
     this.rejectPending(new KernelDisconnected("Kernel connection closed."));
@@ -443,6 +448,16 @@ export class AcpClient {
     return () => this.reconnectHandlers.delete(handler);
   }
 
+  onConnectionStateChange(handler: ConnectionStateHandler): () => void {
+    this.connectionStateHandlers.add(handler);
+    queueMicrotask(() => handler(this.connectionState));
+    return () => this.connectionStateHandlers.delete(handler);
+  }
+
+  getConnectionState(): KernelConnectionState {
+    return this.connectionState;
+  }
+
   isConnected(): boolean {
     return !this.disconnected && this.ws.readyState === WebSocket.OPEN;
   }
@@ -469,6 +484,7 @@ export class AcpClient {
   private reconnect(): Promise<void> {
     if (this.isConnected()) return Promise.resolve();
     if (this.reconnecting) return this.reconnecting;
+    this.setConnectionState("connecting");
     this.reconnecting = this.reconnectLoop().finally(() => {
       this.reconnecting = undefined;
     });
@@ -487,6 +503,7 @@ export class AcpClient {
         this.disconnected = undefined;
         this.attachWebSocket(next);
         await this.initialize();
+        this.setConnectionState("connected");
         for (const handler of this.reconnectHandlers) handler();
         return;
       } catch (error) {
@@ -494,6 +511,7 @@ export class AcpClient {
         delayMs = Math.min(2_000, delayMs * 2);
       }
     }
+    this.setConnectionState("disconnected");
     throw lastError instanceof Error
       ? lastError
       : new KernelDisconnected("Kernel reconnect failed.");
@@ -504,8 +522,15 @@ export class AcpClient {
     this.disconnected = error;
     this.stopHealthTimer();
     this.rejectPending(error);
+    this.setConnectionState("connecting");
     for (const handler of this.disconnectHandlers) handler(error);
     void this.reconnect().catch(() => {});
+  }
+
+  private setConnectionState(state: KernelConnectionState): void {
+    if (this.connectionState === state) return;
+    this.connectionState = state;
+    for (const handler of this.connectionStateHandlers) handler(state);
   }
 
   private rejectPending(error: KernelDisconnected): void {

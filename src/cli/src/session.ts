@@ -1,4 +1,5 @@
 import {
+  AcpError,
   KernelDisconnected,
   type AcpClient,
   type ExecutionResult,
@@ -14,6 +15,9 @@ type MustangSessionClient = Pick<
   AcpClient,
   "request" | "notify" | "promptRequest" | "executeShellRequest" | "executePythonRequest" | "onUpdate"
 >;
+
+const RESUME_RETRY_ATTEMPTS = 24;
+const RESUME_RETRY_DELAY_MS = 250;
 
 export class MustangSession {
   constructor(
@@ -53,12 +57,12 @@ export class MustangSession {
     const unsub = this.client.onUpdate(onUpdate);
     const clientTurnId = randomUUID();
     try {
-      await this.resume();
+      await this.resumeWithRetry();
       try {
         return await this.client.promptRequest(this.sessionId, text, { clientTurnId });
       } catch (error) {
         if (!(error instanceof KernelDisconnected)) throw error;
-        await this.resume();
+        await this.resumeWithRetry();
         return await this.client.promptRequest(this.sessionId, text, { clientTurnId });
       }
     } finally {
@@ -107,10 +111,33 @@ export class MustangSession {
     });
   }
 
+  private async resumeWithRetry(): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= RESUME_RETRY_ATTEMPTS; attempt++) {
+      try {
+        await this.resume();
+        return;
+      } catch (error) {
+        lastError = error;
+        if (!isTransientResumeError(error) || attempt === RESUME_RETRY_ATTEMPTS) break;
+        await sleep(RESUME_RETRY_DELAY_MS);
+      }
+    }
+    throw lastError;
+  }
+
   private async resume(): Promise<void> {
     await this.client.request(AcpMethod.sessionResume, {
       sessionId: this.sessionId,
       cwd: cwd(),
     });
   }
+}
+
+function isTransientResumeError(error: unknown): boolean {
+  return error instanceof AcpError && error.code === -32603 && error.message.includes("Internal error");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

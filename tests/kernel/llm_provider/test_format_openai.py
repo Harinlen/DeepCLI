@@ -14,6 +14,7 @@ from kernel.llm.types import (
     ImageContent,
     PromptSection,
     TextContent,
+    ThinkingContent,
     ToolResultContent,
     ToolSchema,
     ToolUseContent,
@@ -122,6 +123,32 @@ class TestMessagesToOpenAI:
             "type": "function",
             "function": {"name": "bash", "arguments": orjson.dumps({"cmd": "ls"}).decode()},
         }
+
+    def test_assistant_thinking_is_ignored_by_default(self):
+        result = messages_to_openai(
+            [AssistantMessage([ThinkingContent(thinking="reason", signature="sig")])],
+            [],
+        )
+
+        assert result[0] == {"role": "assistant", "content": None}
+
+    def test_assistant_thinking_can_be_serialized_as_reasoning_content(self):
+        result = messages_to_openai(
+            [
+                AssistantMessage(
+                    [
+                        ThinkingContent(thinking="reason 1", signature="sig"),
+                        ThinkingContent(thinking="reason 2", signature="sig"),
+                        TextContent(text="answer"),
+                    ]
+                )
+            ],
+            [],
+            include_reasoning_content=True,
+        )
+
+        assert result[0]["content"] == "answer"
+        assert result[0]["reasoning_content"] == "reason 1\nreason 2"
 
     def test_tool_result_becomes_tool_role(self):
         result = messages_to_openai(

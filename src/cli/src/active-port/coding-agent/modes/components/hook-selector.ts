@@ -35,24 +35,31 @@ export interface HookSelectorOptions {
 }
 
 class OutlinedList extends Container {
-	#lines: string[] = [];
+	#lines: Array<{ text: string; selected: boolean }> = [];
 
-	setLines(lines: string[]): void {
+	setLines(lines: Array<{ text: string; selected: boolean }>): void {
 		this.#lines = lines;
 		this.invalidate();
 	}
 
 	render(width: number): string[] {
 		const borderColor = (text: string) => theme.fg("border", text);
-		const horizontal = borderColor(theme.boxSharp.horizontal.repeat(Math.max(1, width)));
+		const box = theme.boxRound;
 		const innerWidth = Math.max(1, width - 2);
-		const content = this.#lines.map(line => {
-			const normalized = replaceTabs(line);
+		const horizontal = borderColor(box.horizontal.repeat(innerWidth));
+		const content = this.#lines.map(({ text, selected }) => {
+			const normalized = replaceTabs(text);
 			const fitted = truncateToWidth(normalized, innerWidth);
 			const pad = Math.max(0, innerWidth - visibleWidth(fitted));
-			return `${borderColor(theme.boxSharp.vertical)}${fitted}${padding(pad)}${borderColor(theme.boxSharp.vertical)}`;
+			let body = `${fitted}${padding(pad)}`;
+			if (selected) body = theme.bg("selectedBg", body);
+			return `${borderColor(box.vertical)}${body}${borderColor(box.vertical)}`;
 		});
-		return [horizontal, ...content, horizontal];
+		return [
+			`${borderColor(box.topLeft)}${horizontal}${borderColor(box.topRight)}`,
+			...content,
+			`${borderColor(box.bottomLeft)}${horizontal}${borderColor(box.bottomRight)}`,
+		];
 	}
 }
 
@@ -131,7 +138,7 @@ export class HookSelectorComponent extends Container {
 	}
 
 	#updateList(): void {
-		const lines: string[] = [];
+		const lines: Array<{ text: string; selected: boolean }> = [];
 		const startIndex = Math.max(
 			0,
 			Math.min(this.#selectedIndex - Math.floor(this.#maxVisible / 2), this.#options.length - this.#maxVisible),
@@ -142,14 +149,17 @@ export class HookSelectorComponent extends Container {
 		for (let i = startIndex; i < endIndex; i++) {
 			const isSelected = i === this.#selectedIndex;
 			const label = isSelected
-				? renderInlineMarkdown(this.#options[i], mdTheme, t => theme.fg("accent", t))
+				? theme.bold(renderInlineMarkdown(this.#options[i], mdTheme, t => theme.fg("accent", t)))
 				: renderInlineMarkdown(this.#options[i], mdTheme, t => theme.fg("text", t));
 			const prefix = isSelected ? theme.fg("accent", `${theme.nav.cursor} `) : "  ";
-			lines.push(prefix + label);
+			lines.push({ text: prefix + label, selected: isSelected });
 		}
 
 		if (startIndex > 0 || endIndex < this.#options.length) {
-			lines.push(theme.fg("dim", `  (${this.#selectedIndex + 1}/${this.#options.length})`));
+			lines.push({
+				text: theme.fg("dim", `  (${this.#selectedIndex + 1}/${this.#options.length})`),
+				selected: false,
+			});
 		}
 		if (this.#outlinedList) {
 			this.#outlinedList.setLines(lines);
@@ -157,7 +167,7 @@ export class HookSelectorComponent extends Container {
 		}
 		this.#listContainer?.clear();
 		for (const line of lines) {
-			this.#listContainer?.addChild(new Text(line, 1, 0));
+			this.#listContainer?.addChild(new Text(line.text, 1, 0));
 		}
 	}
 

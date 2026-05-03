@@ -7,7 +7,7 @@ import { SessionService } from "@/sessions/service.js";
 import { promptForSessionSelection } from "@/sessions/terminal-picker.js";
 
 export interface StartupSessionResult {
-  session: MustangSession;
+  session?: MustangSession;
   recentSessions: CliSessionInfo[];
   warning?: string;
 }
@@ -29,8 +29,12 @@ export async function resolveStartupSession(
   }
 
   const mustAvoidPicker = args.print || Boolean(args.prompt) || !isInteractive;
-  if (args.newSession || mustAvoidPicker || config.session.startup === "new") {
+  if (args.newSession || mustAvoidPicker) {
     return createNew(service, config, listCwd, cwd);
+  }
+
+  if (config.session.startup === "new") {
+    return createDeferred(service, config, listCwd);
   }
 
   const recentSessions = await safeList(service, config, listCwd);
@@ -46,7 +50,7 @@ export async function resolveStartupSession(
       }
     }
     if (picked === "cancel") {
-      return createNew(service, config, listCwd, cwd, recentSessions);
+      return { recentSessions };
     }
   }
   const candidate = config.session.startup === "last" || config.session.startup === "picker"
@@ -62,7 +66,7 @@ export async function resolveStartupSession(
     }
   }
 
-  return createNew(service, config, listCwd, cwd, recentSessions);
+  return { recentSessions };
 }
 
 async function createNew(
@@ -77,6 +81,14 @@ async function createNew(
     session: new MustangSession(service.clientForSession(), result.sessionId),
     recentSessions: recentSessions ?? await safeList(service, config, listCwd),
   };
+}
+
+async function createDeferred(
+  service: SessionService,
+  config: CliConfig,
+  listCwd: string | undefined,
+): Promise<StartupSessionResult> {
+  return { recentSessions: await safeList(service, config, listCwd) };
 }
 
 async function safeList(service: SessionService, config: CliConfig, cwd: string | undefined): Promise<CliSessionInfo[]> {

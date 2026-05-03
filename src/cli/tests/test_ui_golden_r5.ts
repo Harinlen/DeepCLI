@@ -8,6 +8,7 @@ const { WelcomeComponent } = await load("../src/active-port/coding-agent/modes/c
 const { StatusLineComponent } = await load("../src/active-port/coding-agent/modes/components/status-line.ts");
 const { CustomEditor } = await load("../src/active-port/coding-agent/modes/components/custom-editor.ts");
 const { SelectList } = await load("../src/active-port/tui/components/select-list.ts");
+const { UserMessageComponent } = await load("../src/active-port/coding-agent/modes/components/user-message.ts");
 const { AssistantMessageComponent } = await load("../src/active-port/coding-agent/modes/components/assistant-message.ts");
 const { BashExecutionComponent } = await load("../src/active-port/coding-agent/modes/components/bash-execution.ts");
 const { ToolExecutionComponent } = await load("../src/active-port/coding-agent/modes/components/tool-execution.ts");
@@ -67,6 +68,7 @@ const assistant = new AssistantMessageComponent({
 	stopReason: "stop",
 	timestamp: 0,
 } as never, false);
+const userMessage = new UserMessageComponent("不是这么做的吧，应该就是打个 tag");
 
 const bashRunning = new BashExecutionComponent("echo ok", ui as never);
 bashRunning.appendOutput("ok\n");
@@ -137,6 +139,11 @@ const frames: GoldenFrame[] = [
 		name: "assistant markdown and thinking",
 		lines: assistant.render(80),
 		mustInclude: ["checking state", "Hello world", "const ok = true"],
+	},
+	{
+		name: "user message highlighted block",
+		lines: userMessage.render(80),
+		mustInclude: ["> 不是这么做的吧，应该就是打个 tag"],
 	},
 	{
 		name: "bash running",

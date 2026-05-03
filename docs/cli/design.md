@@ -29,7 +29,7 @@ CLI 通过 WebSocket 消费。
              │ ACP WebSocket
              ▼
 ┌─────────────────────────────────┐
-│  Mustang Kernel（Python）        │
+│  DeepCLI Kernel（Python）        │
 │  - SessionManager               │
 │  - Orchestrator / agent loop    │
 │  - ToolManager / MCPManager…    │
@@ -50,6 +50,26 @@ DeepCLI CLI 是纯 UI 层，不运行任何 LLM 调用。
 | TUI 库 | `@oh-my-pi/pi-tui`（直接引用本地路径） | 移植源，无需重写 |
 | ACP 客户端 | `@agentclientprotocol/sdk` | oh-my-pi 已验证用法（`acp-mode.ts`） |
 | 包管理 | bun workspaces | 与 oh-my-pi 同方案 |
+
+产品发布时，用户不需要安装 Bun。Linux v1 的 CLI 发布为 launcher 调用的
+bundled artifact：
+
+```text
+~/.local/share/deepcli/cli/<version>/deepcli-cli
+```
+
+优先尝试 Bun single executable；如果 TUI、资源文件或动态 import 在 single
+executable 中不稳定，则 fallback 为 bundled Bun runtime + JS bundle：
+
+```text
+~/.local/share/deepcli/cli/<version>/
+├── bun
+├── dist/main.js
+└── assets/
+```
+
+TypeScript CLI 的源码仍使用 Bun 开发和测试；产品入口 `deepcli` 是 native
+launcher，不是直接暴露给用户的 Bun script。
 
 ---
 
@@ -119,9 +139,9 @@ deepcli/
 ```
 CLI 启动
   │
-  ├─ 读取 ~/.mustang/client.yaml → kernel host + port + auth token
+  ├─ 从 native launcher 注入的环境变量读取 kernel URL + auth token
   │
-  ├─ WebSocket 连接: ws://{host}:{port}/session
+  ├─ WebSocket 连接: KERNEL_URL
   │
   ├─ 发送 initialize（client info）
   │
@@ -134,12 +154,21 @@ CLI 启动
        └─ 收到 session_end event → 退出
 ```
 
-### 本地 kernel 自启动（可选）
+Launcher 交接环境变量：
 
-如果 `~/.mustang/client.yaml` 不存在或配置为 `autostart: true`，
-CLI 直接 `spawn` kernel 进程（`uv run python -m kernel`），
-等待 readiness probe，然后连接。
-这样单机体验与 oh-my-pi 一样流畅，不需要手动启动 daemon。
+```text
+DEEPCLI_TOKEN=<token>
+KERNEL_URL=ws://127.0.0.1:<port>/session
+KERNEL_HEALTH_URL=http://127.0.0.1:<port>/
+```
+
+开发期可保留旧环境变量 fallback（例如 `MUSTANG_TOKEN`、`KERNEL_PORT`），但产品
+路径以 `DEEPCLI_TOKEN`、`KERNEL_URL`、`KERNEL_HEALTH_URL` 为准。
+
+### Kernel 启动边界
+
+CLI 不负责本地 Kernel 自启动。Kernel/Supervisor 的单例、端口选择、后台进程、
+token 文件读取都归 native launcher。CLI 只消费 launcher 提供的连接信息。
 
 ---
 
@@ -151,6 +180,10 @@ deepcli -p "..."                # print 模式，非交互，输出后退出
 deepcli --kernel ws://host:port # 连接远程 kernel
 deepcli --session <id>          # 恢复指定 session
 ```
+
+用户可见的 `deepcli` 命令由 launcher 提供；上面这些参数由 launcher 原样转交给
+CLI artifact，或者由 launcher 先消费属于 runtime 管理的子命令（如
+`deepcli status`、`deepcli stop`）。
 
 ---
 
@@ -182,6 +215,20 @@ memory、secret、tool、MCP、schedule、git/worktree 等 kernel 状态只能�
 `Component` interface（`render(width): string[]` + `handleInput?` + `invalidate`）
 原样保留，便于日后直接升级 oh-my-pi 版本。
 
+### D5 — CLI Artifact 是前台 UI，不是进程管理器
+
+发布产物中的 CLI artifact 只负责 ACP 连接和 UI。它不做：
+
+- Kernel/Supervisor 启动、停止、重启；
+- runtime 单例锁；
+- 端口选择；
+- token 文件读取；
+- Kernel state / SQLite / sidecar 读取；
+- 自行寻找其它 Kernel endpoint。
+
+CLI 断线时只能重连当前 `KERNEL_URL`。如果 runtime 不存在或不 ready，应由 launcher
+在启动 CLI 前处理。
+
 ---
 
 ## 实现阶段
@@ -190,7 +237,8 @@ memory、secret、tool、MCP、schedule、git/worktree 等 kernel 状态只能�
 
 - `packages/cli/` 目录结构 + `package.json` + `tsconfig.json`
 - `connection/acp-client.ts`：WebSocket 连接、重连、事件流
-- `main.ts`：argv 解析、kernel 自启动（可选）、InteractiveMode 入口
+- `main.ts`：argv 解析、InteractiveMode / print mode 入口
+- env loading：支持 `DEEPCLI_TOKEN`、`KERNEL_URL`、`KERNEL_HEALTH_URL`
 - 最小 InteractiveMode：Editor 输入 → ACP user_message，收 assistant_message → Text 渲染
 - 目标：`bun run deepcli` 能跑起来，能和 kernel 收发消息
 
@@ -213,7 +261,8 @@ CLI 展示 approve/deny 对话框，结果回传 ACP。
 ### Phase D — session 管理 + 本地配置（P2）
 
 - session 选择器（列出历史 session，可恢复）
-- `~/.mustang/client.yaml` 配置（kernel URL、token、主题）
+- `~/.config/deepcli/config.yaml` 配置（主题、session startup、UI 偏好；kernel
+  URL/token 在产品路径由 launcher 环境变量提供）
 - 主题支持（移植 oh-my-pi theme 系统）
 
 ---

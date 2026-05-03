@@ -10,6 +10,7 @@ const tests = [
 	"test_editor_slash_argument_autocomplete.ts",
 	"test_syntax_highlight_fallback.ts",
 	"test_model_service.ts",
+	"test_markdown_autolink_punctuation.ts",
 	"test_markdown_thinking_code_style.ts",
 	"test_agent_session_adapter.ts",
 	"test_input_controller_r4.ts",

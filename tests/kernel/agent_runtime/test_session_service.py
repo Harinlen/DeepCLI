@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from pydantic import BaseModel
@@ -11,14 +12,125 @@ from kernel.agent_runtime.session_service import (
     CollectingRuntimeSender,
     _prompt_user_dirs,
 )
+from kernel.protocol.acp.schemas.content import AcpTextBlock
 from kernel.protocol.acp.schemas.permission import (
     PermissionOption,
     RequestPermissionRequest,
     RequestPermissionResponse,
     ToolCallUpdate,
 )
+from kernel.protocol.acp.schemas.session import (
+    CloseSessionRequest,
+    ExecuteShellRequest,
+    ListSessionsRequest,
+    LoadSessionRequest,
+    NewSessionRequest,
+    PromptRequest,
+    ResumeSessionRequest,
+    SetSessionModeRequest,
+)
 from kernel.protocol.acp.schemas.updates import AgentMessageChunk, SessionUpdateNotification
-from kernel.protocol.acp.schemas.content import AcpTextBlock
+
+
+class _DumpableResult:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+
+    def model_dump(self, *, by_alias: bool = False) -> dict[str, Any]:
+        if by_alias:
+            return {k.replace("_", ""): v for k, v in self.payload.items()}
+        return self.payload
+
+
+class _PromptResult:
+    stop_reason = "end_turn"
+    meta = {"trace": "ok"}
+
+
+class _ExecutionResult:
+    exit_code = 0
+    cancelled = False
+
+
+class _FakeSessionManager:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, Any, Any]] = []
+        self.new = AsyncMock(side_effect=self._new)
+        self.list = AsyncMock(side_effect=self._list)
+        self.load_session = AsyncMock(side_effect=self._load_session)
+        self.prompt = AsyncMock(side_effect=self._prompt)
+        self.resume_session = AsyncMock(side_effect=self._resume_session)
+        self.execute_shell = AsyncMock(side_effect=self._execute_shell)
+        self.set_mode = AsyncMock(side_effect=self._set_mode)
+        self.close_session = AsyncMock(side_effect=self._close_session)
+
+    async def _new(self, ctx: Any, params: Any) -> Any:
+        self.calls.append(("new", ctx, params))
+        return type("NewResult", (), {"session_id": "s-new"})()
+
+    async def _list(self, ctx: Any, params: Any) -> Any:
+        self.calls.append(("list", ctx, params))
+        return _DumpableResult({"sessions": [], "next_cursor": params.cursor})
+
+    async def _load_session(self, ctx: Any, params: Any) -> Any:
+        self.calls.append(("load_session", ctx, params))
+        await ctx.sender.notify(
+            "session/update",
+            SessionUpdateNotification(
+                session_id=params.session_id,
+                update=AgentMessageChunk(content=AcpTextBlock(type="text", text="loaded")),
+            ),
+        )
+        return _DumpableResult({"config_options": [], "modes": {"current": "default"}})
+
+    async def _prompt(self, ctx: Any, params: Any) -> Any:
+        self.calls.append(("prompt", ctx, params))
+        await ctx.sender.notify(
+            "session/update",
+            SessionUpdateNotification(
+                session_id=params.session_id,
+                update=AgentMessageChunk(content=AcpTextBlock(type="text", text="reply")),
+            ),
+        )
+        return _PromptResult()
+
+    async def _resume_session(self, ctx: Any, params: Any) -> Any:
+        self.calls.append(("resume_session", ctx, params))
+        return _DumpableResult({"config_options": [], "modes": {"current": "default"}})
+
+    async def _execute_shell(self, ctx: Any, params: Any) -> Any:
+        self.calls.append(("execute_shell", ctx, params))
+        await ctx.sender.notify(
+            "_mustang.agent/session/execution_update",
+            _Params(session_id=params.session_id),
+        )
+        return _ExecutionResult()
+
+    async def _set_mode(self, ctx: Any, params: Any) -> Any:
+        self.calls.append(("set_mode", ctx, params))
+        await ctx.sender.notify(
+            "session/update",
+            SessionUpdateNotification(
+                session_id=params.session_id,
+                update=AgentMessageChunk(content=AcpTextBlock(type="text", text="mode")),
+            ),
+        )
+        return _DumpableResult({"meta": {"mode": params.mode_id}})
+
+    async def _close_session(self, ctx: Any, params: Any) -> Any:
+        self.calls.append(("close_session", ctx, params))
+        return _DumpableResult({"meta": {"closed": params.session_id}})
+
+
+def _service_with_manager(tmp_path: Path) -> tuple[AgentSessionRuntimeService, _FakeSessionManager]:
+    service = AgentSessionRuntimeService(
+        agent_id="primary",
+        state_dir=tmp_path / "state",
+        workspace=tmp_path,
+    )
+    manager = _FakeSessionManager()
+    service._session_manager = manager  # type: ignore[assignment]  # unit-test seam
+    return service, manager
 
 
 class _Result(BaseModel):
@@ -185,3 +297,94 @@ def test_prompt_user_dirs_returns_none_when_no_prompt_dirs(
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
     assert _prompt_user_dirs(tmp_path / "workspace") is None
+
+
+@pytest.mark.anyio
+async def test_runtime_service_new_list_load_resume_and_close_delegate_contracts(
+    tmp_path: Path,
+) -> None:
+    service, manager = _service_with_manager(tmp_path)
+
+    new_result = await service.new_session(NewSessionRequest(cwd=str(tmp_path)))
+    list_result = await service.list_sessions(ListSessionsRequest(cursor="next-1"))
+    load_result = await service.load_session(
+        LoadSessionRequest(session_id="s-new", cwd=str(tmp_path))
+    )
+    resume_result = await service.resume_session(
+        ResumeSessionRequest(session_id="s-new", cwd=str(tmp_path))
+    )
+    close_result = await service.close_session(CloseSessionRequest(session_id="s-new"))
+
+    assert new_result == {"sessionId": "s-new"}
+    assert list_result == {"sessions": [], "nextcursor": "next-1"}
+    assert load_result["configoptions"] == []
+    assert load_result["updates"][0]["sessionId"] == "s-new"
+    assert resume_result == {"configoptions": [], "modes": {"current": "default"}}
+    assert close_result == {"meta": {"closed": "s-new"}}
+    assert "s-new" not in service._connections
+    assert [call[0] for call in manager.calls] == [
+        "new",
+        "list",
+        "load_session",
+        "resume_session",
+        "close_session",
+    ]
+    assert manager.calls[0][2].cwd == str(tmp_path)
+    assert manager.calls[1][2].cursor == "next-1"
+
+
+@pytest.mark.anyio
+async def test_runtime_service_prompt_collects_updates_without_runtime_peer(tmp_path: Path) -> None:
+    service, manager = _service_with_manager(tmp_path)
+    service._connection_for("s-1")
+
+    result = await service.prompt(
+        PromptRequest(
+            session_id="s-1",
+            prompt=[AcpTextBlock(type="text", text="hello")],
+            meta={"mustang.agent/clientTurnId": "turn-1"},
+        )
+    )
+
+    assert result["stopReason"] == "end_turn"
+    assert result["_meta"] == {"trace": "ok"}
+    assert result["updates"][0]["update"]["content"]["text"] == "reply"
+    assert manager.calls[-1][2].meta == {"mustang.agent/clientTurnId": "turn-1"}
+
+
+@pytest.mark.anyio
+async def test_runtime_service_prompt_suppresses_updates_when_runtime_peer_streams(
+    tmp_path: Path,
+) -> None:
+    service, _manager = _service_with_manager(tmp_path)
+    service._connection_for("s-1")
+    peer = _Peer({})
+
+    result = await service.prompt(
+        PromptRequest(session_id="s-1", prompt=[AcpTextBlock(type="text", text="hello")]),
+        client_peer=peer,  # type: ignore[arg-type]
+    )
+
+    assert result["updates"] == []
+    assert peer.calls[0]["method"] == "session/update"
+
+
+@pytest.mark.anyio
+async def test_runtime_service_execute_shell_and_set_mode_return_updates(tmp_path: Path) -> None:
+    service, manager = _service_with_manager(tmp_path)
+    service._connection_for("s-1")
+
+    shell = await service.execute_shell(
+        ExecuteShellRequest(session_id="s-1", command="echo hi", shell="bash")
+    )
+    mode = await service.set_mode(SetSessionModeRequest(session_id="s-1", mode_id="plan"))
+
+    assert shell == {
+        "exitCode": 0,
+        "cancelled": False,
+        "executionUpdates": [{"session_id": "s-1"}],
+    }
+    assert mode["meta"] == {"mode": "plan"}
+    assert mode["updates"][0]["update"]["content"]["text"] == "mode"
+    assert manager.calls[-2][2].command == "echo hi"
+    assert manager.calls[-1][2].mode_id == "plan"

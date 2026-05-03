@@ -6,6 +6,7 @@ import type {
   ToolPermissionOption,
   ToolPermissionPrompt,
 } from "./types.js";
+import { buildToolDisplay, displayOptionLabel, formatPermissionBody } from "./tool-input-display.js";
 
 type RawQuestion = Record<string, unknown>;
 
@@ -40,11 +41,9 @@ export function questionsResult(prompt: StructuredQuestionPrompt, answers: Recor
 }
 
 function mapToolPrompt(req: PermissionRequest): ToolPermissionPrompt {
-  const title = req.toolCall.title || req.toolCall.toolCallId || "Tool Authorization";
-  const summary = req.toolCall.inputSummary ? `${req.toolCall.inputSummary}\n\n` : "";
-  const input = req.toolInput ? `\`\`\`json\n${JSON.stringify(req.toolInput, null, 2)}\n\`\`\`` : "";
+  const display = buildToolDisplay(req);
   const options = req.options.map((option, index, all) => {
-    const label = option.name || labelForKind(option.kind) || option.optionId;
+    const label = displayOptionLabel(option, display);
     return {
       optionId: option.optionId,
       label,
@@ -54,9 +53,10 @@ function mapToolPrompt(req: PermissionRequest): ToolPermissionPrompt {
   });
   return {
     type: "tool",
-    title,
-    body: `Tool Authorization\n\n**${title}**\n\n${summary}${input}`.trim(),
+    title: display.title,
+    body: formatPermissionBody(display),
     options,
+    sections: display.sections,
   };
 }
 

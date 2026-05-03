@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from typing import Any
 
-from kernel.tools.web.search_backends import search_with_fallback
+import httpx
+
+from kernel.tools.web.search_backends import _has_env, get_available_backends, search_with_fallback
 from kernel.tools.web.search_backends.base import SearchBackend, SearchResult
+from kernel.tools.web.search_backends.duckduckgo import (
+    DuckDuckGoSearchBackend,
+    _parse_ddg_html,
+    _resolve_ddg_url,
+)
 
 
 # ── Mock backend ──
@@ -102,3 +110,93 @@ async def test_respects_limit():
     )
     results, name = await search_with_fallback("test", 3, backends=[be])
     assert len(results) <= 3
+
+
+def test_search_has_env_trims_empty_values(monkeypatch):
+    monkeypatch.delenv("DEEPCLI_SEARCH_KEY", raising=False)
+    assert _has_env("DEEPCLI_SEARCH_KEY") is False
+    monkeypatch.setenv("DEEPCLI_SEARCH_KEY", "   ")
+    assert _has_env("DEEPCLI_SEARCH_KEY") is False
+    monkeypatch.setenv("DEEPCLI_SEARCH_KEY", " key ")
+    assert _has_env("DEEPCLI_SEARCH_KEY") is True
+
+
+def test_get_available_search_backends_always_includes_duckduckgo(monkeypatch):
+    for key in (
+        "BRAVE_API_KEY",
+        "GOOGLE_API_KEY",
+        "GOOGLE_CSE_ID",
+        "EXA_API_KEY",
+        "TAVILY_API_KEY",
+        "FIRECRAWL_API_KEY",
+        "FIRECRAWL_API_URL",
+        "PARALLEL_API_KEY",
+        "PERPLEXITY_API_KEY",
+        "KIMI_API_KEY",
+        "MOONSHOT_API_KEY",
+        "XAI_API_KEY",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    names = [backend.name for backend in get_available_backends()]
+
+    assert names[-1] == "duckduckgo"
+
+
+def test_duckduckgo_url_resolution_and_html_parsing():
+    wrapped = (
+        "//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.test%2Fa%3Fx%3D1"
+    )
+    html = f"""
+    <a rel="nofollow" href="{wrapped}"> Example title </a>
+    <td class="result-snippet">Snippet <b>text</b></td>
+    <a rel="nofollow" href="/not-a-result">Ignored</a>
+    <a rel="nofollow" href="https://direct.test">Direct</a>
+    """
+
+    assert _resolve_ddg_url(wrapped) == "https://example.test/a?x=1"
+    assert _resolve_ddg_url("/not-a-result") is None
+    results = _parse_ddg_html(html, limit=2)
+
+    assert results == [
+        SearchResult(
+            title="Example title",
+            url="https://example.test/a?x=1",
+            snippet="Snippet text",
+        ),
+        SearchResult(title="Direct", url="https://direct.test", snippet=""),
+    ]
+
+
+async def test_duckduckgo_search_shapes_request_and_results(monkeypatch):
+    html = """
+    <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fpython.test">Python</a>
+    <td class="result-snippet">Language</td>
+    """
+    calls: list[dict[str, Any]] = []
+
+    class _Client:
+        def __init__(self, **kwargs: Any) -> None:
+            self.kwargs = kwargs
+
+        async def __aenter__(self) -> "_Client":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        async def get(self, url: str, **kwargs: Any) -> httpx.Response:
+            calls.append({"url": url, **kwargs})
+            return httpx.Response(
+                200,
+                text=html,
+                request=httpx.Request("GET", url),
+            )
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client(**kwargs))
+
+    results = await DuckDuckGoSearchBackend().search("python", limit=1)
+
+    assert calls[0]["url"] == "https://lite.duckduckgo.com/lite/"
+    assert calls[0]["params"] == {"q": "python"}
+    assert results == [SearchResult("Python", "https://python.test", "Language")]

@@ -1,6 +1,6 @@
 # Phase 1 — Kernel 单元测试细化计划
 
-状态: active coverage hardening
+状态: completed — owned Phase 1 coverage goals met; residual misses assigned
 创建: 2026-05-01
 所属计划: [`full-system-test-plan.md`](full-system-test-plan.md)
 范围: `src/kernel/kernel/` 与 `tests/kernel/`
@@ -213,11 +213,90 @@ cd src/kernel && uv run mypy kernel
 | `kernel.tools.web.fetch_backends.httpx_html/readability/playwright` | `0%–33%` | SSRF redirect、HTTP fallback、optional dependency fetch |
 | `kernel.session.*` remaining gaps | `57%–87%` | lifecycle load/runtime、event writer、permission runner、user REPL |
 
-继续推进规则：
+历史继续推进规则（已由 2026-05-03 收敛记录完成/取代）：
 
-- 不能把 `81%` 说成“完全覆盖”。
-- 下一个单元测试 tranche 应优先补 `gateways`、`mcp`、`memory`、`agent_runtime.session_service`、`schedule.scheduler/delivery`。
+- 当时不能把 `81%` 说成“完全覆盖”；2026-05-03 后当前 Phase 1 结论见下节。
+- 当时的下一个单元测试 tranche 优先补 `gateways`、`mcp`、`memory`、`agent_runtime.session_service`、`schedule.scheduler/delivery`。
 - optional/external dependency 模块可以 mock 网络/SDK，但必须断言请求形态、返回结构、错误路径，不能只 import 提升 coverage。
+
+### Phase 1 完成收敛记录 — 2026-05-03
+
+本轮按上一轮“继续推进规则”补齐已归属的高风险单元测试缺口。Phase 1 的完成定义不是 100% 行覆盖率，而是：
+
+- 每个 Kernel 组件已有对应测试文件。
+- 高风险 public API 的 happy/error/boundary path 有行为断言。
+- 返回 dataclass/Pydantic model/dict 的新增测试均断言关键字段。
+- 跨组件 callable/closure 的调用形状已有单元测试；真实闭合缝继续由 Phase 2 Probe 覆盖。
+- 覆盖率报告中的剩余缺口有明确归属，不再是无人认领的 Phase 1 blocker。
+
+本轮新增/扩展的单元测试：
+
+| 文件 | 覆盖重点 |
+|---|---|
+| `tests/kernel/agent_runtime/test_session_service.py` | `new/list/load/resume/prompt/execute_shell/set_mode/close` ACP schema 到 Session contract 的转换、runtime peer streaming 时 update 抑制、execution update replay |
+| `tests/kernel/tools/builtin/test_mcp_resource_tools.py` | `ListMcpResources` / `ReadMcpResource` 的 MCP subsystem 缺失、server 过滤、resources capability、text/binary/empty content、mime fallback |
+| `tests/kernel/tools/builtin/test_mcp_auth.py` | `McpAuthTool` 的 not-needed、OAuth discovery failure、callback server failure、registration failure、cached client auth URL path |
+| `tests/kernel/gateways/test_gateway_adapter.py` | platform permission request allow/reject、Hub client request error mapping、stable platform `clientTurnId`、GatewayManager config/startup/shutdown/webhook/send edges |
+| `tests/kernel/tools/web/test_fetch_fallback.py` | fetch backend env detection、available backend registry、SSRF redirect blocking、Readability success/error、Playwright domain-block path |
+| `tests/kernel/tools/web/test_search_fallback.py` | search backend env detection、available backend registry、DuckDuckGo URL/parser/request behavior |
+| `tests/kernel/schedule/test_delivery.py` | ACP/gateway/session delivery edges、partial-failure cache behavior、transient retry sleep, idempotency cache pruning |
+
+本轮门禁结果：
+
+```bash
+cd src/kernel && uv run pytest ../../tests/kernel/tools/builtin/test_mcp_resource_tools.py ../../tests/kernel/tools/builtin/test_mcp_auth.py ../../tests/kernel/agent_runtime/test_session_service.py ../../tests/kernel/gateways/test_gateway_adapter.py ../../tests/kernel/tools/web/test_fetch_fallback.py ../../tests/kernel/tools/web/test_search_fallback.py ../../tests/kernel/schedule/test_delivery.py -q
+# 99 passed
+
+cd src/kernel && uv run pytest ../../tests/kernel -q
+# 2036 passed, 9 skipped, 24 deselected
+
+cd src/kernel && uv run pytest --cov=kernel --cov-report=term-missing ../../tests/kernel -q
+# 2036 passed, 9 skipped, 24 deselected, 14 warnings
+# TOTAL coverage: 84%
+
+cd src/kernel && uv run ruff check kernel ../../tests/kernel
+# All checks passed!
+
+cd src/kernel && uv run mypy kernel
+# Success: no issues found in 392 source files
+
+cloc src/kernel/kernel --by-percent c
+# Python comment density: 36.73%
+```
+
+Coverage movement on previously named gaps:
+
+| 模块 | 上轮 | 本轮 | 状态 |
+|---|---:|---:|---|
+| `kernel.agent_runtime.session_service` | `46%–50%` | `74%` | sufficient for ACP contract conversion and runtime sender replay |
+| `kernel.gateways.manager` | `49%` | `100%` | sufficient |
+| `kernel.gateways.base` | `57%` | `65%` | base routing/permission/lifecycle covered; concrete platform API remains integration/platform scope |
+| `kernel.schedule.delivery` | `61%` | `88%` | sufficient |
+| `kernel.tools.builtin.list_mcp_resources` | `38%` | `100%` | sufficient |
+| `kernel.tools.builtin.read_mcp_resource` | `28%` | `89%` | sufficient |
+| `kernel.tools.builtin.mcp_auth` | `20%` | `75%` | sufficient for foreground OAuth branches; background token exchange/reconnect remains Probe/integration scope |
+| `kernel.tools.web.fetch_backends.__init__` | `77%` | `96%` | sufficient |
+| `kernel.tools.web.fetch_backends.readability_be` | `0%` | `94%` | sufficient |
+| `kernel.tools.web.search_backends.__init__` | `61%` | `97%` | sufficient |
+| `kernel.tools.web.search_backends.duckduckgo` | `33%` | `96%` | sufficient |
+
+剩余已归属缺口：
+
+| 模块 | 当前覆盖率 | 归属 |
+|---|---:|---|
+| `kernel.gateways.discord.*` | `25%–40%` | concrete Discord SDK/event-loop behavior；需要 platform fixture 或 adapter-level integration，不阻塞 Phase 1 owned unit goals |
+| `kernel.mcp.transport.http` / `sse` | `26%–28%` | streaming remote transport/OAuth header/session-expiry matrix；属于 MCP transport integration suite |
+| `kernel.memory.background` / `selector` | `34%–63%` | background refresh + LLM selector paths；已有 store/tool/index 单测，剩余进入 memory hardening tranche |
+| `kernel.schedule.scheduler` | `49%` | long-running scheduler loop/claim/reaper timing branches；已有 store/executor/delivery 单测，剩余需要 scheduler-focused tranche |
+| `kernel.tools.web.fetch_backends.httpx_html` / `playwright_be` | `57%` / `54%` | live HTTP response decoding and optional browser execution；真实 backend coverage belongs to external integration matrix |
+
+闭合缝清单：
+
+- 本轮只新增/扩展单元测试和计划记录，没有改 production callable wiring。
+- 未引入或修改 `_make_*` closure、`ctx.* = fn`、adapter callback wiring、Hub/Runtime callable seam。
+- 因此 Phase 4.5 无新增 real-system probe requirement；既有 Phase 2 Probe 继续覆盖真实 Supervisor/ACP/Runtime closure seams。
+
+结论：Phase 1 owned goals 完成。后续不得再把这些剩余行覆盖称为“Phase 1 未完成”；应按上表进入对应的 platform / MCP transport / memory / scheduler / external integration hardening 任务。
 
 ## Phase 1.1 — Bootstrap / 基础服务
 

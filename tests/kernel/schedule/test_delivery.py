@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from kernel.schedule.delivery import DeliveryRouter
+from kernel.schedule.delivery import DeliveryRouter, _IDEMPOTENCY_MAX_ENTRIES, _IDEMPOTENCY_TTL_S
 from kernel.schedule.types import (
     CronExecution,
     CronTask,
@@ -171,3 +171,117 @@ class TestFailureAlert:
         session = mgr._sessions["sess-creator"]
         assert len(session.pending_reminders) == 1
         assert "failed" in session.pending_reminders[0].lower()
+
+
+class TestDeliveryEdges:
+    """Boundary behavior for delivery targets, retries, and cache pruning."""
+
+    @pytest.mark.asyncio
+    async def test_acp_delivery_broadcasts_to_session_senders(self) -> None:
+        sent: list[str] = []
+
+        async def _sender(payload: str) -> None:
+            sent.append(payload)
+
+        mgr = _mock_session_manager()
+        mgr._sessions["sess-creator"].senders = {"ws-1": _sender}
+        router = DeliveryRouter(session_manager=mgr)
+
+        status, error = await router.deliver(_task(delivery_target="acp"), _execution())
+
+        assert status == "delivered"
+        assert error is None
+        assert '"method":"session/update"' in sent[0]
+        assert '"type":"cron_completion"' in sent[0]
+
+    @pytest.mark.asyncio
+    async def test_session_delivery_without_creator_session_is_successful_noop(self) -> None:
+        mgr = _mock_session_manager()
+        router = DeliveryRouter(session_manager=mgr)
+
+        status, error = await router.deliver(
+            _task(delivery_target="session", session_id=""),
+            _execution(),
+        )
+
+        assert (status, error) == ("delivered", None)
+        assert mgr._sessions["sess-creator"].pending_reminders == []
+
+    @pytest.mark.asyncio
+    async def test_gateway_delivery_routes_adapter_and_channel(self) -> None:
+        gateway = MagicMock()
+        gateway.send_to_channel = AsyncMock()
+        router = DeliveryRouter(session_manager=_mock_session_manager(), gateway_manager=gateway)
+
+        status, error = await router.deliver(
+            _task(delivery_target="gateway:discord:channel-1"),
+            _execution(summary="gateway result"),
+        )
+
+        assert (status, error) == ("delivered", None)
+        gateway.send_to_channel.assert_awaited_once()
+        adapter, channel, text = gateway.send_to_channel.await_args.args
+        assert (adapter, channel) == ("discord", "channel-1")
+        assert "gateway result" in text
+
+    @pytest.mark.asyncio
+    async def test_gateway_delivery_missing_manager_or_malformed_target_is_noop(self) -> None:
+        router = DeliveryRouter(session_manager=_mock_session_manager(), gateway_manager=None)
+
+        assert await router.deliver(_task(delivery_target="gateway:discord:ch"), _execution()) == (
+            "delivered",
+            None,
+        )
+        assert await router.deliver(_task(delivery_target="gateway:bad"), _execution()) == (
+            "delivered",
+            None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_partial_failure_is_not_cached_and_reports_first_error(self) -> None:
+        gateway = MagicMock()
+        gateway.send_to_channel = AsyncMock(side_effect=RuntimeError("permanent failure"))
+        router = DeliveryRouter(session_manager=_mock_session_manager(), gateway_manager=gateway)
+        task = _task(delivery_target="session,gateway:discord:channel-1")
+
+        status, error = await router.deliver(task, _execution())
+        retry_status, retry_error = await router.deliver(task, _execution())
+
+        assert status == retry_status == "not-delivered"
+        assert error == retry_error == "permanent failure"
+        assert gateway.send_to_channel.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_retry_transient_sleeps_then_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        sleeps: list[float] = []
+        attempts = 0
+        router = DeliveryRouter(session_manager=_mock_session_manager())
+
+        async def _sleep(delay: float) -> None:
+            sleeps.append(delay)
+
+        async def _flaky() -> str:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("network error while sending")
+            return "ok"
+
+        monkeypatch.setattr("kernel.schedule.delivery.asyncio.sleep", _sleep)
+
+        assert await router._retry_transient(_flaky, delays=[0.25]) == "ok"
+        assert sleeps == [0.25]
+        assert attempts == 2
+
+    def test_prune_cache_removes_expired_and_oldest_entries(self) -> None:
+        router = DeliveryRouter(session_manager=_mock_session_manager())
+        now = time.time()
+        router._delivered["expired"] = (now - _IDEMPOTENCY_TTL_S - 1, True)
+        for i in range(_IDEMPOTENCY_MAX_ENTRIES + 2):
+            router._delivered[f"fresh-{i}"] = (now + i, True)
+
+        router._prune_cache()
+
+        assert "expired" not in router._delivered
+        assert len(router._delivered) == _IDEMPOTENCY_MAX_ENTRIES
+        assert "fresh-0" not in router._delivered

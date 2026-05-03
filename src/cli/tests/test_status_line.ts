@@ -49,6 +49,18 @@ assert(border.content.includes("sonnet"), "status line should include model segm
 assert(border.content.includes("mustang") || border.content.includes("/tmp"), "status line should include cwd path segment");
 assert(border.content.includes("0.8%/200,000"), "status line should include computed context usage");
 
+const narrowBorder = statusLine.getTopBorder(34).content;
+const expandedBorder = statusLine.getTopBorder(120).content;
+assert(narrowBorder.includes("sonnet"), "narrow status line should keep high-priority model segment");
+assert(
+	expandedBorder.includes("mustang") || expandedBorder.includes("/tmp"),
+	"status line should restore width-dependent path segment after a wider render",
+);
+assert(
+	expandedBorder.includes("0.8%/200,000"),
+	"status line should restore width-dependent context segment after a wider render",
+);
+
 const noModelStatusLine = new StatusLineComponent({
 	model: { id: "no-model", name: "no-model", provider: "ACP" },
 	agent: { state: { messages: [] } },

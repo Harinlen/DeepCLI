@@ -125,4 +125,36 @@ assert(
 	`session events should be flushed in order, got: ${delayedEvents.join(",")}`,
 );
 
+let lazyCreateCalls = 0;
+const lazyClient = {
+	request: async (_method: string, _params: unknown) => ({}),
+	notify: () => {},
+	promptRequest: async (_sessionId: string, _text: string) => ({ stopReason: "stop" }),
+	executeShellRequest: async () => ({ exitCode: 0, cancelled: false }),
+	executePythonRequest: async () => ({ exitCode: 0, cancelled: false }),
+	onUpdate: () => () => {},
+};
+const lazyAdapter = new MustangAgentSessionAdapter({
+	client: lazyClient as never,
+	sessionService: {
+		create: async () => {
+			lazyCreateCalls += 1;
+			return { sessionId: "lazy-session" };
+		},
+		clientForSession: () => lazyClient,
+		list: async () => [],
+	} as never,
+});
+assert(lazyAdapter.sessionId === "pending", "adapter without startup session should expose pending session id");
+try {
+	await lazyAdapter.executeBash("pwd", () => {});
+	assert(false, "shell execution should not create a lazy chat session");
+} catch (error) {
+	assert((error as Error).message.includes("Run a chat prompt"), "shell execution should fail without creating a session");
+}
+assert(lazyCreateCalls === 0, "commands should not create lazy chat sessions");
+await lazyAdapter.prompt("hello");
+assert(lazyCreateCalls === 1, "first chat prompt should create the lazy session");
+assert(lazyAdapter.sessionId === "lazy-session", "lazy session id should update after first prompt");
+
 console.log("PASS: agent session adapter");

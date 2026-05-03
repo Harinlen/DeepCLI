@@ -30,20 +30,23 @@ const service = {
 
 const config: CliConfig = { ...DEFAULT_CONFIG, kernel: { ...DEFAULT_CONFIG.kernel }, session: { ...DEFAULT_CONFIG.session }, ui: { ...DEFAULT_CONFIG.ui } };
 let result = await resolveStartupSession(service, { newSession: false, print: false, help: false, sessionId: "explicit" }, config, { isInteractive: true, cwd: "/repo" });
-assert(result.session.sessionId === "explicit", "--session should load explicit session");
+assert(result.session?.sessionId === "explicit", "--session should load explicit session");
 
+requests.length = 0;
 result = await resolveStartupSession(service, { newSession: false, print: false, help: false }, config, { isInteractive: true, cwd: "/repo" });
-assert(result.session.sessionId === "new-session", "default startup should create a new session");
+assert(result.session === undefined, "default interactive startup should defer session creation");
+assert(!requests.some((call) => call.method === "session/new"), "default interactive startup must not create a session");
+assert(!requests.some((call) => call.method === "session/load"), "default interactive startup must not load a session");
 
 result = await resolveStartupSession(service, { newSession: true, print: false, help: false }, config, { isInteractive: true, cwd: "/repo" });
-assert(result.session.sessionId === "new-session", "--new should create a new session");
+assert(result.session?.sessionId === "new-session", "--new should create a new session");
 
 result = await resolveStartupSession(service, { newSession: false, print: true, help: false, prompt: "hello" }, config, { isInteractive: true, cwd: "/repo" });
-assert(result.session.sessionId === "new-session", "--print/prompt should avoid picker and create new session");
+assert(result.session?.sessionId === "new-session", "--print/prompt should avoid picker and create new session");
 
 config.session.startup = "last";
 result = await resolveStartupSession(service, { newSession: false, print: false, help: false }, config, { isInteractive: true, cwd: "/repo" });
-assert(result.session.sessionId === "recent", "last startup should load recent session");
+assert(result.session?.sessionId === "recent", "last startup should load recent session");
 assert(requests.some((call) => call.method === "session/load" && call.params.cwd === "/old"), "restore_cwd should load recent cwd");
 
 console.log("PASS: session startup branches");

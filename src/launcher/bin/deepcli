@@ -1,0 +1,464 @@
+#!/usr/bin/env bash
+# DeepCLI Linux launcher.
+#
+# Responsibilities:
+# - keep one user-level Supervisor runtime running in the background;
+# - choose an Access Agent port;
+# - wait for /access/readiness;
+# - pass connection env vars to the foreground CLI artifact.
+set -euo pipefail
+
+DEFAULT_PORT="${DEEPCLI_DEFAULT_PORT:-8200}"
+HOST="${DEEPCLI_HOST:-127.0.0.1}"
+HOME_DIR="${HOME:?HOME is required}"
+STATE_DIR="${DEEPCLI_STATE_DIR:-$HOME_DIR/.local/state/deepcli}"
+CONFIG_DIR="${DEEPCLI_CONFIG_DIR:-$HOME_DIR/.config/deepcli}"
+DATA_DIR="${DEEPCLI_DATA_DIR:-$HOME_DIR/.local/share/deepcli}"
+RUNTIME_DIR="$STATE_DIR/runtime"
+LOCK_FILE="$STATE_DIR/launcher.lock"
+STATE_FILE="$RUNTIME_DIR/launcher-runtime.env"
+STDOUT_LOG="$RUNTIME_DIR/supervisor.stdout.log"
+STDERR_LOG="$RUNTIME_DIR/supervisor.stderr.log"
+INVOCATION_CWD="$PWD"
+SCRIPT_PATH="$(realpath "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+
+mkdir -p "$STATE_DIR" "$CONFIG_DIR" "$RUNTIME_DIR"
+
+usage() {
+  cat <<'EOF'
+Usage: deepcli [args...]
+       deepcli status
+       deepcli stop
+       deepcli restart
+       deepcli --uninstall
+       deepcli kernel start [--port PORT]
+       deepcli kernel logs
+
+Default mode ensures the background Kernel Supervisor is ready, then starts
+the foreground CLI and forwards all args to it.
+
+`deepcli --uninstall` removes the installed launcher/CLI/Kernel artifacts for
+the current user. It preserves config, state, sessions, logs, and editable UI
+assets.
+EOF
+}
+
+is_dev_root() {
+  local root="$1"
+  [[ -x "$root/src/run-kernel.sh" && -f "$root/src/cli/package.json" && -f "$root/src/kernel/pyproject.toml" ]]
+}
+
+is_source_launcher() {
+  local maybe_root
+  maybe_root="$(cd "$SCRIPT_DIR/../../.." 2>/dev/null && pwd)" || return 1
+  is_dev_root "$maybe_root"
+}
+
+discover_dev_root() {
+  if [[ -n "${DEEPCLI_DEV_ROOT:-}" ]]; then
+    if is_dev_root "$DEEPCLI_DEV_ROOT"; then
+      printf '%s\n' "$DEEPCLI_DEV_ROOT"
+      return 0
+    fi
+    echo "DEEPCLI_DEV_ROOT does not look like a DeepCLI checkout: $DEEPCLI_DEV_ROOT" >&2
+    return 1
+  fi
+
+  if ! is_source_launcher; then
+    return 1
+  fi
+
+  local dir="$PWD"
+  while [[ "$dir" != "/" ]]; do
+    if is_dev_root "$dir"; then
+      printf '%s\n' "$dir"
+      return 0
+    fi
+    dir="$(dirname "$dir")"
+  done
+  return 1
+}
+
+resolve_layout() {
+  if DEV_ROOT="$(discover_dev_root 2>/dev/null)"; then
+    MODE="dev"
+    KERNEL_CMD=("$DEV_ROOT/src/run-kernel.sh")
+    KERNEL_CWD="$DEV_ROOT/src"
+    CLI_CMD=("${BUN:-bun}" "run" "src/main.ts")
+    CLI_CWD="$DEV_ROOT/src/cli"
+  else
+    MODE="packaged"
+    KERNEL_CMD=("$DATA_DIR/kernel/current/.venv/bin/python" "-m" "kernel.supervisor")
+    KERNEL_CWD="$PWD"
+    if [[ -x "$DATA_DIR/cli/current/deepcli-cli" ]]; then
+      CLI_CMD=("$DATA_DIR/cli/current/deepcli-cli")
+    else
+      CLI_CMD=("$DATA_DIR/cli/current/bun" "$DATA_DIR/cli/current/dist/main.js")
+    fi
+    CLI_CWD="$PWD"
+  fi
+}
+
+readiness_url() {
+  local port="$1"
+  printf 'http://%s:%s/access/readiness\n' "$HOST" "$port"
+}
+
+ws_url() {
+  local port="$1"
+  printf 'ws://%s:%s\n' "$HOST" "$port"
+}
+
+health_url() {
+  local port="$1"
+  printf 'http://%s:%s/\n' "$HOST" "$port"
+}
+
+probe_ready() {
+  local port="$1"
+  local payload
+  payload="$(curl -fsS --max-time 1 "$(readiness_url "$port")" 2>/dev/null)" || return 1
+  grep -q '"default_route_ready"[[:space:]]*:[[:space:]]*true' <<<"$payload" &&
+    grep -q '"hub_ready"[[:space:]]*:[[:space:]]*true' <<<"$payload" &&
+    grep -q '"primary_registered"[[:space:]]*:[[:space:]]*true' <<<"$payload"
+}
+
+load_state() {
+  if [[ -f "$STATE_FILE" ]]; then
+    # shellcheck disable=SC1090
+    source "$STATE_FILE"
+  fi
+}
+
+write_state() {
+  local port="$1"
+  local pid="$2"
+  local pgid="$3"
+  local tmp="$STATE_FILE.tmp"
+  {
+    printf 'DEEPCLI_RUNTIME_VERSION=%q\n' "1"
+    printf 'DEEPCLI_RUNTIME_MODE=%q\n' "$MODE"
+    printf 'DEEPCLI_RUNTIME_PORT=%q\n' "$port"
+    printf 'DEEPCLI_RUNTIME_PID=%q\n' "$pid"
+    printf 'DEEPCLI_RUNTIME_PGID=%q\n' "$pgid"
+    printf 'DEEPCLI_RUNTIME_STARTED_AT=%q\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } >"$tmp"
+  mv "$tmp" "$STATE_FILE"
+  chmod 600 "$STATE_FILE"
+}
+
+port_is_free() {
+  local port="$1"
+  python3 - "$HOST" "$port" <<'PY'
+import socket
+import sys
+
+host = sys.argv[1]
+port = int(sys.argv[2])
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    try:
+        s.bind((host, port))
+    except OSError:
+        raise SystemExit(1)
+PY
+}
+
+free_port() {
+  python3 - "$HOST" <<'PY'
+import socket
+import sys
+
+host = sys.argv[1]
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.bind((host, 0))
+    print(s.getsockname()[1])
+PY
+}
+
+ensure_token() {
+  if [[ -n "${DEEPCLI_TOKEN:-}" ]]; then
+    printf '%s\n' "$DEEPCLI_TOKEN"
+    return 0
+  fi
+  if [[ -n "${MUSTANG_TOKEN:-}" ]]; then
+    printf '%s\n' "$MUSTANG_TOKEN"
+    return 0
+  fi
+  local candidates=(
+    "$RUNTIME_DIR/auth_token"
+    "$STATE_DIR/auth_token"
+    "$HOME_DIR/.mustang/state/auth_token"
+  )
+  for path in "${candidates[@]}"; do
+    if [[ -s "$path" ]]; then
+      tr -d '\r\n' <"$path"
+      return 0
+    fi
+  done
+  echo "No DeepCLI auth token found. Checked runtime state and legacy dev token path." >&2
+  return 1
+}
+
+start_supervisor() {
+  local port="$1"
+  resolve_layout
+  local extra_args=()
+
+  if [[ ! -x "${KERNEL_CMD[0]}" ]]; then
+    echo "Kernel command is not executable: ${KERNEL_CMD[0]}" >&2
+    return 1
+  fi
+  if [[ "$MODE" == "dev" ]]; then
+    extra_args+=(--dev)
+  fi
+
+  (
+    cd "$KERNEL_CWD"
+    export PYTHONUNBUFFERED=1
+    export DEEPCLI_STATE_DIR="$STATE_DIR"
+    export DEEPCLI_CONFIG_DIR="$CONFIG_DIR"
+    if [[ "$MODE" == "packaged" ]]; then
+      export VIRTUAL_ENV="$DATA_DIR/kernel/current/.venv"
+      export PATH="$VIRTUAL_ENV/bin:$PATH"
+    fi
+    setsid "${KERNEL_CMD[@]}" \
+      --access-port "$port" \
+      --state-dir "$RUNTIME_DIR" \
+      --workspace "$INVOCATION_CWD" \
+      "${extra_args[@]}" \
+      9>&- \
+      >"$STDOUT_LOG" 2>"$STDERR_LOG" < /dev/null &
+    printf '%s\n' "$!" >"$RUNTIME_DIR/supervisor.pid"
+  )
+
+  local pid
+  pid="$(cat "$RUNTIME_DIR/supervisor.pid")"
+  write_state "$port" "$pid" "$pid"
+}
+
+wait_ready() {
+  local port="$1"
+  local attempts="${2:-160}"
+  for _ in $(seq 1 "$attempts"); do
+    if probe_ready "$port"; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  echo "Kernel Supervisor did not become ready. Logs:" >&2
+  echo "  $STDOUT_LOG" >&2
+  echo "  $STDERR_LOG" >&2
+  return 1
+}
+
+ensure_runtime() {
+  local requested_port="${1:-$DEFAULT_PORT}"
+  resolve_layout
+  load_state
+
+  if [[ -n "${DEEPCLI_RUNTIME_PORT:-}" ]] && probe_ready "$DEEPCLI_RUNTIME_PORT"; then
+    RUNTIME_PORT="$DEEPCLI_RUNTIME_PORT"
+    return 0
+  fi
+
+  (
+    flock -x 9
+    load_state
+    if [[ -n "${DEEPCLI_RUNTIME_PORT:-}" ]] && probe_ready "$DEEPCLI_RUNTIME_PORT"; then
+      exit 0
+    fi
+
+    local port="$requested_port"
+    if ! port_is_free "$port"; then
+      if [[ "$requested_port" != "$DEFAULT_PORT" ]]; then
+        echo "Port $requested_port is already in use." >&2
+        exit 1
+      fi
+      port="$(free_port)"
+    fi
+
+    start_supervisor "$port"
+    wait_ready "$port"
+  ) 9>"$LOCK_FILE"
+
+  load_state
+  RUNTIME_PORT="${DEEPCLI_RUNTIME_PORT:-$requested_port}"
+}
+
+status() {
+  load_state
+  if [[ -z "${DEEPCLI_RUNTIME_PORT:-}" ]]; then
+    echo "runtime: not found"
+    echo "state: $STATE_DIR"
+    return 0
+  fi
+  if probe_ready "$DEEPCLI_RUNTIME_PORT"; then
+    echo "runtime: ready"
+  else
+    echo "runtime: not ready"
+  fi
+  echo "pid: ${DEEPCLI_RUNTIME_PID:-unknown}"
+  echo "port: $DEEPCLI_RUNTIME_PORT"
+  echo "readiness: $(readiness_url "$DEEPCLI_RUNTIME_PORT")"
+  echo "state: $STATE_DIR"
+}
+
+stop_runtime() {
+  load_state
+  if [[ -z "${DEEPCLI_RUNTIME_PGID:-}" ]]; then
+    echo "runtime: not running"
+    return 0
+  fi
+  kill "-TERM" "-$DEEPCLI_RUNTIME_PGID" 2>/dev/null || true
+  for _ in $(seq 1 32); do
+    if ! probe_ready "${DEEPCLI_RUNTIME_PORT:-$DEFAULT_PORT}"; then
+      rm -f "$STATE_FILE"
+      echo "runtime: stopped"
+      return 0
+    fi
+    sleep 0.25
+  done
+  kill "-KILL" "-$DEEPCLI_RUNTIME_PGID" 2>/dev/null || true
+  rm -f "$STATE_FILE"
+  echo "runtime: stopped"
+}
+
+current_target() {
+  local path="$1"
+  if [[ -e "$path" || -L "$path" ]]; then
+    realpath "$path" 2>/dev/null || true
+  fi
+}
+
+uninstall_current_version() {
+  if is_source_launcher; then
+    echo "Refusing to uninstall from the source launcher. Use an installed deepcli command." >&2
+    return 1
+  fi
+
+  (
+    flock -x 9
+    stop_runtime
+
+    local bin_link="$HOME_DIR/.local/bin/deepcli"
+    local cli_target kernel_target self_target
+    cli_target="$(current_target "$DATA_DIR/cli/current")"
+    kernel_target="$(current_target "$DATA_DIR/kernel/current")"
+    self_target="$SCRIPT_PATH"
+
+    if [[ -L "$DATA_DIR/cli/current" ]]; then
+      rm -f "$DATA_DIR/cli/current"
+    fi
+    if [[ -n "$cli_target" && "$cli_target" == "$DATA_DIR/cli/"* ]]; then
+      rm -rf "$cli_target"
+    fi
+
+    if [[ -L "$DATA_DIR/kernel/current" ]]; then
+      rm -f "$DATA_DIR/kernel/current"
+    fi
+    if [[ -n "$kernel_target" && "$kernel_target" == "$DATA_DIR/kernel/"* ]]; then
+      rm -rf "$kernel_target"
+    fi
+
+    if [[ -L "$bin_link" && "$(current_target "$bin_link")" == "$self_target" ]]; then
+      rm -f "$bin_link"
+    fi
+    if [[ "$self_target" == "$DATA_DIR/bin/"* ]]; then
+      rm -f "$self_target"
+    fi
+
+    rm -f "$STATE_FILE" "$RUNTIME_DIR/supervisor.pid"
+    echo "DeepCLI uninstalled for this user."
+    echo "Preserved config/state/assets:"
+    echo "  $CONFIG_DIR"
+    echo "  $STATE_DIR"
+    echo "  $DATA_DIR/assets"
+  ) 9>"$LOCK_FILE"
+}
+
+kernel_logs() {
+  for path in "$STDOUT_LOG" "$STDERR_LOG"; do
+    if [[ -f "$path" ]]; then
+      echo "==> $path <=="
+      tail -n 200 "$path"
+    fi
+  done
+}
+
+run_cli() {
+  local port="$DEFAULT_PORT"
+  local args=("$@")
+  for ((i = 0; i < ${#args[@]}; i++)); do
+    if [[ "${args[$i]}" == "--port" && $((i + 1)) -lt ${#args[@]} ]]; then
+      port="${args[$((i + 1))]}"
+      break
+    fi
+  done
+
+  ensure_runtime "$port"
+  local token
+  token="$(ensure_token)"
+  resolve_layout
+  if [[ ! -x "${CLI_CMD[0]}" ]]; then
+    echo "CLI command is not executable: ${CLI_CMD[0]}" >&2
+    return 1
+  fi
+  (
+    cd "$CLI_CWD"
+    export DEEPCLI_TOKEN="$token"
+    export MUSTANG_TOKEN="$token"
+    export DEEPCLI_CONFIG_DIR="$CONFIG_DIR"
+    export DEEPCLI_DATA_DIR="$DATA_DIR"
+    export KERNEL_URL
+    export KERNEL_HEALTH_URL
+    KERNEL_URL="$(ws_url "$RUNTIME_PORT")"
+    KERNEL_HEALTH_URL="$(health_url "$RUNTIME_PORT")"
+    exec "${CLI_CMD[@]}" "$@"
+  )
+}
+
+case "${1:-}" in
+  "" )
+    run_cli
+    ;;
+  --help|-h|help )
+    usage
+    ;;
+  --uninstall|uninstall )
+    uninstall_current_version
+    ;;
+  status )
+    status
+    ;;
+  stop )
+    stop_runtime
+    ;;
+  restart )
+    stop_runtime
+    ensure_runtime "$DEFAULT_PORT"
+    ;;
+  kernel )
+    shift
+    case "${1:-}" in
+      start )
+        shift
+        port="$DEFAULT_PORT"
+        if [[ "${1:-}" == "--port" && -n "${2:-}" ]]; then
+          port="$2"
+        fi
+        ensure_runtime "$port"
+        ;;
+      logs )
+        kernel_logs
+        ;;
+      * )
+        usage >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  * )
+    run_cli "$@"
+    ;;
+esac

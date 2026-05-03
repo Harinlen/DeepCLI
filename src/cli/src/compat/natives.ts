@@ -21,6 +21,7 @@ export const Ellipsis = {
 } as const;
 
 const ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
+const ANSI_TOKEN_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
 
 function plain(text: string): string {
 	return String(text ?? "").replace(ANSI_RE, "");
@@ -53,20 +54,157 @@ export function truncateToWidth(text: string, width: number, ellipsisKind: Ellip
 }
 
 export function wrapTextWithAnsi(text: string, width: number, ..._rest: unknown[]): string[] {
-	return String(text ?? "").split("\n").flatMap(line => {
-		const chunks: string[] = [];
-		let current = "";
-		for (const char of [...line]) {
-			if (visibleWidth(current + char) > width && current) {
-				chunks.push(current);
-				current = char;
-			} else {
-				current += char;
+	const maxWidth = Math.max(1, width);
+	return String(text ?? "").split("\n").flatMap(line => wrapAnsiLine(line, maxWidth));
+}
+
+interface SgrState {
+	bold: boolean;
+	italic: boolean;
+	underline: boolean;
+	strikethrough: boolean;
+	fg?: string;
+	bg?: string;
+}
+
+const sgrReset = "\x1b[0m";
+const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+function wrapAnsiLine(line: string, width: number): string[] {
+	const chunks: string[] = [];
+	const state: SgrState = { bold: false, italic: false, underline: false, strikethrough: false };
+	let current = "";
+	let currentWidth = 0;
+	let lastIndex = 0;
+
+	const appendText = (value: string) => {
+		for (const part of graphemeSegmenter.segment(value)) {
+			const grapheme = part.segment;
+			const graphemeWidth = visibleWidth(grapheme);
+			if (currentWidth > 0 && currentWidth + graphemeWidth > width) {
+				chunks.push(closeChunk(current, state));
+				current = statePrefix(state);
+				currentWidth = 0;
 			}
+			current += grapheme;
+			currentWidth += graphemeWidth;
 		}
-		chunks.push(current);
-		return chunks;
-	});
+	};
+
+	for (const match of line.matchAll(ANSI_TOKEN_RE)) {
+		appendText(line.slice(lastIndex, match.index));
+		const token = match[0];
+		current += token;
+		updateSgrState(state, token);
+		lastIndex = match.index + token.length;
+	}
+	appendText(line.slice(lastIndex));
+
+	chunks.push(current);
+	return chunks;
+}
+
+function closeChunk(chunk: string, state: SgrState): string {
+	return statePrefix(state) ? `${chunk}${sgrReset}` : chunk;
+}
+
+function statePrefix(state: SgrState): string {
+	let prefix = "";
+	if (state.bold) prefix += "\x1b[1m";
+	if (state.italic) prefix += "\x1b[3m";
+	if (state.underline) prefix += "\x1b[4m";
+	if (state.strikethrough) prefix += "\x1b[9m";
+	if (state.fg) prefix += state.fg;
+	if (state.bg) prefix += state.bg;
+	return prefix;
+}
+
+function updateSgrState(state: SgrState, token: string): void {
+	const match = /^\x1b\[([0-9;]*)m$/.exec(token);
+	if (!match) return;
+
+	const codes = match[1] === "" ? [0] : match[1].split(";").map(code => Number(code || 0));
+	for (let i = 0; i < codes.length; i++) {
+		const code = codes[i];
+		switch (code) {
+			case 0:
+				state.bold = false;
+				state.italic = false;
+				state.underline = false;
+				state.strikethrough = false;
+				state.fg = undefined;
+				state.bg = undefined;
+				break;
+			case 1:
+				state.bold = true;
+				break;
+			case 3:
+				state.italic = true;
+				break;
+			case 4:
+				state.underline = true;
+				break;
+			case 9:
+				state.strikethrough = true;
+				break;
+			case 22:
+				state.bold = false;
+				break;
+			case 23:
+				state.italic = false;
+				break;
+			case 24:
+				state.underline = false;
+				break;
+			case 29:
+				state.strikethrough = false;
+				break;
+			case 39:
+				state.fg = undefined;
+				break;
+			case 49:
+				state.bg = undefined;
+				break;
+			case 38:
+			case 48: {
+				const parsed = parseExtendedColor(codes, i);
+				if (parsed) {
+					if (code === 38) state.fg = `\x1b[${parsed.sequence}m`;
+					else state.bg = `\x1b[${parsed.sequence}m`;
+					i = parsed.nextIndex;
+				}
+				break;
+			}
+			default:
+				if ((code >= 30 && code <= 37) || (code >= 90 && code <= 97)) {
+					state.fg = `\x1b[${code}m`;
+				} else if ((code >= 40 && code <= 47) || (code >= 100 && code <= 107)) {
+					state.bg = `\x1b[${code}m`;
+				}
+		}
+	}
+}
+
+function parseExtendedColor(codes: number[], startIndex: number): { sequence: string; nextIndex: number } | undefined {
+	const mode = codes[startIndex + 1];
+	if (mode === 5 && Number.isFinite(codes[startIndex + 2])) {
+		return {
+			sequence: `${codes[startIndex]};5;${codes[startIndex + 2]}`,
+			nextIndex: startIndex + 2,
+		};
+	}
+	if (
+		mode === 2 &&
+		Number.isFinite(codes[startIndex + 2]) &&
+		Number.isFinite(codes[startIndex + 3]) &&
+		Number.isFinite(codes[startIndex + 4])
+	) {
+		return {
+			sequence: `${codes[startIndex]};2;${codes[startIndex + 2]};${codes[startIndex + 3]};${codes[startIndex + 4]}`,
+			nextIndex: startIndex + 4,
+		};
+	}
+	return undefined;
 }
 
 export function extractSegments(

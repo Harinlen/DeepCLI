@@ -19,6 +19,13 @@ export interface ToolPermissionPrompt {
   title: string;
   body: string;
   options: ToolPermissionOption[];
+  sections: ToolPermissionSection[];
+}
+
+export interface ToolPermissionSection {
+  label: string;
+  value: string;
+  style: "text" | "code" | "multiline" | "parameters";
 }
 
 export type StructuredQuestionKind = "choice" | "text";

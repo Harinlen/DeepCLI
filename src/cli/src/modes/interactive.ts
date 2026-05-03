@@ -6,6 +6,7 @@ import { SessionService } from "@/sessions/service.js";
 import type { CliSessionInfo } from "@/sessions/types.js";
 import { MustangAgentSessionAdapter } from "@/session/agent-session-adapter.js";
 import { PermissionController } from "@/permissions/controller.js";
+import { InteractiveMode as ActivePortInteractiveMode } from "./active-port-loader.js";
 
 export const BUILTIN_COMMANDS: AutocompleteItem[] = [
   { value: "help", label: "/help", description: "Show available commands" },
@@ -136,7 +137,7 @@ export class InteractiveMode {
 
   constructor(
     private readonly client: AcpClient,
-    session: MustangSession,
+    session: MustangSession | undefined,
     private readonly options: {
       model?: string;
       provider?: string;
@@ -158,8 +159,7 @@ export class InteractiveMode {
 
   async run(): Promise<void> {
     await this.adapter.refreshModelProfiles().catch(() => {});
-    const { InteractiveMode: OmpInteractiveMode } = await importActivePortInteractiveMode();
-    this.mode = new OmpInteractiveMode(this.adapter as never, this.options.version ?? "0.1.0");
+    this.mode = new ActivePortInteractiveMode(this.adapter as never, this.options.version ?? "0.1.0");
     this.applyConnectionState(this.client.getConnectionState());
     this.client.onConnectionStateChange((state) => this.applyConnectionState(state));
     this.client.setPermissionHandler((_id, req) => {
@@ -227,9 +227,4 @@ export class InteractiveMode {
       }
     }
   }
-}
-
-async function importActivePortInteractiveMode(): Promise<{ InteractiveMode: new (...args: any[]) => any }> {
-  const load = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<unknown>;
-  return await load("../active-port/coding-agent/modes/interactive-mode.ts") as { InteractiveMode: new (...args: any[]) => any };
 }

@@ -65,6 +65,9 @@ async function main(): Promise<void> {
   const kernelVersion = await fetchKernelVersion(loaded.config.kernel.health_url);
 
   if (args.prompt || args.print) {
+    if (!startup.session) {
+      throw new Error("Prompt mode did not create a session.");
+    }
     await runPrintPrompt(startup.session, args.prompt ?? "");
     connection.client.close();
     connection.autostarted?.stop();

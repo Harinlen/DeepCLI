@@ -88,7 +88,7 @@ function makeContext() {
 		bashComponent: undefined,
 		pythonComponent: undefined,
 		ui: {
-			requestRender: () => calls.push("render"),
+			requestRender: (force?: boolean) => calls.push(force ? "render:force" : "render"),
 			onDebug: undefined,
 			hasOverlay: () => false,
 			addInputListener: (listener: (data: string) => { consume?: boolean } | undefined) => {
@@ -178,6 +178,7 @@ assert(thinkingHideValue === true, "thinking toggle should update existing assis
 assert(thinkingInvalidated, "thinking toggle should re-render existing assistant components");
 assert(!calls.includes("chat-clear"), "thinking toggle must not clear and rebuild the chat");
 assert(calls.some(item => item === "status:Thinking blocks: hidden"), "thinking toggle should report hidden state");
+assert(calls.includes("render:force"), "thinking toggle should force a full TUI redraw so off-viewport thinking updates");
 
 editor.setText("!");
 assert(ctx.isBashMode, "typing ! should enter bash mode");

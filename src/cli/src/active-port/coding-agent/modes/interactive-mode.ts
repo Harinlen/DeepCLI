@@ -236,6 +236,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#syncEditorMaxHeight();
 		this.#resizeHandler = () => {
 			this.#syncEditorMaxHeight();
+			this.updateEditorTopBorder();
 		};
 		process.stdout.on("resize", this.#resizeHandler);
 		try {
@@ -1068,7 +1069,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		const sessionId = this.sessionManager.getSessionId();
 		const sessionFile = this.sessionManager.getSessionFile();
 		if (sessionId && sessionFile) {
-			process.stderr.write(`\n${chalk.dim(`Resume this session with ${APP_NAME} --resume ${sessionId}`)}\n`);
+			process.stderr.write(`\n${chalk.dim("Resume this session with:")}\n${chalk.cyan(`  deepcli --resume ${sessionId}`)}\n`);
 		}
 
 		await postmortem.quit(0);
@@ -1170,6 +1171,9 @@ export class InteractiveMode implements InteractiveModeContext {
 				this.#defaultWorkingMessage,
 				getSymbolTheme().spinnerFrames,
 			);
+			this.statusContainer.addChild(this.loadingAnimation);
+		} else if (!this.statusContainer.children.includes(this.loadingAnimation)) {
+			this.statusContainer.clear();
 			this.statusContainer.addChild(this.loadingAnimation);
 		}
 

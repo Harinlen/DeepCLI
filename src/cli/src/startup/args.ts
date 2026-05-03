@@ -41,7 +41,8 @@ export function parseCliArgs(argv = process.argv.slice(2)): CliArgs {
         break;
       }
       case "--session":
-        args.sessionId = requireValue(argv, ++i, "--session");
+      case "--resume":
+        args.sessionId = requireValue(argv, ++i, item);
         break;
       case "--new":
         args.newSession = true;
@@ -83,6 +84,7 @@ export function usage(): string {
     "  --kernel <ws-url>   Kernel WebSocket URL",
     "  --port <port>       Kernel port on localhost",
     "  --session <id>      Load an existing session",
+    "  --resume <id>       Alias for --session",
     "  --new               Create a new session",
     "  --theme <name>      Override configured theme",
     "  --print             Send prompt and print streamed output without TUI picker",

@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+import sys
+from types import SimpleNamespace
+from typing import Any
 
-from kernel.tools.web.fetch_backends import _looks_like_anti_bot, fetch_with_fallback
+import httpx
+
+from kernel.tools.web.fetch_backends import (
+    _has_env,
+    _looks_like_anti_bot,
+    fetch_with_fallback,
+    get_available_backends,
+)
 from kernel.tools.web.fetch_backends.base import FetchBackend, FetchResult
+from kernel.tools.web.fetch_backends.httpx_html import (
+    HttpxFetchBackend,
+    _send_with_redirect_check,
+)
+from kernel.tools.web.fetch_backends.playwright_be import PlaywrightFetchBackend
+from kernel.tools.web.fetch_backends.readability_be import ReadabilityFetchBackend
 
 
 # ── Mock backend ──
@@ -152,3 +168,101 @@ def test_not_anti_bot_short_but_legitimate():
             status_code=200,
         )
     )
+
+
+def test_fetch_has_env_trims_empty_values(monkeypatch):
+    monkeypatch.delenv("DEEPCLI_TEST_KEY", raising=False)
+    assert _has_env("DEEPCLI_TEST_KEY") is False
+    monkeypatch.setenv("DEEPCLI_TEST_KEY", "   ")
+    assert _has_env("DEEPCLI_TEST_KEY") is False
+    monkeypatch.setenv("DEEPCLI_TEST_KEY", " value ")
+    assert _has_env("DEEPCLI_TEST_KEY") is True
+
+
+def test_get_available_fetch_backends_always_includes_httpx(monkeypatch):
+    for key in ("FIRECRAWL_API_KEY", "FIRECRAWL_API_URL", "EXA_API_KEY", "TAVILY_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+
+    names = [backend.name for backend in get_available_backends()]
+
+    assert names[-1] == "httpx"
+    assert "httpx" in names
+
+
+async def test_httpx_fetch_blocks_private_domain_before_network():
+    result = await HttpxFetchBackend().fetch("http://127.0.0.1/private")
+
+    assert result.content == ""
+    assert result.error
+    assert "rejected" in result.error.lower()
+
+
+async def test_send_with_redirect_check_blocks_bad_redirect():
+    request = httpx.Request("GET", "https://safe.test")
+    redirect = httpx.Response(
+        302,
+        headers={"location": "http://127.0.0.1/private"},
+        request=request,
+    )
+
+    class _Client:
+        async def request(self, method: str, url: str) -> httpx.Response:
+            assert method == "GET"
+            assert url == "https://safe.test"
+            return redirect
+
+    try:
+        await _send_with_redirect_check(_Client(), "https://safe.test")
+    except httpx.HTTPStatusError as exc:
+        assert "Redirect blocked" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("redirect should have been blocked")
+
+
+async def test_readability_fetch_success_and_http_error(monkeypatch):
+    class _Document:
+        def __init__(self, html: str) -> None:
+            self.html = html
+
+        def summary(self) -> str:
+            return "<main><h1>Hello</h1><p>World</p></main>"
+
+        def title(self) -> str:
+            return "Readable"
+
+    class _Client:
+        def __init__(self, *, fail: bool = False, **_: Any) -> None:
+            self.fail = fail
+
+        async def __aenter__(self) -> "_Client":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        async def get(self, url: str) -> httpx.Response:
+            if self.fail:
+                raise httpx.ConnectError("offline", request=httpx.Request("GET", url))
+            return httpx.Response(
+                200,
+                text="<html><body>Hello</body></html>",
+                headers={"content-type": "text/html"},
+                request=httpx.Request("GET", url),
+            )
+
+    monkeypatch.setitem(sys.modules, "readability", SimpleNamespace(Document=_Document))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client(**kwargs))
+
+    result = await ReadabilityFetchBackend().fetch("https://example.test", max_chars=20)
+    assert result.title == "Readable"
+    assert "Hello" in result.content
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client(fail=True, **kwargs))
+    failed = await ReadabilityFetchBackend().fetch("https://example.test")
+    assert failed.error == "HTTP error: offline"
+
+
+async def test_playwright_fetch_blocks_domain_before_optional_import():
+    result = await PlaywrightFetchBackend().fetch("http://127.0.0.1/private")
+
+    assert result.error

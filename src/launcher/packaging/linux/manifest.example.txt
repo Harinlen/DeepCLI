@@ -1,0 +1,8 @@
+# Minimal release manifest consumed by install.sh.
+# The first .whl entry is treated as the Kernel wheel.
+deepcli-launcher-linux
+welcome-logo.txt
+deepcli-cli-linux-amd64
+deepcli-cli-linux-arm64
+mustang_kernel-1.0.0-py3-none-any.whl
+checksums.txt

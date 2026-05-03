@@ -1,7 +1,7 @@
 # DeepCLI Launcher 子仓库计划
 
 **状态**：planned
-**归属仓库**：新的子仓库，命名 `launcher`
+**归属目录**：`src/launcher/`（新的 sub-repo 边界）
 **产品命令**：`deepcli`
 **当前相关代码**：`src/cli/`、`src/kernel/kernel/supervisor/`
 
@@ -37,34 +37,29 @@ deepcli
 - CLI 不直接读取 Kernel SQLite、sidecar 文件或 subsystem 状态。runtime
   发现由 launcher 和 Kernel/Supervisor readiness endpoint 负责。
 - v1 不做系统级 daemon。单例范围是当前 OS 用户，不是整台机器。
+- Linux v1 不提供 `.deb` / `.rpm` 作为主发布路径，不要求 systemd user
+  service。包管理器和 service install 都是后续可选增强。
 
 ## 建议形态
 
-创建新的 native launcher 子仓库：
+创建新的 native launcher sub-repo，放在 `src/launcher/`：
 
 ```text
-launcher/
-├── cmd/deepcli/                  # native deepcli 命令
-├── internal/launcher/            # ensure / attach / start 主逻辑
-├── internal/platform/            # Windows/macOS/Linux 进程和锁适配
-├── internal/runtime/             # runtime 文件 schema + readiness probe
-├── internal/install/             # packaged/dev 安装布局发现
+src/launcher/
+├── bin/deepcli                   # Linux Bash launcher
+├── packaging/linux/              # install.sh、release staging
 └── docs/                         # launcher 自己的打包说明
 ```
 
-测试不放在 launcher 子仓库内部，按当前 monorepo 习惯放在外层 `tests/`
+测试不放在 `src/launcher/` 内部，按当前 monorepo 习惯放在外层 `tests/`
 对应目录下，例如 `tests/launcher/` 或后续约定的跨仓库验证目录。launcher
 子仓库只保留实现代码和自身说明文档。
 
-建议实现语言：**Go**。
+Linux v1 实现语言：**Bash**。
 
-原因：launcher 的核心工作是进程控制、文件锁、HTTP probe、路径发现和跨平台
-打包。Go 可以产出小型 native binary，Windows/macOS/Linux 进程 API 够直接，
-GitHub Actions 构建简单，并且避免用户在 launcher 启动前就必须先装好
-Node/Bun/Python。
-
-Rust 也可行，但除非后续打包或嵌入需求明显更适合 Rust，否则 Go 是更简单的
-选择。
+原因：Linux 安装路径本来就是 `install.sh`，用 Bash 做 launcher 可以避免再引入
+Go/Rust 等额外工具链。Bash launcher 只负责本机 Linux/WSL2 的用户级 runtime
+管理；Windows/macOS 后续可以在不影响 Linux v1 的前提下重新评估 native 实现。
 
 ## 命令契约
 
@@ -93,7 +88,11 @@ runtime 的启动细节安静处理。
 launcher 应启动当前产品路径，也就是 Supervisor：
 
 ```bash
-python -m kernel.supervisor --access-port <port> --state-dir <state-dir> --workspace <cwd>
+<kernel-python> -m kernel.supervisor \
+  --access-port <port> \
+  --state-dir <state-dir> \
+  --config-dir <config-dir> \
+  --workspace <cwd>
 ```
 
 Supervisor 会启动：
@@ -108,6 +107,123 @@ CLI 只连接 Access Agent：
 ws://127.0.0.1:<access-port>/session
 ```
 
+## Linux v1 发布决策
+
+Linux v1 采用 Claude Code / Hermes 风格的一键 shell installer，而不是
+`.deb` / `.rpm` / distro package manager：
+
+```bash
+curl -fsSL https://install.deepcli.dev/linux.sh | sh
+```
+
+设计原则：
+
+- 不需要 `sudo`。
+- 不碰系统 Python。
+- 不要求用户提前安装 Bun / Node。
+- 默认只写用户目录。
+- 安装后用户只需要运行 `deepcli`。
+- Kernel、CLI、launcher 都由 DeepCLI 自己在用户目录下版本化管理。
+
+Linux v1 用户级目录：
+
+```text
+~/.local/bin/deepcli
+~/.local/share/deepcli/
+├── bin/
+│   └── deepcli-1.0.0              # launcher binary
+├── kernel/
+│   └── 1.0.0/
+│       ├── .venv/                 # uv-managed Python runtime
+│       ├── wheels/
+│       └── uv.lock
+├── cli/
+│   └── 1.0.0/
+│       └── deepcli-cli            # bundled CLI artifact
+└── downloads/
+~/.local/state/deepcli/
+├── launcher.lock
+├── launcher.log
+└── runtime/
+    ├── supervisor.json
+    ├── supervisor.stdout.log
+    └── supervisor.stderr.log
+~/.config/deepcli/
+└── config.yaml
+```
+
+`~/.local/bin/deepcli` 是用户 PATH 上的稳定入口，通常指向当前版本的
+launcher：
+
+```text
+~/.local/bin/deepcli -> ~/.local/share/deepcli/bin/deepcli-1.0.0
+```
+
+installer 负责：
+
+1. 检测 Linux / WSL2 / CPU 架构。
+2. 创建 `~/.local/share/deepcli`、`~/.local/state/deepcli`、
+   `~/.config/deepcli`。
+3. 下载 launcher binary、CLI artifact、Kernel wheel、lock metadata。
+4. 安装或定位 `uv`。
+5. 用 `uv python install 3.13` 准备 Kernel Python。
+6. 创建 `~/.local/share/deepcli/kernel/<version>/.venv`。
+7. 安装 Kernel wheel + locked dependencies。
+8. 创建 / 更新 `~/.local/bin/deepcli` symlink。
+9. 检查 `~/.local/bin` 是否在 PATH；缺失时提示或写入 shell rc。
+10. 运行 `deepcli doctor` 或等价 smoke，确认安装物可执行。
+
+release artifact 至少包含：
+
+```text
+deepcli-launcher-linux-x64
+deepcli-launcher-linux-arm64
+deepcli-cli-linux-x64.tar.gz
+deepcli-cli-linux-arm64.tar.gz
+deepcli-kernel-1.0.0-py3-none-any.whl
+deepcli-kernel-lock-1.0.0.txt / uv.lock
+install-linux.sh
+checksums.txt
+manifest.json
+```
+
+Kernel 不是 frozen binary。Kernel 发布为 wheel，并安装到 launcher 管理的
+完整 Python venv 中。这样 `import`、插件、MCP、Python 工具和未来动态依赖
+都仍然在真实 Python 环境里运行。
+
+`!` 命令和 shell tool 不使用 Kernel venv 的 PATH。Kernel venv 只用于运行
+Kernel 自己；用户命令必须在用户项目 cwd 和用户 shell 环境中执行。Linux shell
+选择规则：
+
+1. 优先 `$SHELL`。
+2. fallback `/bin/bash`。
+3. fallback `/bin/sh`。
+
+`!python` 因此走用户 PATH 上的 Python，而不是
+`~/.local/share/deepcli/kernel/<version>/.venv/bin/python`。
+
+## Windows Native vs WSL2
+
+Windows native 和 WSL2 必须视为两个独立 runtime world：
+
+| 环境 | Kernel runtime | Shell | 单例范围 |
+|---|---|---|---|
+| Windows native `deepcli.exe` | Windows Python runtime | PowerShell / cmd | Windows 用户 |
+| WSL2 内的 `deepcli` | Linux Python runtime | bash / sh | 当前 WSL distro 用户 |
+
+v1 默认不跨 world 复用 Kernel。Windows native launcher 不连接 WSL2 Kernel，
+WSL2 launcher 也不连接 Windows Kernel。后续可以设计显式目标，例如
+`deepcli --target wsl:Ubuntu`，但它不是默认行为。
+
+Linux launcher 应识别 WSL2：
+
+- `runtime.GOOS == "linux"`；
+- 且 `WSL_DISTRO_NAME` / `WSL_INTEROP` 存在，或
+  `/proc/sys/kernel/osrelease` 包含 `microsoft` / `WSL`。
+
+识别 WSL2 只是为了安装提示、目录说明和诊断输出；运行模型仍按 Linux artifact
+和 Linux Supervisor 处理。
+
 ## 开发模式 vs 安装包模式
 
 launcher 需要支持两种运行布局。
@@ -115,66 +231,60 @@ launcher 需要支持两种运行布局。
 | 模式 | 发现方式 | Kernel 命令 | CLI 命令 |
 |---|---|---|---|
 | 开发 checkout | `DEEPCLI_DEV_ROOT` 或仓库标记文件 | 在 `src/kernel` 下执行 `uv run python -m kernel.supervisor ...` | 在 `src/cli` 下执行 `bun run src/main.ts ...` |
-| 正式安装包 | launcher binary 旁边的文件布局 | bundled Python env / kernel wheel | bundled CLI artifact |
+| 正式安装包 | `~/.local/share/deepcli` 等平台安装布局 | managed Python venv + Kernel wheel | bundled CLI artifact |
 
-安装包模式可以先采用务实布局：
+跨平台安装包模式由 `InstallLayout` 抽象隐藏差异。Linux v1 的实体布局见
+“Linux v1 发布决策”；Windows/macOS 后续可采用各自更合适的 installer
+布局，但 launcher 内部仍暴露相同字段：
 
 ```text
-DeepCLI/
-├── bin/deepcli                 # native launcher
-├── kernel/                     # Python venv 或嵌入式 runtime
-├── cli/                        # CLI bundle
-└── resources/
+InstallLayout
+├── launcherPath
+├── kernelPython
+├── kernelVersion
+├── cliCommand
+├── stateDir
+├── configDir
+└── logDir
 ```
-
-不同平台的具体打包形式可以不同，但 launcher 内部应通过一个 `InstallLayout`
-抽象隐藏这些差异。
 
 ## 用户级状态目录
 
-沿用 Mustang 兼容状态目录：
+DeepCLI 产品态使用 DeepCLI 自己的目录，不沿用旧兼容目录：
 
 | 平台 | State Root |
 |---|---|
-| Windows | `%USERPROFILE%\.mustang\state` |
-| macOS | `$HOME/.mustang/state` |
-| Linux | `$HOME/.mustang/state` |
+| Windows native | `%LOCALAPPDATA%\DeepCLI\state` |
+| macOS | `$HOME/Library/Application Support/DeepCLI/state` 或 `$HOME/.local/state/deepcli`（待 macOS 打包决策确认） |
+| Linux / WSL2 | `$HOME/.local/state/deepcli` |
 
 launcher 拥有的文件：
 
 ```text
-~/.mustang/state/
+~/.local/state/deepcli/
 ├── launcher.lock
 ├── launcher.log
-└── supervisor/
+└── runtime/
     ├── supervisor.json
     ├── supervisor.stdout.log
     └── supervisor.stderr.log
 ```
 
-`supervisor.json` 当前已经存在。launcher 可以扩展它，但要兼容现有字段：
+`supervisor.json` 是 attach hint，不是真相。真相永远是 readiness probe。
+建议字段：
 
 ```json
 {
-  "ready": true,
-  "access": {
-    "pid": 1234,
-    "endpoint": "http://127.0.0.1:8200"
-  },
-  "children": {}
-}
-```
-
-未来 launcher 字段必须 additive，例如：
-
-```json
-{
-  "launcherVersion": "0.1.0",
+  "version": "1.0.0",
+  "pid": 1234,
+  "processGroupId": 1234,
+  "startedAt": "2026-05-03T00:00:00Z",
+  "state": "ready",
   "access": {
     "host": "127.0.0.1",
     "port": 8200,
     "wsUrl": "ws://127.0.0.1:8200/session",
-    "healthUrl": "http://127.0.0.1:8200/"
+    "readinessUrl": "http://127.0.0.1:8200/access/readiness"
   }
 }
 ```
@@ -235,14 +345,59 @@ LockHandle.Release()
 5. 如果用户显式传了 `--port <port>`，不要静默换端口。若该端口被非 DeepCLI
    进程占用，直接给出清晰错误。
 
-readiness 检测优先使用 Supervisor Access Agent 的 `/access/readiness`。
-为了兼容旧的 bare Kernel 进程，launcher 可以额外 probe `GET /`，但产品主路径
-应优先 Supervisor。
+readiness 检测使用 Supervisor Access Agent 的 `/access/readiness`。产品路径
+不 attach bare Kernel。
 
 ## 后台进程语义
 
 launcher 启动的 Supervisor 是独立于 CLI 的后台进程。关闭 CLI 不应停止
 Kernel runtime。
+
+Linux v1 不依赖 systemd。launcher 使用普通 detached process 语义后台启动
+Supervisor：
+
+```go
+cmd := exec.Command(
+    kernelPython,
+    "-m", "kernel.supervisor",
+    "--access-port", port,
+    "--state-dir", stateDir,
+    "--config-dir", configDir,
+    "--workspace", cwd,
+)
+
+cmd.Dir = cwd
+cmd.Env = buildKernelEnv()
+cmd.Stdout = supervisorStdoutLog
+cmd.Stderr = supervisorStderrLog
+cmd.Stdin = nil
+cmd.SysProcAttr = &syscall.SysProcAttr{
+    Setsid: true,
+}
+
+cmd.Start()
+cmd.Process.Release()
+```
+
+启动成功不能以 `cmd.Start()` 为准，必须等 readiness：
+
+```text
+GET http://127.0.0.1:<port>/access/readiness
+```
+
+至少需要：
+
+```json
+{
+  "process_ready": true,
+  "hub_ready": true,
+  "primary_registered": true,
+  "default_route_ready": true
+}
+```
+
+如果 readiness 超时，launcher 非零退出，不启动 CLI，并打印 stdout/stderr
+日志路径。
 
 平台注意事项：
 
@@ -250,46 +405,156 @@ Kernel runtime。
 |---|---|
 | Windows | 使用 `CREATE_NEW_PROCESS_GROUP`；正式安装包中尽量避免弹出额外 console window。 |
 | macOS | 从 CLI process group detached；日志写入 state dir。未来可以加 LaunchAgent，但 v1 不要求。 |
-| Linux | 创建新的 session/process group；日志写入 state dir。systemd user unit 是未来可选项，不属于 v1。 |
+| Linux / WSL2 | `setsid` 创建新的 session/process group；日志写入 state dir。不安装 systemd user unit。 |
 
 v1 不要求 runtime 在 logout 或重启后仍然存活。它只需要在 CLI 退出后继续运行，
 并能被同一用户后续终端复用。
 
+`deepcli stop` 在 Linux 上按 process group 停止后台 runtime：
+
+1. 对 `-pgid` 发送 `SIGTERM`。
+2. 等待 readiness 失败 / process 消失。
+3. 超时后对 `-pgid` 发送 `SIGKILL`。
+
+Supervisor 自己负责优雅 shutdown children；launcher 负责兜底杀进程组。
+
 ## Auth 交接
 
-连接认证仍由 Kernel 拥有。当前 token 存储在：
+连接认证仍由 Kernel 拥有。产品态 token 存储在 state dir：
 
 ```text
-~/.mustang/state/auth_token
+~/.local/state/deepcli/runtime/auth_token
 ```
 
 launcher 在 Supervisor readiness 后读取 token，并通过环境变量传给 CLI：
 
 ```text
-MUSTANG_TOKEN=<token>
-KERNEL_URL=ws://127.0.0.1:<port>
+DEEPCLI_TOKEN=<token>
+KERNEL_URL=ws://127.0.0.1:<port>/session
 KERNEL_HEALTH_URL=http://127.0.0.1:<port>/
 ```
 
-CLI 当前已经支持 `MUSTANG_TOKEN`、`KERNEL_URL`、`KERNEL_PORT`。实现本计划时
-需要补 `KERNEL_HEALTH_URL`，这样端口漂移后 Welcome / health 展示不会依赖旧
-配置文件。
+CLI 当前已经支持旧环境变量。实现本计划时需要补 `DEEPCLI_TOKEN` 和
+`KERNEL_HEALTH_URL`，并保留开发期旧变量 fallback，直到本仓库脚本迁移完成。
 
 ## CLI 边界
 
 TypeScript CLI 不应该变成 launcher。它的启动路径应保持为：
 
-1. 从 native launcher 接收 `KERNEL_URL` 和 `MUSTANG_TOKEN`。
+1. 从 native launcher 接收 `KERNEL_URL`、`KERNEL_HEALTH_URL`、
+   `DEEPCLI_TOKEN`。
 2. 连接 ACP WebSocket。
 3. 渲染 TUI 或执行 `--print`。
 
 开发时仍然可以直接运行 CLI：
 
 ```bash
-KERNEL_URL=ws://127.0.0.1:8200 MUSTANG_TOKEN=... bun run src/main.ts
+KERNEL_URL=ws://127.0.0.1:8200/session DEEPCLI_TOKEN=... bun run src/main.ts
 ```
 
 但用户面对的 `deepcli` 命令应该是 native launcher。
+
+## CLI 发布和交接
+
+CLI 是 bundled artifact，不要求用户安装 Bun。Linux v1 优先尝试 Bun single
+executable：
+
+```text
+~/.local/share/deepcli/cli/1.0.0/deepcli-cli
+```
+
+launcher ensure runtime 后以前台进程执行 CLI：
+
+```bash
+DEEPCLI_TOKEN=<token> \
+KERNEL_URL=ws://127.0.0.1:<port>/session \
+KERNEL_HEALTH_URL=http://127.0.0.1:<port>/ \
+~/.local/share/deepcli/cli/1.0.0/deepcli-cli "$@"
+```
+
+CLI 退出码就是 `deepcli` 默认命令的退出码。CLI 退出不停止 Supervisor。
+
+如果 Bun single executable 对 TUI、资源文件或动态 import 不稳定，fallback
+artifact 是 bundled Bun runtime + JS bundle：
+
+```text
+~/.local/share/deepcli/cli/1.0.0/
+├── bun
+├── dist/main.js
+└── assets/
+```
+
+launcher 对两种 artifact 暴露同一个 `cliCommand`：
+
+```text
+single executable: [deepcli-cli, ...args]
+bundled bun:       [bun, dist/main.js, ...args]
+```
+
+CLI 不做：
+
+- runtime 单例；
+- 端口选择；
+- Kernel 进程启动/停止；
+- token 文件读取；
+- Kernel state / SQLite 读取。
+
+CLI 要做：
+
+- 从环境变量读取连接信息；
+- 建立 ACP WebSocket；
+- 支持 `--print` 和 TUI 两种前台模式；
+- 展示 health / reconnect 状态时使用 `KERNEL_HEALTH_URL`；
+- 在连接断开时重连当前 launcher 提供的 URL，不自行寻找其它 Kernel。
+
+当前验证结果：
+
+- `cd src/cli && bun build src/main.ts --target=bun --outdir /tmp/deepcli-cli-build-check`
+  可以生成普通 JS bundle。
+- `cd src/cli && bun build src/main.ts --target=bun --compile --outfile /tmp/deepcli-cli-check`
+  可以生成 Linux single executable；当前大小约 99MB。
+- `/tmp/deepcli-cli-check --help` 可以正常输出 CLI usage。
+
+因此 Linux launcher 可以先以 Bun single executable 为目标实现；但完整 TUI
+artifact 仍需要在安装包验收中跑真实 PTY smoke，确认资源文件、动态 import、
+终端 raw mode 等路径在 single executable 中稳定。如果失败，切换到 bundled
+Bun runtime + JS bundle。
+
+## Linux v1 可实现性检查
+
+已确认可以开始写 Linux launcher 和 install.sh，但需要先完成 Phase 0 的几个
+本仓库契约补齐。
+
+已经可用：
+
+- Kernel wheel 可以构建：
+  `cd src/kernel && uv build --wheel --out-dir /tmp/deepcli-kernel-wheel-check`
+  生成 `mustang_kernel-1.0.0-py3-none-any.whl`。
+- CLI 普通 bundle 和 Bun single executable 都可以构建。
+- Supervisor 已支持 `--access-port`、`--state-dir`、`--workspace`，可以作为
+  launcher 后台启动的主进程。
+- Access readiness endpoint 已存在，launcher 可用
+  `/access/readiness` 做真实 ready gate。
+
+必须补齐：
+
+- Kernel package 名称仍是 `mustang-kernel`，产品发布前需要决定是否改成
+  `deepcli-kernel`，或在 v1 wheel artifact 中保留兼容名但由 manifest 映射。
+- Supervisor CLI 还没有 `--config-dir`；Kernel lifespan 当前仍默认读取旧 home
+  config/state 位置。产品态需要支持 `~/.config/deepcli` 和
+  `~/.local/state/deepcli`。
+- Supervisor primary runtime 当前仍把 agent state 写到
+  `Path.home() / ".mustang" / "agents" / "primary"`；需要改成从
+  SupervisorConfig 派生的产品 state dir。
+- CLI 当前代码仍主要读取 `MUSTANG_TOKEN` / `KERNEL_PORT`，需要补
+  `DEEPCLI_TOKEN` / `KERNEL_HEALTH_URL`，并确认 `KERNEL_URL` 总是包含
+  `/session`。
+- `deepcli doctor` 还不存在；install.sh 第一版可以先用 `deepcli --help` 和
+  `deepcli kernel start/status` smoke 代替，或把 doctor 放进 launcher Phase 1。
+
+结论：Linux launcher 和安装脚本现在可以开始实现骨架、下载布局、lock、端口
+选择、detached Supervisor、readiness probe 和 CLI exec；但真正产品态安装包
+验收前，必须先完成上面的 state/config/env 契约修正。
 
 ## 失败模式
 
@@ -309,9 +574,11 @@ KERNEL_URL=ws://127.0.0.1:8200 MUSTANG_TOKEN=... bun run src/main.ts
 
 - 更新 `docs/cli/design.md`，明确区分用户面对的 native launcher 和
   TypeScript thin client。
-- CLI config loading 增加 `KERNEL_HEALTH_URL` 支持。
+- CLI config loading 增加 `DEEPCLI_TOKEN`、`KERNEL_HEALTH_URL` 支持。
 - 确保 Supervisor runtime 文件包含足够的 Access Agent 字段，launcher attach
   时不需要猜。
+- Kernel/Supervisor 支持 DeepCLI 产品态 `state-dir` / `config-dir`，避免写入旧
+  兼容目录。
 
 ### Phase 1 — Launcher 骨架
 
@@ -325,7 +592,7 @@ KERNEL_URL=ws://127.0.0.1:8200 MUSTANG_TOKEN=... bun run src/main.ts
 - 实现单例 ensure 算法。
 - 实现默认端口和 fallback 端口选择。
 - 在开发模式下 detached 启动 Supervisor。
-- 把 `KERNEL_URL`、`KERNEL_HEALTH_URL`、`MUSTANG_TOKEN` 传给 CLI。
+- 把 `KERNEL_URL`、`KERNEL_HEALTH_URL`、`DEEPCLI_TOKEN` 传给 CLI。
 
 ### Phase 3 — Stop/Restart 和日志
 
@@ -335,12 +602,14 @@ KERNEL_URL=ws://127.0.0.1:8200 MUSTANG_TOKEN=... bun run src/main.ts
 
 ### Phase 4 — 安装包模式
 
-- 定义 Windows/macOS/Linux 安装布局。
-- bundle 或定位 Kernel runtime 和 CLI artifact。
+- 实现 Linux `install.sh` 用户级安装路径。
+- 发布 launcher binary、Kernel wheel/lock、CLI artifact、manifest/checksums。
+- 用 `uv` 创建 Kernel Python 3.13 venv 并安装 wheel。
+- bundle 或定位 CLI artifact。
 - 增加 release builds：
-  - Windows x64
-  - macOS arm64/x64
   - Linux x64
+  - Linux arm64
+  - Windows/macOS 后续补齐
 
 ### Phase 5 — 全系统验证
 
@@ -363,18 +632,17 @@ KERNEL_URL=ws://127.0.0.1:8200 MUSTANG_TOKEN=... bun run src/main.ts
 
 ## 开放问题
 
-- CLI 安装包 artifact 采用哪种方式：依赖 Bun runtime、Bun single executable，
-  还是 Node-compatible bundle？
-- Kernel 安装包 artifact 采用哪种方式：Python venv、PyApp/PyOxidizer 风格
-  bundle，还是平台 installer 管理 Python？
+- CLI artifact 最终是否能稳定使用 Bun single executable；如果不能，采用
+  bundled Bun runtime + JS bundle。
 - macOS 未来是否需要 LaunchAgent 做 login persistence，还是 v1 保持
   on-demand 后台进程？
 - Windows 正式安装包未来是否需要 tray/Home Screen？这应该独立于命令行
   launcher。
+- 自动更新 `deepcli update` 的 manifest 签名、rollback 和保留版本数量。
 
 ## 验收标准
 
-- Windows/macOS/Linux fresh install 后，用户无需手动启动 Kernel，直接运行
+- Linux fresh install 后，用户无需手动启动 Kernel，直接运行
   `deepcli` 即可进入 CLI。
 - 两个终端同时运行 `deepcli` 时，连接到同一个用户 runtime。
 - 非 DeepCLI 进程占用 `8200` 时，默认启动仍然成功。

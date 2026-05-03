@@ -300,6 +300,7 @@ export class SelectorController {
 				}
 				this.ctx.chatContainer.clear();
 				this.ctx.rebuildChatFromMessages();
+				this.ctx.ui.requestRender(true);
 				break;
 			case "theme": {
 				setTheme(value as string, true).then(result => {

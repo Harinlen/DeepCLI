@@ -20,7 +20,7 @@ type AssistantMessage = {
 
 export interface MustangAgentSessionAdapterOptions {
 	client: AcpClient;
-	session: MustangSession;
+	session?: MustangSession;
 	sessionService: SessionService;
 	recentSessions?: CliSessionInfo[];
 	modelProfiles?: ModelProfile[];
@@ -47,7 +47,6 @@ export class MustangAgentSessionAdapter {
 		getApiKeyForProvider: async () => undefined,
 	};
 	readonly sessionFile: string | undefined;
-	readonly sessionId: string;
 
 	messages: any[] = [];
 	state: { messages: any[]; model: { id: string; name: string; provider: string; thinking?: boolean; contextWindow?: number | null } };
@@ -73,7 +72,6 @@ export class MustangAgentSessionAdapter {
 		private readonly options: MustangAgentSessionAdapterOptions,
 		private readonly modelService = new ModelService(options.client),
 	) {
-		this.sessionId = options.session.sessionId;
 		this.sessionManager = new MustangSessionManagerAdapter(options);
 		const defaultModel = options.defaultModel || options.modelProfiles?.find(profile => profile.isDefault)?.name || "no-model";
 		const profile = options.modelProfiles?.find(item => item.name === defaultModel || item.isDefault);
@@ -94,6 +92,10 @@ export class MustangAgentSessionAdapter {
 		});
 	}
 
+	get sessionId(): string {
+		return this.options.session?.sessionId ?? "pending";
+	}
+
 	subscribe(listener: Listener): () => void {
 		this.#listeners.add(listener);
 		return () => this.#listeners.delete(listener);
@@ -104,6 +106,7 @@ export class MustangAgentSessionAdapter {
 	}
 
 	async prompt(text: string, _options: Record<string, unknown> = {}): Promise<unknown> {
+		const session = await this.#ensureSessionForPrompt();
 		const userMessage = {
 			role: "user",
 			content: [{ type: "text", text }],
@@ -121,7 +124,7 @@ export class MustangAgentSessionAdapter {
 		this.#emit({ type: "agent_start" });
 
 		try {
-			const result = await this.options.session.prompt(text, update => this.#handleUpdate(update));
+			const result = await session.prompt(text, update => this.#handleUpdate(update));
 			await this.#flushEvents();
 			this.#activeAssistant.stopReason = String((result as { stopReason?: string })?.stopReason ?? "stop");
 			this.#endAssistantSegment(this.#activeAssistant.stopReason);
@@ -154,8 +157,8 @@ export class MustangAgentSessionAdapter {
 		let assistantMessages = 0;
 		let toolCalls = 0;
 		let toolResults = 0;
-		let inputTokens = this.options.session.summary?.totalInputTokens ?? 0;
-		let outputTokens = this.options.session.summary?.totalOutputTokens ?? 0;
+		let inputTokens = this.options.session?.summary?.totalInputTokens ?? 0;
+		let outputTokens = this.options.session?.summary?.totalOutputTokens ?? 0;
 
 		for (const message of this.messages) {
 			if (message?.role === "user") userMessages++;
@@ -194,10 +197,11 @@ export class MustangAgentSessionAdapter {
 	}
 
 	async executeBash(command: string, onChunk: (chunk: string) => void, options: { excludeFromContext?: boolean } = {}): Promise<{ exitCode: number; cancelled: boolean; output: string }> {
+		const session = this.#requireSession("Run a chat prompt or /session new before using shell execution.");
 		this.isBashRunning = true;
 		let output = "";
 		try {
-			const result = await this.options.session.executeShell(command, Boolean(options.excludeFromContext), update => {
+			const result = await session.executeShell(command, Boolean(options.excludeFromContext), update => {
 				if (update.sessionUpdate !== "execution_update" || update.phase !== "chunk") return;
 				const text = String(update.text ?? "");
 				output += text;
@@ -210,10 +214,11 @@ export class MustangAgentSessionAdapter {
 	}
 
 	async executePython(code: string, onChunk: (chunk: string) => void, options: { excludeFromContext?: boolean } = {}): Promise<{ exitCode: number; cancelled: boolean; output: string }> {
+		const session = this.#requireSession("Run a chat prompt or /session new before using Python execution.");
 		this.isPythonRunning = true;
 		let output = "";
 		try {
-			const result = await this.options.session.executePython(code, Boolean(options.excludeFromContext), update => {
+			const result = await session.executePython(code, Boolean(options.excludeFromContext), update => {
 				if (update.sessionUpdate !== "execution_update" || update.phase !== "chunk") return;
 				const text = String(update.text ?? "");
 				output += text;
@@ -226,15 +231,15 @@ export class MustangAgentSessionAdapter {
 	}
 
 	abort(): void {
-		this.options.session.cancel();
+		this.options.session?.cancel();
 	}
 
 	abortBash(): void {
-		this.options.session.cancelExecution("shell");
+		this.options.session?.cancelExecution("shell");
 	}
 
 	abortPython(): void {
-		this.options.session.cancelExecution("python");
+		this.options.session?.cancelExecution("python");
 	}
 
 	setKernelConnectionState(state: KernelConnectionState): void {
@@ -330,19 +335,35 @@ export class MustangAgentSessionAdapter {
 	}
 
 	async archiveCurrentSession(archived: boolean): Promise<CliSessionInfo> {
-		const summary = await this.options.sessionService.archive(this.options.session.sessionId, archived);
-		this.options.session.summary = summary;
-		this.sessionManager.replaceSession(this.options.session);
+		const session = this.#requireSession("No active session to archive.");
+		const summary = await this.options.sessionService.archive(session.sessionId, archived);
+		session.summary = summary;
+		this.sessionManager.replaceSession(session);
 		return summary;
 	}
 
 	async deleteCurrentSessionAndCreate(): Promise<string> {
-		await this.options.sessionService.delete(this.options.session.sessionId, { force: true });
+		const session = this.#requireSession("No active session to delete.");
+		await this.options.sessionService.delete(session.sessionId, { force: true });
 		return this.createSession();
 	}
 
 	async deleteSessionByPath(sessionPath: string): Promise<boolean> {
 		return this.options.sessionService.delete(sessionPath, { force: true });
+	}
+
+	async #ensureSessionForPrompt(): Promise<MustangSession> {
+		if (this.options.session) return this.options.session;
+		const result = await this.options.sessionService.create(this.sessionManager.getCwd());
+		const session = new MustangSession(this.options.sessionService.clientForSession(), result.sessionId);
+		this.options.session = session;
+		this.sessionManager.replaceSession(session);
+		return session;
+	}
+
+	#requireSession(message: string): MustangSession {
+		if (!this.options.session) throw new Error(message);
+		return this.options.session;
 	}
 
 	#handleUpdate(update: SessionUpdateParams): void {
@@ -452,13 +473,13 @@ export class MustangAgentSessionAdapter {
 
 export class MustangSessionManagerAdapter {
 	titleSource: "auto" | "user" | undefined;
-	#session: MustangSession;
+	#session: MustangSession | undefined;
 	#name: string | undefined;
 
 	constructor(private readonly options: MustangAgentSessionAdapterOptions) {
 		this.#session = options.session;
-		this.#name = options.session.summary?.title;
-		this.titleSource = normalizeTitleSource(options.session.summary?.titleSource);
+		this.#name = options.session?.summary?.title;
+		this.titleSource = normalizeTitleSource(options.session?.summary?.titleSource);
 	}
 
 	replaceSession(session: MustangSession): void {
@@ -467,17 +488,17 @@ export class MustangSessionManagerAdapter {
 		this.titleSource = normalizeTitleSource(session.summary?.titleSource);
 	}
 
-	getSessionId(): string { return this.#session.sessionId; }
-	getSessionFile(): string | undefined { return this.#session.sessionId; }
+	getSessionId(): string { return this.#session?.sessionId ?? "pending"; }
+	getSessionFile(): string | undefined { return this.#session?.sessionId; }
 	getSessionDir(): string { return process.cwd(); }
-	getCwd(): string { return this.#session.summary?.cwd || process.cwd(); }
+	getCwd(): string { return this.#session?.summary?.cwd || process.cwd(); }
 	getSessionName(): string | undefined { return this.#name; }
 	getArtifactsDir(): string { return process.cwd(); }
-	getLeafId(): string { return this.#session.sessionId; }
-	getTree(): unknown { return { id: this.#session.sessionId, children: [] }; }
+	getLeafId(): string { return this.getSessionId(); }
+	getTree(): unknown { return { id: this.getSessionId(), children: [] }; }
 	getEntries(): unknown[] { return []; }
 	getUsageStatistics(): { premiumRequests: number } { return { premiumRequests: 0 }; }
-	buildSessionContext(): Record<string, unknown> { return { cwd: this.getCwd(), sessionId: this.#session.sessionId, title: this.#name }; }
+	buildSessionContext(): Record<string, unknown> { return { cwd: this.getCwd(), sessionId: this.getSessionId(), title: this.#name }; }
 	async flush(): Promise<void> {}
 	async moveTo(_path: string): Promise<void> {}
 	appendModeChange(_mode: string, _meta?: unknown): void {}
@@ -488,6 +509,7 @@ export class MustangSessionManagerAdapter {
 		this.#name = next;
 		this.titleSource = source;
 		try {
+			if (!this.#session) return true;
 			const summary = await this.options.sessionService.rename(this.#session.sessionId, next);
 			this.#session.summary = summary;
 		} catch {

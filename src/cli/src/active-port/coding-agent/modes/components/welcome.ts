@@ -1,13 +1,18 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { type Component, padding, truncateToWidth, visibleWidth } from "@/tui/index.js";
 import { APP_NAME } from "@/compat/utils.js";
 import { theme } from "../../modes/theme/theme";
 
-const DEFAULT_LOGO: string[] = [];
-const LOGO_PATH = join(dirname(fileURLToPath(import.meta.url)), "welcome-logo.txt");
-const WELCOME_LOGO = readLogoLines();
+const DEFAULT_WELCOME_LOGO = [
+	"     ⢀⣀  ⢀    ",
+	"⣠⣶⣿⣿⣿⣿⣿⣶⣄⡘⢿⣶⡶⠟",
+	"⣿⡀ ⠈⠙⠻⣿⣿⣙⣿⣿⠇  ",
+	"⠈⠻⣦⣀⣰⣤⣈⡻⣿⣿⣋   ",
+	"   ⠉⠉⠉⠉⠉      ",
+];
+const WELCOME_LOGO = readWelcomeLogo();
 
 export interface RecentSession {
 	name: string;
@@ -238,13 +243,29 @@ export class WelcomeComponent implements Component {
 	}
 }
 
-function readLogoLines(): string[] {
-	try {
-		const text = readFileSync(LOGO_PATH, "utf8").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-		const lines = text.split("\n");
-		if (lines.at(-1) === "") lines.pop();
-		return lines.length > 0 ? lines : DEFAULT_LOGO;
-	} catch {
-		return DEFAULT_LOGO;
+function readWelcomeLogo(): string[] {
+	for (const path of welcomeLogoCandidates()) {
+		try {
+			if (!existsSync(path)) continue;
+			const text = readFileSync(path, "utf8").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+			const lines = text.split("\n");
+			if (lines.at(-1) === "") lines.pop();
+			if (lines.length > 0) return lines;
+		} catch {
+			// A broken user logo should not blank the Welcome screen.
+		}
 	}
+	return DEFAULT_WELCOME_LOGO;
+}
+
+function welcomeLogoCandidates(): string[] {
+	const home = homedir();
+	const configDir = process.env.DEEPCLI_CONFIG_DIR ?? join(process.env.XDG_CONFIG_HOME ?? join(home, ".config"), "deepcli");
+	const dataDir = process.env.DEEPCLI_DATA_DIR ?? join(process.env.XDG_DATA_HOME ?? join(home, ".local", "share"), "deepcli");
+	return [
+		process.env.DEEPCLI_WELCOME_LOGO_FILE,
+		join(configDir, "welcome-logo.txt"),
+		join(configDir, "ui", "welcome-logo.txt"),
+		join(dataDir, "assets", "welcome-logo.txt"),
+	].filter((path): path is string => Boolean(path));
 }

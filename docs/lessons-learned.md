@@ -226,6 +226,13 @@ wall twice.
   session/gateway state (`GatewayManager`, `ScheduleManager`) must start
   after the Runtime `SessionManager`, mirroring `kernel.app` ordering.
 
+- **TUI visibility toggles that affect prior transcript lines need a
+  forced redraw.**  The active-port differential renderer intentionally
+  skips changes above the current viewport.  That is usually correct,
+  but `Ctrl+T` can change old Thinking blocks split around tool calls.
+  After mutating existing transcript components for a global visibility
+  toggle, call `requestRender(true)` and cover it with a real PTY probe.
+
 ---
 
 ## Kernel Design-debt Backlog

@@ -61,6 +61,7 @@ interface InlineStyleContext {
 type ListToken = Token & { items: Array<{ tokens?: Token[] }>; ordered: boolean; start?: number };
 type TableCellToken = { tokens?: Token[] };
 type TableToken = Token & { header: TableCellToken[]; rows: TableCellToken[][]; raw?: string };
+type LinkToken = Token & { href: string; text: string; tokens?: Token[] };
 
 function formatHyperlink(text: string, target: string): string {
 	if (!TERMINAL.hyperlinks || !target) {
@@ -73,6 +74,25 @@ function formatHyperlink(text: string, target: string): string {
 	}
 
 	return `\x1b]8;;${safeTarget}\x07${text}\x1b]8;;\x07`;
+}
+
+function splitNaturalLanguageAutolink(token: LinkToken): { href: string; text: string; trailing: string } {
+	const hrefForComparison = token.href.startsWith("mailto:") ? token.href.slice(7) : token.href;
+	const isBareAutolink = token.text === token.href || token.text === hrefForComparison;
+	if (!isBareAutolink || !/^(?:https?:\/\/|mailto:)/i.test(token.href)) {
+		return { href: token.href, text: token.text, trailing: "" };
+	}
+
+	const separatorIndex = token.text.search(/[，。！？；：、]/u);
+	if (separatorIndex < 0) {
+		return { href: token.href, text: token.text, trailing: "" };
+	}
+
+	return {
+		href: token.href.slice(0, separatorIndex),
+		text: token.text.slice(0, separatorIndex),
+		trailing: token.text.slice(separatorIndex),
+	};
 }
 
 export class Markdown implements Component {
@@ -492,19 +512,23 @@ export class Markdown implements Component {
 					break;
 
 				case "link": {
-					const linkText = this.#renderInlineTokens(token.tokens || [], resolvedStyleContext);
+					const splitLink = splitNaturalLanguageAutolink(token as LinkToken);
+					const linkText =
+						splitLink.trailing.length > 0
+							? applyText(splitLink.text)
+							: this.#renderInlineTokens(token.tokens || [], resolvedStyleContext);
 					const styledLinkText = this.#theme.link(this.#theme.underline(linkText));
-					const clickableLinkText = formatHyperlink(styledLinkText, token.href);
+					const clickableLinkText = formatHyperlink(styledLinkText, splitLink.href);
 					// If link text matches href, only show the link once
 					// Compare raw text (token.text) not styled text (linkText) since linkText has ANSI codes
 					// For mailto: links, strip the prefix before comparing (autolinked emails have
 					// text="foo@bar.com" but href="mailto:foo@bar.com")
-					const hrefForComparison = token.href.startsWith("mailto:") ? token.href.slice(7) : token.href;
-					if (token.text === token.href || token.text === hrefForComparison)
-						result += clickableLinkText + stylePrefix;
+					const hrefForComparison = splitLink.href.startsWith("mailto:") ? splitLink.href.slice(7) : splitLink.href;
+					if (splitLink.text === splitLink.href || splitLink.text === hrefForComparison)
+						result += clickableLinkText + stylePrefix + applyText(splitLink.trailing);
 					else {
-						const styledLinkUrl = this.#theme.linkUrl(` (${token.href})`);
-						result += clickableLinkText + formatHyperlink(styledLinkUrl, token.href) + stylePrefix;
+						const styledLinkUrl = this.#theme.linkUrl(` (${splitLink.href})`);
+						result += clickableLinkText + formatHyperlink(styledLinkUrl, splitLink.href) + stylePrefix + applyText(splitLink.trailing);
 					}
 					break;
 				}
@@ -899,8 +923,15 @@ function renderInlineTokens(tokens: Token[], mdTheme: MarkdownTheme, applyText: 
 				result += mdTheme.strikethrough(renderInlineTokens(token.tokens || [], mdTheme, applyText)) + styleReset;
 				break;
 			case "link": {
-				const linkText = renderInlineTokens(token.tokens || [], mdTheme, applyText);
+				const splitLink = splitNaturalLanguageAutolink(token as LinkToken);
+				const linkText =
+					splitLink.trailing.length > 0
+						? applyText(splitLink.text)
+						: renderInlineTokens(token.tokens || [], mdTheme, applyText);
 				result += mdTheme.link(mdTheme.underline(linkText)) + styleReset;
+				if (splitLink.trailing) {
+					result += applyText(splitLink.trailing);
+				}
 				break;
 			}
 			default:

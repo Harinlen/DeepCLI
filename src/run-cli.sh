@@ -3,9 +3,32 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+kernel_port="${KERNEL_PORT:-8200}"
+explicit_kernel_url="${KERNEL_URL:-}"
 
-if [ -z "${KERNEL_URL:-}" ]; then
-  kernel_port="${KERNEL_PORT:-8200}"
+for ((i = 1; i <= $#; i++)); do
+  arg="${!i}"
+  case "$arg" in
+    --help|-h|help )
+      cd "$script_dir/cli"
+      exec "${BUN:-bun}" run src/main.ts "$@"
+      ;;
+    --port )
+      next_index=$((i + 1))
+      if [ "$next_index" -le "$#" ]; then
+        kernel_port="${!next_index}"
+      fi
+      ;;
+    --kernel )
+      next_index=$((i + 1))
+      if [ "$next_index" -le "$#" ]; then
+        explicit_kernel_url="${!next_index}"
+      fi
+      ;;
+  esac
+done
+
+if [ -z "$explicit_kernel_url" ]; then
   readiness_url="http://127.0.0.1:${kernel_port}/access/readiness"
 
   if ! curl -fsS --max-time 1 "$readiness_url" 2>/dev/null | grep -q '"default_route_ready":true'; then

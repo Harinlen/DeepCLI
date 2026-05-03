@@ -35,7 +35,7 @@ const toolReq: PermissionRequest = {
 const toolResult = await controller.handleRequest(toolReq);
 assert(toolResult.outcome.outcome === "selected", "tool permission should select through hook host");
 assert(toolResult.outcome.optionId === "reject-once", "selected hook label must map back to original optionId");
-assert(calls[0] === "selector:Tool Authorization:outline", "tool prompt should use OMP hook selector with outline");
+assert(calls[0] === "selector:Bash command:outline", "tool prompt should use structured title with outline");
 
 const textReq: PermissionRequest = {
   reqId: 2,

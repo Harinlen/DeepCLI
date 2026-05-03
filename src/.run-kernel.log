@@ -1,0 +1,62 @@
+INFO:     Started server process [3664202]
+INFO:     Waiting for application startup.
+SecretManager started — db=/home/saki/.mustang/secrets.db
+ConfigManager loaded 2 file(s) from global=/home/saki/.mustang/config project=/home/saki/Documents/truenorth/mustang/src/kernel/.mustang/config
+PromptManager: loaded 56 defaults from /home/saki/Documents/truenorth/mustang/src/kernel/kernel/prompts/default
+ConnectionAuthenticator started: password_auth=disabled
+ToolAuthorizer started: 0 rules loaded, bash_llm_judge=True
+LLMProviderManager: ready
+LLMProviderManager: created bedrock provider (base_url=<default>)
+LLMManager: registered provider 'bedrock' (2 models)
+LLMProviderManager: created deepseek provider (base_url=<default>)
+LLMManager: registered provider 'deepseek' (2 models)
+LLMProviderManager: created nvidia provider (base_url=<default>)
+LLMManager: registered provider 'nvidia' (1 models)
+LLMManager: 3 provider(s) loaded, current_used={'default': {'provider': 'deepseek', 'model': 'deepseek-v4-pro'}, 'memory': {'provider': 'deepseek', 'model': 'deepseek-v4-pro'}, 'compact': {'provider': 'deepseek', 'model': 'deepseek-v4-flash'}}
+McpClient[echo]: handshake complete, capabilities=['tools']
+McpClient[resources]: handshake complete, capabilities=['tools', 'resources']
+MCPManager: server 'mcp-reference' requires OAuth authentication
+Future exception was never retrieved
+future: <Future finished exception=McpError('client closing (mcp-reference)')>
+kernel.mcp.types.McpError: client closing (mcp-reference)
+MCPManager: 2/3 servers connected
+ToolManager: synced 2 MCP tools + 1 auth tools
+ToolManager started with 28 built-in tools
+SkillManager started: 0 skills (0 conditional)
+HookManager started: 0 handler-registration(s) across 0 hook(s)
+MemoryIndex loaded: 0 memories (global=/home/saki/.mustang/memory, project=None)
+MemoryManager started: global=/home/saki/.mustang/memory, project=None, model=provider='deepseek' model='deepseek-v4-pro'
+WorktreeStore opened: /home/saki/.mustang/state/kernel.db
+Registered EnterWorktree/ExitWorktree (git=True; hook fallback available)
+GitManager started: available=True, binary=/usr/bin/git
+SessionStore opened: /home/saki/.mustang/sessions/sessions.db
+SessionManager ready — agent=primary sessions DB at /home/saki/.mustang/sessions
+gateway=main-discord bot_user_id=1493994275489321022
+gateway=main-discord (discord) started
+GatewayManager: 1 adapter running (1 provider type available: discord)
+CronStore opened: /home/saki/.mustang/state/kernel.db
+CronScheduler started (kernel_id=d8446d27de43455d)
+ScheduleManager started
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18631 (Press CTRL+C to quit)
+INFO:     127.0.0.1:52458 - "GET /access/readiness HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52472 - "GET /access/readiness HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52478 - "GET /access/readiness HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52486 - "GET /access/readiness HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52496 - "GET /access/readiness HTTP/1.1" 200 OK
+Future exception was never retrieved
+future: <Future finished exception=McpError('client closing (mcp-reference)')>
+kernel.mcp.types.McpError: client closing (mcp-reference)
+INFO:     127.0.0.1:52512 - "GET /access/readiness HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52528 - "GET /access/readiness HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52530 - "GET /access/readiness HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52536 - "WebSocket /session?token=E4CfKr2FC2j0tokuUYQSfF8qVgEbyLovoJ1ftexNxpE" [accepted]
+conn=029062d455c14118a1ea8fafc299250e accepted from 127.0.0.1:52536
+conn=029062d455c14118a1ea8fafc299250e authenticated type=token local=True
+conn=029062d455c14118a1ea8fafc299250e stack=acp started
+INFO:     connection open
+conn=029062d455c14118a1ea8fafc299250e initialized client=deepcli-cli protocol_version=1
+INFO:     127.0.0.1:52548 - "GET / HTTP/1.1" 200 OK
+INFO:     connection closed
+conn=029062d455c14118a1ea8fafc299250e disconnected by peer code=1000
+conn=029062d455c14118a1ea8fafc299250e ACP connection cleaned up

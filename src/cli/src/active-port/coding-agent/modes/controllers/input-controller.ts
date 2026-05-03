@@ -686,7 +686,7 @@ export class InputController {
 		}
 
 		this.ctx.showStatus(`Thinking blocks: ${this.ctx.hideThinkingBlock ? "hidden" : "visible"}`);
-		this.ctx.ui.requestRender();
+		this.ctx.ui.requestRender(true);
 	}
 
 	#getEditorTerminalPath(): string | null {

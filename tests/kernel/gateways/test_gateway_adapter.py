@@ -21,7 +21,17 @@ import pytest
 
 from kernel.gateways.base import GatewayAdapter, InboundMessage, _YES_WORDS
 from kernel.gateways.discord.adapter import _chunk_text
+from kernel.gateways.manager import (
+    GatewayManager,
+    GatewayManagerConfig,
+    _create_adapter,
+)
 from kernel.orchestrator.types import PermissionRequest, PermissionResponse
+from kernel.protocol.acp.schemas.permission import (
+    PermissionOption,
+    RequestPermissionRequest,
+    ToolCallUpdate,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -295,6 +305,76 @@ async def test_permission_waits_indefinitely_until_reply(adapter: _StubAdapter) 
     assert result.decision == "allow"
 
 
+async def test_platform_permission_request_maps_allow_and_reject(adapter: _StubAdapter) -> None:
+    params = RequestPermissionRequest(
+        session_id="s-1",
+        tool_call=ToolCallUpdate(
+            tool_call_id="tool-1",
+            title="Write file",
+            kind="edit",
+            input_summary="path: README.md",
+        ),
+        options=[PermissionOption(option_id="allow_once", name="Allow", kind="allow_once")],
+        tool_input={"path": "README.md"},
+    )
+    msg = _msg("hello")
+
+    task = asyncio.create_task(adapter._request_permission_over_platform(params, msg))
+    await asyncio.sleep(0.05)
+
+    assert adapter.sent[-1] == (
+        "u1",
+        "ch1",
+        "**Permission required**: `Write file`\n"
+        "path: README.md\n"
+        "Reply **yes** to allow or **no** to deny.",
+    )
+    await adapter._handle(_msg("yes"))
+
+    allowed = await asyncio.wait_for(task, timeout=2.0)
+    assert allowed.outcome.outcome == "selected"
+    assert allowed.outcome.option_id == "allow_once"
+
+    task = asyncio.create_task(adapter._request_permission_over_platform(params, msg))
+    await asyncio.sleep(0.05)
+    await adapter._handle(_msg("no"))
+    rejected = await asyncio.wait_for(task, timeout=2.0)
+    assert rejected.outcome.outcome == "cancelled"
+
+
+async def test_handle_hub_client_request_rejects_unknown_method(adapter: _StubAdapter) -> None:
+    from kernel.agents import HubFrame, HubFrameType
+
+    frame = HubFrame(
+        frame_id="f-1",
+        frame_type=HubFrameType.REQUEST,
+        contract="client.request",
+        payload={"method": "client/unknown", "params": {}},
+    )
+
+    response = await adapter._handle_hub_client_request(frame, _msg("hello"))
+
+    assert response.frame_type is HubFrameType.RESPONSE
+    assert response.correlation_id == "f-1"
+    assert response.payload["ok"] is False
+    assert response.payload["error"] == "RuntimeError"
+
+
+def test_client_turn_id_prefers_platform_raw_id(adapter: _StubAdapter) -> None:
+    first = adapter._client_turn_id_for_message(
+        InboundMessage("test-stub", "u1", "ch1", "hello", raw={"id": "m-1"})
+    )
+    second = adapter._client_turn_id_for_message(
+        InboundMessage("test-stub", "u1", "ch1", "hello again", raw={"id": "m-1"})
+    )
+    other_thread = adapter._client_turn_id_for_message(
+        InboundMessage("test-stub", "u1", "ch2", "hello", raw={"id": "m-1"})
+    )
+
+    assert first == second
+    assert first != other_thread
+
+
 # ---------------------------------------------------------------------------
 # _chunk_text (Discord adapter helper)
 # ---------------------------------------------------------------------------
@@ -343,3 +423,111 @@ async def test_peer_sessions_persist_and_reload(adapter: _StubAdapter, tmp_path:
 
         assert adapter2._peer_sessions.get(("user1", "chan1")) == "sess-aaa"
         assert adapter2._peer_sessions.get(("user2", None)) == "sess-bbb"
+
+
+# ---------------------------------------------------------------------------
+# GatewayManager
+# ---------------------------------------------------------------------------
+
+
+def test_gateway_manager_config_returns_extra_adapter_entries() -> None:
+    cfg = GatewayManagerConfig.model_validate(
+        {"discord-main": {"type": "discord", "token": "secret"}}
+    )
+
+    assert cfg.adapter_entries() == {
+        "discord-main": {"type": "discord", "token": "secret"}
+    }
+
+
+def test_create_adapter_rejects_unknown_adapter_type(module_table: MagicMock) -> None:
+    with pytest.raises(ValueError, match="Unknown gateway adapter type 'irc'"):
+        _create_adapter(
+            adapter_type="irc",
+            instance_id="chat",
+            config={"type": "irc"},
+            module_table=module_table,
+        )
+
+
+async def test_gateway_manager_startup_skips_missing_type_and_failed_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started: list[str] = []
+
+    class _GoodManagerAdapter(_StubAdapter):
+        def __init__(self, instance_id: str, config: dict[str, Any], module_table: Any) -> None:
+            super().__init__(module_table)
+            self._instance_id = instance_id
+
+        async def start(self) -> None:
+            started.append(self._instance_id)
+
+    class _BadManagerAdapter(_GoodManagerAdapter):
+        async def start(self) -> None:
+            raise RuntimeError("bad token")
+
+    mt = MagicMock()
+    section = MagicMock()
+    section.get.return_value = GatewayManagerConfig.model_validate(
+        {
+            "missing": {},
+            "bad": {"type": "bad"},
+            "good": {"type": "good"},
+        }
+    )
+    mt.config.get_section.return_value = section
+    monkeypatch.setattr(
+        "kernel.gateways.manager._build_adapter_registry",
+        lambda: {"bad": _BadManagerAdapter, "good": _GoodManagerAdapter},
+    )
+    manager = GatewayManager(mt)
+
+    await manager.startup()
+
+    assert started == ["good"]
+    assert list(manager._adapters) == ["good"]
+
+
+async def test_gateway_manager_shutdown_and_channel_delivery_tolerate_edges(
+    module_table: MagicMock,
+) -> None:
+    manager = GatewayManager(module_table)
+    good = _StubAdapter(module_table)
+    bad = _StubAdapter(module_table)
+    bad.stop = AsyncMock(side_effect=RuntimeError("stop failed"))  # type: ignore[method-assign]
+    manager._adapters = {"good": good, "bad": bad}
+
+    await manager.send_to_channel("good", "channel-1", "hello")
+    assert good.sent == [("cron-delivery", "channel-1", "hello")]
+    with pytest.raises(KeyError, match="No running gateway adapter"):
+        await manager.send_to_channel("missing", "channel-1", "hello")
+
+    await manager.shutdown()
+    assert manager._adapters == {}
+
+
+async def test_gateway_manager_webhook_routes_when_adapter_supports_it(
+    module_table: MagicMock,
+) -> None:
+    class _WebhookAdapter(_StubAdapter):
+        def __init__(self, mt: Any) -> None:
+            super().__init__(mt)
+            self.payloads: list[dict[str, Any]] = []
+
+        async def handle_webhook(self, payload: dict[str, Any]) -> None:
+            self.payloads.append(payload)
+
+    manager = GatewayManager(module_table)
+    adapter = _WebhookAdapter(module_table)
+    manager._adapters = {"web": adapter}
+
+    await manager.handle_webhook("web", {"event": "message"})
+
+    assert adapter.payloads == [{"event": "message"}]
+
+    manager._adapters["plain"] = _StubAdapter(module_table)
+    await manager.handle_webhook("plain", {"event": "ignored"})
+
+    with pytest.raises(KeyError, match="No running gateway adapter"):
+        await manager.handle_webhook("missing", {})

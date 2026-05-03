@@ -139,6 +139,19 @@ class FakeAcpKernel {
 			this.#notify(ws, sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `permission:selected:${outcome}` } });
 			return this.#result(ws, id, { stopReason: "stop" });
 		}
+		if (text.includes("thinking interleaved")) {
+			this.#notify(ws, sessionId, { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "first hidden thought" } });
+			this.#notify(ws, sessionId, { sessionUpdate: "tool_call", toolCallId: "tool-thinking-interleaved", title: "scan", rawInput: "{\"pattern\":\"thought\"}" });
+			this.#notify(ws, sessionId, {
+				sessionUpdate: "tool_call_update",
+				toolCallId: "tool-thinking-interleaved",
+				status: "completed",
+				content: "thinking-interleaved-result",
+			});
+			this.#notify(ws, sessionId, { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "second hidden thought" } });
+			this.#notify(ws, sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "thinking interleaved done" } });
+			return this.#result(ws, id, { stopReason: "stop" });
+		}
 		if (text.includes("interleaved")) {
 			this.#notify(ws, sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "before tool" } });
 			this.#notify(ws, sessionId, { sessionUpdate: "tool_call", toolCallId: "tool-interleaved", title: "scan", rawInput: "{\"pattern\":\"bar\"}" });
@@ -235,6 +248,8 @@ async function main(): Promise<void> {
 			"Deleted session and switched",
 			"Allow command?",
 			"permission:selected:allow_once",
+			"first hidden thought",
+			"second hidden thought",
 		]) {
 			assert(result.output.includes(expected), `PTY transcript should include ${JSON.stringify(expected)}\n${result.output}`);
 		}
@@ -392,6 +407,12 @@ expect("slow stream tool renders before turn ends", ["success slowbash", "slow-o
 expect("slow stream final text renders", ["slow after"], 3)
 send("\x0f")
 expect("ctrl-o expands tool output", ["success grep", "tool-result-line-12"])
+send("\x14")
+expect("ctrl-t hides thinking", ["Thinking blocks: hidden"])
+send("show thinking interleaved\r")
+expect("hidden thinking interleaved renders placeholders", ["Thinking...", "success scan", "thinking-interleaved-result", "thinking interleaved done"])
+send("\x14")
+expect("ctrl-t reveals all interleaved thinking after tool boundaries", ["first hidden thought", "second hidden thought", "thinking interleaved done"])
 send("/session delete")
 read_for(0.3)
 send("\x1b")

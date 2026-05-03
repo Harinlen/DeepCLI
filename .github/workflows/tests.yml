@@ -83,8 +83,11 @@ jobs:
           bun x tsc -p tsconfig.json --noEmit
 
       - name: Check Windows dev scripts
-        shell: cmd
+        shell: pwsh
         run: |
-          scripts\run-kernel.bat --help
-          scripts\run-probe.bat --help
-          scripts\run-cli.bat --help
+          .\scripts\run-kernel.ps1 --help
+          .\scripts\run-probe.ps1 --help
+          .\scripts\run-cli.ps1 --help
+          cmd /c scripts\run-kernel.bat --help
+          cmd /c scripts\run-probe.bat --help
+          cmd /c scripts\run-cli.bat --help

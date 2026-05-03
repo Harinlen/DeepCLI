@@ -1,9 +1,7 @@
 @echo off
-rem Start deepcli-probe (interactive ACP test client).
-
-set "SCRIPT_DIR=%~dp0"
-set "REPO_ROOT=%SCRIPT_DIR%.."
-
-cd /d "%REPO_ROOT%\src\probe"
-uv run python -m probe %*
+setlocal EnableExtensions
+set "PS_EXE=pwsh"
+where pwsh >nul 2>nul
+if errorlevel 1 set "PS_EXE=powershell.exe"
+"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0run-probe.ps1" %*
 exit /b %ERRORLEVEL%

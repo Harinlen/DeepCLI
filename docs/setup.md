@@ -27,6 +27,10 @@ uv run pytest -q tests/
 cp .mustang-refs.example.yaml .mustang-refs.yaml  # fill in local paths
 ```
 
+The default pytest command is the non-E2E environment smoke check.
+Live-kernel E2E tests are marked `e2e` and are run explicitly when a
+feature or closure seam needs real-system verification.
+
 ## Checking whether this machine is already set up
 
 Idempotent checks — safe to run anytime:
@@ -81,7 +85,8 @@ auto-reload + INFO log level).
 
 ### Run Tests
 
-Unit tests (no running kernel needed):
+Default smoke/unit tests (no running kernel needed; E2E excluded by
+the default `not e2e` marker filter):
 
 ```bash
 uv run pytest -q tests/

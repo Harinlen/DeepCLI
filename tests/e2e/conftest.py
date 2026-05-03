@@ -100,11 +100,11 @@ def _e2e_group(filename: str) -> str | None:
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Auto-mark every test in tests/e2e/ with ``e2e`` + a group marker."""
     for item in items:
-        path = str(item.fspath)
-        if "/e2e/" not in path:
+        path = Path(str(item.fspath))
+        if "e2e" not in path.parts:
             continue
         item.add_marker(pytest.mark.e2e)
-        group = _e2e_group(Path(path).name)
+        group = _e2e_group(path.name)
         if group:
             item.add_marker(getattr(pytest.mark, group))
 

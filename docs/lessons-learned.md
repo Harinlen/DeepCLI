@@ -9,6 +9,10 @@ wall twice.
 
 - **Nested package layout**: hatchling requires `src/kernel/kernel/`
   (outer is project root, inner is the Python package).
+- **Pytest path checks must be separator-agnostic**: Windows reports
+  test paths with backslashes, so marker hooks must use `Path.parts`
+  instead of substring checks like `"/e2e/"`.  Otherwise E2E tests may
+  miss the `e2e` marker and run during the default non-E2E setup smoke.
 - **cloc**: PyPI's `cloc` package has no CLI.  Install the Perl tool
   via `apt install cloc`.
 - **httpx HTTP/2 optional dependency**: `http2=True` needs package

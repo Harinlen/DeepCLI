@@ -85,7 +85,10 @@ test -f .mustang-refs.yaml && echo "refs file: present" || echo "refs file: MISS
    ```
 
 3. **Verify the environment** (only after a fresh sync — if
-   `.venv` was already in sync from preflight, you can skip this):
+   `.venv` was already in sync from preflight, you can skip this).
+   This is a non-E2E smoke check; `pyproject.toml` excludes tests
+   marked `e2e` by default, and live-kernel E2E tests are run
+   separately during feature verification:
    ```bash
    uv run pytest -q tests/
    ```

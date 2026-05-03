@@ -52,7 +52,7 @@ DEEPCLI_RELEASE_DIR=/tmp/deepcli-install-dev-release \
 ```
 
 If `DEEPCLI_DEV_ROOT` is not set, the launcher walks upward from the current
-directory and looks for this repo's `src/run-kernel.sh`, `src/cli/package.json`,
+directory and looks for this repo's `scripts/run-kernel.sh`, `src/cli/package.json`,
 and `src/kernel/pyproject.toml`.
 
 ## Packaged Linux Layout

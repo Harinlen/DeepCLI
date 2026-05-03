@@ -215,7 +215,7 @@ class ProbeClient:
             self._ws = await websockets.connect(url)
         except OSError as exc:
             raise KernelNotRunning(
-                f"Cannot connect to kernel at port {self._port}. Is `src/run-kernel.sh` running?"
+                f"Cannot connect to kernel at port {self._port}. Is `scripts/run-kernel.sh` running?"
             ) from exc
         self._recv_task = asyncio.create_task(self._recv_loop(), name="probe-recv")
 

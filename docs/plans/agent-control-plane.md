@@ -40,7 +40,7 @@ durable Agent 内部的私有 Ephemeral Child Agent 机制。
 
 截至 2026-05-01，新的单 Primary 产品架构已落地：
 
-- `src/run-kernel.sh` 默认通过 Supervisor 启动 Hub、Access Agent、Primary Runtime。
+- `scripts/run-kernel.sh` 默认通过 Supervisor 启动 Hub、Access Agent、Primary Runtime。
 - Access Agent 默认 `--prompt-backend router`，`session/new`、`session/resume`、
   `session/prompt`、`session/close` 经 Hub 路由到 Primary Runtime。
 - Primary Runtime 拥有真实 SessionManager/SessionStore/Orchestrator/LLM/tool 路径。

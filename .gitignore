@@ -1,8 +1,3 @@
-# Ad-hoc scripts dumping ground (not version-controlled)
-scripts/
-!src/cli/scripts/
-!src/cli/scripts/**
-
 # Python
 __pycache__/
 *.py[cod]

@@ -46,7 +46,7 @@ EOF
 
 is_dev_root() {
   local root="$1"
-  [[ -x "$root/src/run-kernel.sh" && -f "$root/src/cli/package.json" && -f "$root/src/kernel/pyproject.toml" ]]
+  [[ -x "$root/scripts/run-kernel.sh" && -f "$root/src/cli/package.json" && -f "$root/src/kernel/pyproject.toml" ]]
 }
 
 is_source_launcher() {
@@ -83,7 +83,7 @@ discover_dev_root() {
 resolve_layout() {
   if DEV_ROOT="$(discover_dev_root 2>/dev/null)"; then
     MODE="dev"
-    KERNEL_CMD=("$DEV_ROOT/src/run-kernel.sh")
+    KERNEL_CMD=("$DEV_ROOT/scripts/run-kernel.sh")
     KERNEL_CWD="$DEV_ROOT/src"
     CLI_CMD=("${BUN:-bun}" "run" "src/main.ts")
     CLI_CWD="$DEV_ROOT/src/cli"

@@ -3,6 +3,7 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
 kernel_port="${KERNEL_PORT:-8200}"
 explicit_kernel_url="${KERNEL_URL:-}"
 
@@ -10,7 +11,7 @@ for ((i = 1; i <= $#; i++)); do
   arg="${!i}"
   case "$arg" in
     --help|-h|help )
-      cd "$script_dir/cli"
+      cd "$repo_root/src/cli"
       exec "${BUN:-bun}" run src/main.ts "$@"
       ;;
     --port )
@@ -32,7 +33,7 @@ if [ -z "$explicit_kernel_url" ]; then
   readiness_url="http://127.0.0.1:${kernel_port}/access/readiness"
 
   if ! curl -fsS --max-time 1 "$readiness_url" 2>/dev/null | grep -q '"default_route_ready":true'; then
-    log_path="$script_dir/.run-kernel.log"
+    log_path="$repo_root/src/.run-kernel.log"
     "$script_dir/run-kernel.sh" --access-port "$kernel_port" --dev >"$log_path" 2>&1 &
 
     ready=0
@@ -51,6 +52,6 @@ if [ -z "$explicit_kernel_url" ]; then
   fi
 fi
 
-cd "$script_dir/cli"
+cd "$repo_root/src/cli"
 
 exec "${BUN:-bun}" run src/main.ts "$@"

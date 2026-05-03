@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat&colorA=222222&logo=python&logoColor=white" alt="Python 3.12+">
-  <img src="https://img.shields.io/badge/Kernel-v2.0.0-F4A261?style=flat&colorA=222222" alt="Kernel v2.0.0">
+  <img src="https://img.shields.io/badge/Kernel-v1.0.0-F4A261?style=flat&colorA=222222" alt="Kernel v1.0.0">
   <img src="https://img.shields.io/badge/Status-Alpha-orange?style=flat&colorA=222222" alt="Status: Alpha">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-58A6FF?style=flat&colorA=222222" alt="License: MIT"></a>
 </p>
@@ -58,29 +58,52 @@ Active code lives under `src/`:
 
 ## Quick Start
 
-DeepCLI is still alpha software.  Run it from source:
+DeepCLI is still alpha software.  Linux is the first supported install target.
+From a local checkout, build and install the current repo into your user
+layout:
 
 ```bash
 git clone <repo-url> deepcli
 cd deepcli
-uv sync
-uv run pytest -q tests/
+./install-dev.sh
 ```
 
-Start the kernel and probe:
+Then start DeepCLI:
 
 ```bash
-src/run-kernel.sh
-src/run-probe.sh
+deepcli
 ```
 
-The kernel listens on:
+The `deepcli` launcher keeps the Kernel as a per-user singleton.  It checks for
+an existing ready Kernel, starts one in the background when needed, chooses
+`127.0.0.1:8200` by default, and falls back to a free port if the default is
+already occupied.
 
-```text
-ws://127.0.0.1:8200/session
+Useful launcher commands:
+
+```bash
+deepcli status
+deepcli stop
+deepcli restart
+deepcli kernel logs
+deepcli --resume <session-id>
+deepcli --uninstall
 ```
 
-Any ACP-capable client can connect to that WebSocket endpoint.
+If `~/.local/bin` is not already on your shell `PATH`, add it after install:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+For source-only development without installing, use:
+
+```bash
+scripts/run-cli.sh
+```
+
+That script ensures a dev Kernel is ready and forwards CLI arguments, including
+`--resume`, `--port`, and `--kernel`.
 
 ## Development
 
@@ -99,7 +122,7 @@ uv run pytest tests/ -q
 
 ## Status
 
-DeepCLI is in alpha.  Kernel 2.0.0 is online with ACP transport,
+DeepCLI is in alpha.  Kernel 1.0.0 is online with ACP transport,
 SQLite-backed sessions, tool authorization, LLM provider routing, skills,
 hooks, memory, MCP, gateways, and the Agent Control Plane groundwork.
 

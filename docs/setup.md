@@ -73,7 +73,7 @@ First kill any existing kernel process, then launch:
 lsof -ti:8200 | xargs -r kill
 
 # Start dev server (auto-reload, INFO logging, port 8200)
-src/run-kernel.sh
+scripts/run-kernel.sh
 ```
 
 The dev server runs on `http://127.0.0.1:8200` with `--dev` (uvicorn

@@ -740,7 +740,7 @@ mcp:
 启动 + 测试：
 
 ```bash
-src/run-kernel.sh          # 终端 1
+scripts/run-kernel.sh      # 终端 1
 uv run python -m probe     # 终端 2
 # prompt: "Use the echo tool to echo hello world"
 ```

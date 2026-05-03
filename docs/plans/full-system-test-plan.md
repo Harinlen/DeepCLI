@@ -211,7 +211,7 @@ Probe 必须支持：
 ### Probe 验收命令
 
 ```bash
-src/run-kernel.sh --access-port 8361 --dev
+scripts/run-kernel.sh --access-port 8361 --dev
 
 cd src/probe
 uv run python -m probe --port 8361 --test --prompt "Reply with exactly: pong"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import shutil
 import subprocess
 from collections.abc import AsyncGenerator, Sequence
 from dataclasses import dataclass
@@ -21,6 +22,26 @@ class ShellSpec:
 
     argv: Sequence[str] | None = None
     command: str | None = None
+
+
+def bash_shell_spec(command: str) -> ShellSpec | None:
+    """Return a Bash-compatible shell spec, or ``None`` when unavailable."""
+    shell = shutil.which("bash") or shutil.which("sh")
+    if shell is None:
+        return None
+    return ShellSpec(argv=[shell, "-lc", command])
+
+
+def platform_shell_spec(command: str) -> ShellSpec | None:
+    """Return the native shell spec for long-running background commands."""
+    if os.name == "nt":
+        pwsh = shutil.which("pwsh") or shutil.which("powershell")
+        if pwsh is not None:
+            return ShellSpec(argv=[pwsh, "-NoProfile", "-NonInteractive", "-Command", command])
+        cmd = shutil.which("cmd.exe") or shutil.which("cmd")
+        if cmd is not None:
+            return ShellSpec(argv=[cmd, "/d", "/s", "/c", command])
+    return bash_shell_spec(command)
 
 
 async def run_shell_command(
@@ -111,6 +132,37 @@ async def run_shell_command(
     yield _shell_result(exit_code or 0, "".join(stdout_parts), "".join(stderr_parts))
 
 
+async def spawn_shell_background(
+    spec: ShellSpec,
+    *,
+    cwd: Path,
+    env: Mapping[str, str] | None,
+    stdout: int,
+    stderr: int,
+) -> asyncio.subprocess.Process:
+    """Spawn a shell process whose output is owned by caller-provided fds."""
+    kwargs = _process_group_kwargs()
+    if spec.argv is not None:
+        return await asyncio.create_subprocess_exec(
+            *spec.argv,
+            stdout=stdout,
+            stderr=stderr,
+            cwd=str(cwd),
+            env={**os.environ, **env} if env else None,
+            **kwargs,
+        )
+    if spec.command is not None:
+        return await asyncio.create_subprocess_shell(
+            spec.command,
+            stdout=stdout,
+            stderr=stderr,
+            cwd=str(cwd),
+            env={**os.environ, **env} if env else None,
+            **kwargs,
+        )
+    raise ValueError("ShellSpec must provide argv or command")
+
+
 def _shell_result(exit_code: int, stdout: str, stderr: str) -> ToolCallResult:
     body_parts = []
     if stdout:
@@ -151,4 +203,10 @@ async def _terminate_process(process: asyncio.subprocess.Process) -> None:
             await process.wait()
 
 
-__all__ = ["ShellSpec", "run_shell_command"]
+__all__ = [
+    "ShellSpec",
+    "bash_shell_spec",
+    "platform_shell_spec",
+    "run_shell_command",
+    "spawn_shell_background",
+]

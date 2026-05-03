@@ -7,11 +7,12 @@ logging, and prompt-injection scanning.
 
 from __future__ import annotations
 
-import fcntl
 import logging
 import os
 import re
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,11 @@ from .types import (
 )
 
 logger = logging.getLogger(__name__)
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - exercised on native Windows.
+    fcntl = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -226,34 +232,62 @@ def scan_headers(root: Path) -> list[MemoryHeader]:
 def _atomic_write(path: Path, content: str) -> None:
     """Write content to path atomically using temp file + os.replace.
 
-    Uses ``fcntl.flock`` to serialize concurrent writers.
+    Uses a sibling lock file to serialize concurrent writers.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = None
     tmp_path = None
     try:
-        fd = os.open(str(path) + ".lock", os.O_CREAT | os.O_RDWR)
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=str(path.parent),
-            delete=False,
-            suffix=".tmp",
-        ) as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-        os.replace(tmp_path, str(path))
-        tmp_path = None  # replaced successfully
+        with _exclusive_lock(Path(str(path) + ".lock")):
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=str(path.parent),
+                delete=False,
+                suffix=".tmp",
+            ) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+            os.replace(tmp_path, str(path))
+            tmp_path = None  # replaced successfully
     finally:
-        if fd is not None:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-            os.close(fd)
         if tmp_path is not None:
             try:
                 os.unlink(tmp_path)
             except OSError:
                 pass
+
+
+@contextmanager
+def _exclusive_lock(lock_path: Path) -> Iterator[None]:
+    """Hold an exclusive lock on ``lock_path`` across POSIX and Windows."""
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR)
+    try:
+        if fcntl is not None:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            return
+
+        if os.name == "nt":
+            import msvcrt
+
+            os.lseek(fd, 0, os.SEEK_SET)
+            if os.fstat(fd).st_size == 0:
+                os.write(fd, b"\0")
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            return
+
+        raise RuntimeError("memory store file locking is unavailable on this platform")
+    finally:
+        os.close(fd)
 
 
 def write_memory(

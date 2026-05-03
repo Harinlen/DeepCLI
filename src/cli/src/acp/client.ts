@@ -11,9 +11,8 @@
 
 import WebSocket from "ws";
 import { AcpMethod, MustangMethod } from "@/acp/methods.js";
+import { DEFAULT_TOKEN_FILE, LEGACY_TOKEN_FILE, defaultTokenFilePath, expandHome } from "@/config/paths.js";
 import { readFileSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
 
 // ---------------------------------------------------------------------------
 // Wire types (camelCase, matches kernel ACP schema)
@@ -583,17 +582,19 @@ export function failClosedPermissionResult(req: Pick<PermissionRequest, "options
 // Token helpers
 // ---------------------------------------------------------------------------
 
-const TOKEN_PATH = join(homedir(), ".mustang", "state", "auth_token");
-
 export function readToken(): string {
-  const envToken = process.env.MUSTANG_TOKEN;
+  const envToken = process.env.DEEPCLI_TOKEN ?? process.env.MUSTANG_TOKEN;
   if (envToken) return envToken;
 
-  try {
-    return readFileSync(TOKEN_PATH, "utf-8").trim();
-  } catch {
-    throw new Error(
-      `No DeepCLI auth token found. Set MUSTANG_TOKEN or run the kernel first (token at ${TOKEN_PATH}).`,
-    );
+  for (const path of [...new Set([defaultTokenFilePath(), expandHome(LEGACY_TOKEN_FILE)])]) {
+    try {
+      const token = readFileSync(path, "utf-8").trim();
+      if (token) return token;
+    } catch {
+      // Try the next candidate.
+    }
   }
+  throw new Error(
+    `No DeepCLI auth token found. Set DEEPCLI_TOKEN or run the kernel first (token at ${DEFAULT_TOKEN_FILE}).`,
+  );
 }

@@ -23,7 +23,6 @@ import logging
 import os
 import re
 import shlex
-import shutil
 import time
 from collections.abc import AsyncGenerator, Callable
 from typing import Any
@@ -43,7 +42,7 @@ from kernel.tools.types import (
     ToolCallResult,
     ToolInputError,
 )
-from kernel.tools.builtin.shell_exec import ShellSpec, run_shell_command
+from kernel.tools.builtin.shell_exec import bash_shell_spec, run_shell_command, spawn_shell_background
 
 logger = logging.getLogger(__name__)
 
@@ -453,8 +452,8 @@ class BashTool(Tool[dict[str, Any], str]):
             yield await self._spawn_background(command, description, timeout_ms, ctx)
             return
 
-        shell = shutil.which("bash") or shutil.which("sh")
-        if shell is None:
+        spec = bash_shell_spec(command)
+        if spec is None:
             error = "neither bash nor sh found on PATH"
             yield ToolCallResult(
                 data={"exit_code": -1, "stdout": "", "stderr": error},
@@ -464,7 +463,7 @@ class BashTool(Tool[dict[str, Any], str]):
             return
 
         async for event in run_shell_command(
-            ShellSpec(argv=[shell, "-lc", command]),
+            spec,
             cwd=ctx.cwd,
             env=ctx.env,
             timeout_ms=timeout_ms,
@@ -486,14 +485,21 @@ class BashTool(Tool[dict[str, Any], str]):
         # Open file fd for subprocess to write directly (zero Python memory)
         fd = os.open(output_path, os.O_WRONLY | os.O_APPEND)
 
-        process = await asyncio.create_subprocess_shell(
-            command,
-            stdout=fd,
-            stderr=fd,
-            cwd=str(ctx.cwd),
-            env={**os.environ, **ctx.env} if ctx.env else None,
-        )
-        os.close(fd)  # child inherited the fd
+        spec = bash_shell_spec(command)
+        if spec is None:
+            os.close(fd)
+            return _shell_error("neither bash nor sh found on PATH")
+
+        try:
+            process = await spawn_shell_background(
+                spec,
+                cwd=ctx.cwd,
+                env=ctx.env,
+                stdout=fd,
+                stderr=fd,
+            )
+        finally:
+            os.close(fd)  # child inherited the fd on successful spawn
 
         task = ShellTaskState(
             id=task_id,
@@ -522,6 +528,14 @@ class BashTool(Tool[dict[str, Any], str]):
             llm_content=[TextBlock(type="text", text=body)],
             display=TextDisplay(text=body),
         )
+
+
+def _shell_error(error: str) -> ToolCallResult:
+    return ToolCallResult(
+        data={"exit_code": -1, "stdout": "", "stderr": error},
+        llm_content=[TextBlock(type="text", text=error)],
+        display=TextDisplay(text=error),
+    )
 
 
 # ---------------------------------------------------------------------------

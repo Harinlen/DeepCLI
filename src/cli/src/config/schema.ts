@@ -1,3 +1,5 @@
+import { DEFAULT_TOKEN_FILE } from "@/config/paths.js";
+
 export type SessionStartupMode = "picker" | "last" | "new";
 export type SessionListScope = "cwd" | "all";
 export type SymbolPresetName = "unicode" | "nerd" | "ascii";
@@ -31,7 +33,7 @@ export const DEFAULT_CONFIG: CliConfig = {
   kernel: {
     url: "ws://localhost:8200",
     token: null,
-    token_file: "~/.mustang/state/auth_token",
+    token_file: DEFAULT_TOKEN_FILE,
     autostart: false,
     autostart_command: null,
     health_url: "http://localhost:8200/",

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import builtins
+import importlib
+import importlib.util
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -131,6 +135,33 @@ class TestWriteAndRead:
         assert path.exists()
         text = path.read_text()
         assert "atomic-test" in text
+
+    def test_store_imports_when_fcntl_is_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        store_module = importlib.import_module("kernel.memory.store")
+        store_path = Path(store_module.__file__ or "")
+        spec = importlib.util.spec_from_file_location(
+            "kernel.memory._store_no_fcntl_test",
+            store_path,
+        )
+        assert spec is not None
+        assert spec.loader is not None
+
+        original_import = builtins.__import__
+
+        def fake_import(name: str, *args: object, **kwargs: object) -> object:
+            if name == "fcntl":
+                raise ImportError("no fcntl on this platform")
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.modules.pop(spec.name, None)
+
+        assert module.fcntl is None
 
 
 class TestAppendMemory:

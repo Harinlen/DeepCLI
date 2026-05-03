@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { defaultConfigDir, defaultDataDir } from "@/config/paths.js";
 import { type Component, padding, truncateToWidth, visibleWidth } from "@/tui/index.js";
 import { APP_NAME } from "@/compat/utils.js";
 import { theme } from "../../modes/theme/theme";
@@ -259,9 +259,8 @@ function readWelcomeLogo(): string[] {
 }
 
 function welcomeLogoCandidates(): string[] {
-	const home = homedir();
-	const configDir = process.env.DEEPCLI_CONFIG_DIR ?? join(process.env.XDG_CONFIG_HOME ?? join(home, ".config"), "deepcli");
-	const dataDir = process.env.DEEPCLI_DATA_DIR ?? join(process.env.XDG_DATA_HOME ?? join(home, ".local", "share"), "deepcli");
+	const configDir = defaultConfigDir();
+	const dataDir = defaultDataDir();
 	return [
 		process.env.DEEPCLI_WELCOME_LOGO_FILE,
 		join(configDir, "welcome-logo.txt"),

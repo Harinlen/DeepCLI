@@ -43,3 +43,48 @@ jobs:
             -d @- <<PAYLOAD
           {"files":{"coverage.json":{"content":"{\"schemaVersion\":1,\"label\":\"Coverage\",\"message\":\"${COV}%\",\"color\":\"${COLOR}\"}"}}}
           PAYLOAD
+
+  windows-smoke:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install Python dependencies
+        run: uv sync --all-packages
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install CLI dependencies
+        working-directory: src/cli
+        run: bun install --frozen-lockfile
+
+      - name: Run Windows compatibility smoke tests
+        run: >
+          uv run pytest
+          tests/kernel/test_entrypoints.py
+          tests/kernel/memory/test_store.py
+          tests/kernel/tools/test_platform.py
+          tests/kernel/tools/builtin/test_shell_exec.py
+          -q
+
+      - name: Run Windows CLI native path smoke tests
+        working-directory: src/cli
+        run: |
+          bun run tests/test_config_loader.ts
+          bun run tests/test_connect_token_paths.ts
+          bun x tsc -p tsconfig.json --noEmit
+
+      - name: Check Windows dev scripts
+        shell: cmd
+        run: |
+          scripts\run-kernel.bat --help
+          scripts\run-probe.bat --help
+          scripts\run-cli.bat --help

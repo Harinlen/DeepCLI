@@ -1,12 +1,19 @@
 import { existsSync, readFileSync } from "node:fs";
 import { cloneDefaultConfig, type CliConfig, type SessionListScope, type SessionStartupMode, type SymbolPresetName } from "@/config/schema.js";
-import { CLIENT_CONFIG_PATH, expandHome } from "@/config/paths.js";
+import {
+  CLIENT_CONFIG_PATH,
+  LEGACY_CLIENT_CONFIG_PATH,
+  defaultClientConfigPath,
+  defaultTokenFilePath,
+  expandHome,
+} from "@/config/paths.js";
 import type { CliArgs } from "@/startup/args.js";
 
 export interface CliEnvironment {
   [key: string]: string | undefined;
   KERNEL_URL?: string;
   KERNEL_PORT?: string;
+  DEEPCLI_TOKEN?: string;
   MUSTANG_TOKEN?: string;
 }
 
@@ -28,9 +35,10 @@ export function loadCliConfig(options: {
   env?: CliEnvironment;
   args?: Partial<CliArgs>;
 } = {}): LoadedCliConfig {
-  const path = expandHome(options.path ?? CLIENT_CONFIG_PATH);
   const env = options.env ?? process.env;
+  const path = resolveConfigPath(options.path, env);
   const config = cloneDefaultConfig();
+  config.kernel.token_file = defaultTokenFilePath(env);
   const warnings: string[] = [];
 
   if (existsSync(path)) {
@@ -130,6 +138,16 @@ function applyEnvironment(config: CliConfig, env: CliEnvironment): void {
     config.kernel.health_url = `http://localhost:${env.KERNEL_PORT}/`;
   }
   if (env.MUSTANG_TOKEN) config.kernel.token = env.MUSTANG_TOKEN;
+  if (env.DEEPCLI_TOKEN) config.kernel.token = env.DEEPCLI_TOKEN;
+}
+
+function resolveConfigPath(path: string | undefined, env: CliEnvironment): string {
+  if (path) return expandHome(path);
+  const nativePath = defaultClientConfigPath(env);
+  if (existsSync(nativePath)) return nativePath;
+  const legacyPath = expandHome(LEGACY_CLIENT_CONFIG_PATH);
+  if (existsSync(legacyPath)) return legacyPath;
+  return nativePath;
 }
 
 function applyArgs(config: CliConfig, args: Partial<CliArgs>): void {

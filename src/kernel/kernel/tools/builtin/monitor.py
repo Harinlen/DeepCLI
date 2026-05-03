@@ -27,6 +27,7 @@ from kernel.tasks.id import generate_task_id
 from kernel.tasks.output import TaskOutput
 from kernel.tasks.types import MonitorTaskState, TaskStatus, TaskType
 from kernel.tools.context import ToolContext
+from kernel.tools.builtin.shell_exec import platform_shell_spec, spawn_shell_background
 from kernel.tools.tool import Tool
 from kernel.tools.types import (
     PermissionSuggestion,
@@ -127,14 +128,21 @@ class MonitorTool(Tool[dict[str, Any], dict[str, Any]]):
         output_path = await output.init_file()
 
         fd = os.open(output_path, os.O_WRONLY | os.O_APPEND)
-        process = await asyncio.create_subprocess_shell(
-            command,
-            stdout=fd,
-            stderr=fd,
-            cwd=str(ctx.cwd),
-            env={**os.environ, **ctx.env} if ctx.env else None,
-        )
-        os.close(fd)  # child inherited the fd
+        spec = platform_shell_spec(command)
+        if spec is None:
+            os.close(fd)
+            yield _error("no supported shell found on PATH")
+            return
+        try:
+            process = await spawn_shell_background(
+                spec,
+                cwd=ctx.cwd,
+                env=ctx.env,
+                stdout=fd,
+                stderr=fd,
+            )
+        finally:
+            os.close(fd)  # child inherited the fd on successful spawn
 
         task = MonitorTaskState(
             id=task_id,

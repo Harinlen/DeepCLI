@@ -38,7 +38,6 @@ from kernel.routes.session import (
     router,
 )
 from kernel.routes.stack import ProtocolError, ProtocolStack
-from kernel.routes.stack.dummy import DummyCodec, DummyDispatcher
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +62,7 @@ def _module_table(
 ) -> MagicMock:
     """Mock KernelModuleTable for lightweight transport tests."""
     mt = MagicMock()
-    mt.flags.get_section.return_value = TransportFlags(stack="dummy")
+    mt.flags.get_section.return_value = TransportFlags(stack="acp")
 
     if missing_manager:
         mt.get.side_effect = KeyError("Subsystem not loaded: ConnectionAuthenticator")
@@ -76,6 +75,29 @@ def _module_table(
         mt.get.return_value = authenticator
 
     return mt
+
+
+class _EchoCodec:
+    """String passthrough codec used only by transport-loop tests."""
+
+    def decode(self, raw: str) -> str:
+        return raw
+
+    def encode(self, msg: str) -> str:
+        return msg
+
+    def encode_error(self, error: ProtocolError) -> str:
+        return json.dumps({"error": str(error)})
+
+
+class _EchoDispatcher:
+    """Echo dispatcher used only by transport-loop tests."""
+
+    async def dispatch(self, msg: str, auth: AuthContext) -> AsyncIterator[str]:
+        yield msg
+
+    async def on_disconnect(self, auth: AuthContext) -> None:
+        return None
 
 
 def _app(mt: MagicMock) -> FastAPI:
@@ -162,7 +184,7 @@ def test_connection_authenticator_not_loaded_closes_4003() -> None:
 # ---------------------------------------------------------------------------
 
 
-class _FailOnKeyword(DummyCodec):
+class _FailOnKeyword(_EchoCodec):
     """Raises ProtocolError for frames equal to ``"BADINPUT"``."""
 
     def decode(self, raw: str) -> str:
@@ -175,7 +197,7 @@ class _FailOnKeyword(DummyCodec):
 
 
 def _failing_stack() -> ProtocolStack:
-    return ProtocolStack(codec=_FailOnKeyword(), dispatcher=DummyDispatcher())
+    return ProtocolStack(codec=_FailOnKeyword(), dispatcher=_EchoDispatcher())
 
 
 def test_decode_error_sends_error_frame_and_keeps_connection_alive() -> None:
@@ -216,7 +238,7 @@ class _TrackingDispatcher:
 
 
 def _tracking_stack(log: list) -> ProtocolStack:
-    return ProtocolStack(codec=DummyCodec(), dispatcher=_TrackingDispatcher(log))
+    return ProtocolStack(codec=_EchoCodec(), dispatcher=_TrackingDispatcher(log))
 
 
 def test_on_disconnect_called_after_client_disconnect() -> None:

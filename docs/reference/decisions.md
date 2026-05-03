@@ -173,19 +173,32 @@ timestamp` 查询）。Sub-agent event 同表，`agent_depth > 0` 区分。
 
 ## D21 — Versioning convention
 
+Product / Kernel semver is release-facing:
+
 ```
-major   schema change OR 根本性架构重构
-minor   新 subsystem 上线（Tools, Skills, MCP, Commands, …）
-patch   bug fix / perf / 内部 refactor —— 不改 schema、不新增 subsystem
+major   发布级兼容边界或根本性产品架构重构
+minor   新 subsystem / 用户可见能力上线（Tools, Skills, MCP, Commands, …）
+patch   bug fix / perf / 内部 refactor
 ```
 
-**`SCHEMA_VERSION` == kernel major** —— 永远相等，动一个必须动另一个。
+SQLite / 持久化 schema version 是存储契约，必须单调递增，但**不再等于**
+Kernel semver major。原因：产品还未发布时可以重置 release-facing 版本号
+（例如回到 `1.0.0`），但已经写到本地 dev 数据库里的 `PRAGMA user_version`
+不能倒退；否则旧 dev 数据会被当前 build 当成"未来版本"拒绝打开。
+
+**`SCHEMA_VERSION`** 只在对应 SQLite schema shape 变化时递增；迁移列表
+保持追加、升序、不可重排。
+
+Pre-release exception：在没有客户数据兼容承诺前，可以把已经完成的迁移折叠回
+当前 baseline。当前 session DB baseline 是 `SCHEMA_VERSION = 1`，已经包含
+session archive / title-source metadata。已有本地 dev DB 如果曾经被 stamp 成
+`user_version = 2`，需要删掉并重建。
 
 **`KERNEL_VERSION`**（每条持久化 event 都带）在 import 时从
 `kernel.__version__` 推导，单一 source of truth。
 
-History：`0.x.x` = JSONL 前身（无版本契约，已归档）；`1.0.0` =
-SQLite 初版 schema。
+History：`0.x.x` = JSONL 前身（无版本契约，已归档）；session DB
+`SCHEMA_VERSION = 1` = 当前未发布 baseline。
 
 ## D22 — AuthN / AuthZ split into two subsystems
 

@@ -40,9 +40,7 @@ M = TypeVar("M")
 
 A codec and dispatcher are **paired by** ``M``: the codec produces
 ``M`` instances from raw strings and the dispatcher consumes them.
-For the dummy stack ``M`` is ``str`` (identity pass-through); for
-a future ACP stack it would be a discriminated Pydantic union of
-JSON-RPC method calls / responses / notifications.
+For the ACP stack ``M`` is the codec's JSON-RPC message union.
 
 The transport layer treats ``M`` as opaque — it does not unpack
 messages, only shuffles them between codec and dispatcher.
@@ -147,7 +145,7 @@ class ProtocolStack(Generic[M]):
     dispatcher: SessionDispatcher[M]
 
 
-StackName = Literal["dummy", "acp"]
+StackName = Literal["acp"]
 """Registered stack names.
 
 Extend this tuple when adding a new stack and add a matching branch
@@ -167,27 +165,17 @@ def create_stack(name: StackName, module_table: KernelModuleTable) -> ProtocolSt
     name:
         One of the values enumerated by :data:`StackName`.
     module_table:
-        Passed through so future stacks (notably the real ACP
-        stack) can reach provider / session / memory subsystems.
-        The dummy stack ignores it.
+        Passed through so the ACP stack can reach provider /
+        session / memory subsystems.
 
     Returns
     -------
     ProtocolStack[Any]
-        The concrete ``M`` varies by branch (``str`` for the dummy
-        stack, a Pydantic union for ACP), and ``ProtocolStack`` is
-        invariant in ``M``, so there is no common parameter that
-        subsumes all branches.  ``Any`` is the deliberate escape
-        hatch at this single "pick one of several" seam —
-        transport only reads ``codec`` / ``dispatcher`` and hands
-        messages straight from one to the other without inspecting
-        their concrete type, so no real type safety is lost.
+        The ACP stack has a concrete typed message union, while the
+        route factory exposes ``ProtocolStack[Any]`` because transport
+        treats messages as opaque and only hands them from codec to
+        dispatcher.
     """
-    if name == "dummy":
-        from kernel.routes.stack.dummy import DummyCodec, DummyDispatcher
-
-        return ProtocolStack(codec=DummyCodec(), dispatcher=DummyDispatcher())
-
     if name == "acp":
         from kernel.protocol import build_protocol_stack
 

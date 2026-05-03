@@ -137,6 +137,9 @@ class SupervisorRuntime:
         """Start children in the C1-required order and write runtime state."""
 
         specs = self.build_specs()
+        for spec in specs.values():
+            spec.runtime_file.unlink(missing_ok=True)
+        self.config.runtime_file.unlink(missing_ok=True)
         self._start_child(specs["hub"])
         hub_state = _wait_runtime_file(specs["hub"].runtime_file)
         self._start_child(specs["access"])

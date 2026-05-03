@@ -6,16 +6,14 @@ ConnectionAuthenticator is a placeholder stub (see ``kernel/*/__init__.py``),
 and ConnectionAuthenticator itself is redirected at a tmp state dir by
 patching ``Path.home`` before any lifespan-owned code reads it.
 
-The transport happens to echo messages today because the live
-protocol stack is the dummy pass-through — these tests therefore
-cover both the transport layer's close-code behavior and the
-dummy stack's identity semantics in one place.  When the real ACP
-stack lands, most of the authentication assertions will still be
-valid; only the "echo after auth" check will change.
+Authenticated sockets speak the production ACP JSON-RPC stack, so
+successful-auth tests perform a minimal ``initialize`` round trip
+instead of relying on any transport-level echo behavior.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -101,6 +99,24 @@ def _install_password(mustang_home: Path, plaintext: str) -> None:
     (state_dir / "auth_password.hash").write_text(hash_password(plaintext), encoding="utf-8")
 
 
+def _send_initialize(ws) -> dict:
+    """Send a minimal ACP initialize request and return the parsed response."""
+    ws.send_text(
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": 1,
+                    "clientInfo": {"name": "test-client", "title": "Test Client"},
+                },
+            }
+        )
+    )
+    return json.loads(ws.receive_text())
+
+
 def _assert_close_code(ctx_manager, expected: int) -> None:
     """Enter ``ctx_manager``, expect an immediate disconnect with ``expected``.
 
@@ -153,16 +169,16 @@ def test_wrong_token_closes_with_4003(client: TestClient, mustang_home: Path) ->
         )
 
 
-def test_correct_token_connects_and_echoes(client: TestClient, mustang_home: Path) -> None:
+def test_correct_token_connects_and_initializes(
+    client: TestClient, mustang_home: Path
+) -> None:
     with client:
         token = _read_token(mustang_home)
 
         with client.websocket_connect(f"/session?token={token}") as ws:
-            ws.send_text("hello")
-            assert ws.receive_text() == "hello"
-
-            ws.send_text('{"foo": 1}')
-            assert ws.receive_text() == '{"foo": 1}'
+            response = _send_initialize(ws)
+            assert response["id"] == 1
+            assert response["result"]["protocolVersion"] == 1
 
 
 # --------------------------------------------------------------------
@@ -195,7 +211,7 @@ def test_wrong_password_closes_with_4003(
         )
 
 
-def test_correct_password_connects_and_echoes(
+def test_correct_password_connects_and_initializes(
     mustang_home: Path,
 ) -> None:
     _install_password(mustang_home, "correct-horse")
@@ -204,8 +220,8 @@ def test_correct_password_connects_and_echoes(
     client = TestClient(app)
     with client:
         with client.websocket_connect("/session?password=correct-horse") as ws:
-            ws.send_text("ping")
-            assert ws.receive_text() == "ping"
+            response = _send_initialize(ws)
+            assert response["result"]["agentInfo"]["name"] == "mustang-kernel"
 
 
 def test_token_preferred_when_both_credentials_given(
@@ -215,8 +231,8 @@ def test_token_preferred_when_both_credentials_given(
     with client:
         token = _read_token(mustang_home)
         with client.websocket_connect(f"/session?token={token}&password=whatever") as ws:
-            ws.send_text("both")
-            assert ws.receive_text() == "both"
+            response = _send_initialize(ws)
+            assert response["result"]["protocolVersion"] == 1
 
 
 # --------------------------------------------------------------------
@@ -230,7 +246,7 @@ def test_unknown_stack_name_aborts_boot(
     """Writing an unknown ``transport.stack`` name fails kernel startup.
 
     Because :class:`TransportFlags` types the field as a
-    ``Literal["dummy"]``, pydantic rejects anything else during
+    ``Literal["acp"]``, pydantic rejects anything else during
     ``FlagManager.register``, which the lifespan converts into a
     fatal error.
     """

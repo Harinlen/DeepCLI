@@ -396,7 +396,10 @@ def _default_model(deps: OrchestratorDeps) -> ModelRef:
     """
     provider_model_for = getattr(deps.provider, "model_for", None)
     if callable(provider_model_for):
-        return provider_model_for("default")
+        try:
+            return provider_model_for("default")
+        except KeyError:
+            return ModelRef(provider="default", model="default")
     return ModelRef(provider="default", model="default")
 
 

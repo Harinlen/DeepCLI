@@ -12,7 +12,7 @@ subsystem docs rather than expanding this into a second progress log.
 | Config / flags / secrets | Layered config, runtime-frozen flags, SQLite secret store, config secret expansion. | [config.md](subsystems/config.md), [flags.md](subsystems/flags.md), [secrets.md](subsystems/secrets.md) |
 | Connection AuthN | WebSocket accept-time identity with token/password credentials. | [connection_authenticator.md](subsystems/connection_authenticator.md) |
 | LLM stack | Provider lifecycle, model/profile config, alias resolution, role-based `current_used`, streaming delegation. | [llm_provider.md](subsystems/llm_provider.md), [llm.md](subsystems/llm.md) |
-| Transport / protocol | WebSocket `/session`, dummy and ACP protocol stacks, JSON-RPC/Pydantic routing. | [transport.md](subsystems/transport.md), [interfaces/protocol.md](interfaces/protocol.md) |
+| Transport / protocol | WebSocket `/session`, ACP protocol stack, JSON-RPC/Pydantic routing. | [transport.md](subsystems/transport.md), [interfaces/protocol.md](interfaces/protocol.md) |
 
 ## Session And Orchestration
 

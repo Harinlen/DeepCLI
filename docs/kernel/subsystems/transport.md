@@ -53,11 +53,10 @@ transport 不关心 `msg` 的真实类型是什么，不关心 dispatcher 怎么
 ### 为什么是一个 ProtocolStack 而不是两个独立 flag
 
 codec 和 dispatcher 必须是**匹配的一对**：ACP codec 产出的
-`AcpMessage` 只有 ACP dispatcher 能处理，DummyCodec 产出的裸
-字符串只有 DummyDispatcher 能处理。把它们拆成两个 flag 允许
-用户配置 `codec=acp, dispatcher=dummy`，结果是运行时 type error。
-把它们绑成一个 "stack"，flag 选的是名字（`"dummy"` / `"acp"`），
-factory 保证出来的一对必然匹配。
+`AcpMessage` 只能交给 ACP dispatcher 处理。把它们拆成两个 flag
+会允许用户配置不匹配的 codec / dispatcher，结果是运行时 type
+error。把它们绑成一个 "stack"，flag 选的是 stack 名字，factory
+保证出来的一对必然匹配。
 
 ### 为什么是 Flag，不是 Config
 
@@ -68,7 +67,7 @@ Flag 的语义是"启动时冻结的模式开关"，Config 的语义是
   必须从头到尾一致
 - 修改方式永远是"编辑 `flags.yaml` → 重启 kernel"，正是 flag
   系统的工作模式
-- `Literal["dummy"]` 这种类型约束直接由 pydantic 在 `register`
+- `Literal["acp"]` 这种类型约束直接由 pydantic 在 `register`
   时校验，配错名字启动就挂，不需要额外验证代码
 
 ### 为什么不让 transport 变成一个 Subsystem
@@ -122,8 +121,8 @@ class SessionDispatcher(Protocol[M]):
   但**不**持有 socket —— 产出通过 iterator，不直接写 socket
 - `on_disconnect` 在 WebSocket 关闭后被 transport 调用（不管是
   正常断开、对端主动断、还是 transport crash），dispatcher 用它
-  来取消正在进行的任务、从 session 解绑当前连接。实现为 no-op
-  的 dispatcher（如 DummyDispatcher）直接 `pass` 即可
+  来取消正在进行的任务、从 session 解绑当前连接。没有清理工作的
+  dispatcher 可以直接 `pass`
 
 ### ProtocolStack
 
@@ -148,51 +147,26 @@ class ProtocolError(Exception):
 只是一个标记基类，具体 codec 可以继承它加更多字段。transport
 捕获它、调 `encode_error`、继续循环。
 
-## Dummy Stack
+## ACP Stack
 
-在真正的协议层 / 会话层完成之前，需要一个能让整条链路跑起来
-的占位实现。原则：**Echo 不是"特殊路径"，它是 stack 名字叫
-"dummy" 的一种合法 stack 实现**。transport 代码对 echo 一无所
-知 —— 它只是按常规循环跑 DummyCodec + DummyDispatcher，结果
-碰巧是回显。
+当前唯一注册的生产 stack 是 `acp`：
 
 ```python
-class DummyCodec:
-    """Identity codec — passes raw strings through as-is."""
-
-    def decode(self, raw: str) -> str:
-        return raw
-
-    def encode(self, msg: str) -> str:
-        return msg
-
-    def encode_error(self, error: ProtocolError) -> str:
-        return f'{{"error": {json.dumps(str(error))}}}'
-
-
-class DummyDispatcher:
-    """Identity dispatcher — yields the input back once."""
-
-    async def dispatch(
-        self, msg: str, auth: AuthContext
-    ) -> AsyncIterator[str]:
-        yield msg
+def build_acp_stack(module_table: KernelModuleTable) -> ProtocolStack[Any]:
+    return ProtocolStack(
+        codec=AcpCodec(),
+        dispatcher=AcpSessionHandler(module_table),
+    )
 ```
 
-两个加起来就是 echo。transport loop 对它们的处理和对真正 ACP
-stack 的处理是**同一段代码**。
+`AcpCodec` 负责 JSON-RPC 2.0 wire frame 和 ACP typed message 之间
+的转换；`AcpSessionHandler` 负责 `initialize`、`session/new`、
+`session/prompt` 等 ACP 方法的分发。transport 对 ACP 的具体方法
+无感，只按统一循环驱动 stack。
 
-Dummy stack 的存在意义：
-
-1. 让 transport 层现在就可以跑完整流程，不用等协议 / 会话层
-2. 让测试可以验证 "transport 层的认证、错误处理、断开清理"
-   等 socket-level 行为，不依赖 ACP
-3. 给开发提供一个 smoke test 入口（Postman / websocat 连上就
-   能回显）
-
-真正的 `acp` stack 出现以后，dummy stack 不会立刻删 —— 它作为
-纯 socket 测试工具还有价值。什么时候删由 flags 默认值决定：
-默认从 `dummy` 切到 `acp` 之后，dummy 就是 opt-in 的调试工具。
+纯 transport-loop 单元测试如果需要 echo / fail-on-decode 等行为，
+应在测试文件里定义本地假 codec / dispatcher，并通过 monkeypatch
+`create_stack` 注入。生产代码不保留 echo stack。
 
 ## Connection Lifecycle
 
@@ -296,9 +270,8 @@ finally:
 `on_disconnect` 是 `SessionDispatcher` Protocol 的必要方法。transport
 不知道 dispatcher 内部有什么状态，统一交给 dispatcher 自己清理：
 
-- **DummyDispatcher** — no-op，echo stack 没有需要清理的状态
-- **ACP dispatcher（未来）** — 取消当前连接的 in-flight prompt task、
-  从 session 解绑此连接、触发相应的 hook
+- **ACP dispatcher** — 取消当前连接的 in-flight prompt task、从
+  session 解绑此连接、触发相应的 hook
 
 `on_disconnect` 保证在所有断开路径（包括 transport crash）都
 被调用，这意味着 dispatcher 不需要在 `dispatch` 的每个分支里自己
@@ -323,14 +296,14 @@ Transport 通过 FlagManager 绑定自己的 flag section：
 ```yaml
 # ~/.mustang/flags.yaml
 transport:
-  stack: dummy   # 未来会改成默认 "acp"
+  stack: acp
 ```
 
 ```python
 # kernel/routes/flags.py
 class TransportFlags(BaseModel):
-    stack: Literal["dummy"] = Field(
-        "dummy",
+    stack: Literal["acp"] = Field(
+        "acp",
         description="Registered ProtocolStack name.",
     )
 ```

@@ -70,17 +70,9 @@ Kernel 由以下子系统构成。每个子系统是独立模块，有自己的
 
 协议层和会话层分别通过 `ProtocolCodec` / `SessionDispatcher`
 两个 Protocol 接口接入 transport，绑成一个 `ProtocolStack` 由
-`TransportFlags.stack` 选择。两套 stack 都已登记在
-`kernel.routes.stack.create_stack`：
-
-- `dummy` —— `DummyCodec` + `DummyDispatcher`（identity pass-through），
-  裸 echo，仅用来验证 transport 循环本身；`TransportFlags.stack`
-  默认值。
-- `acp` —— 真正的 ACP codec + `SessionDispatcher`（见
-  `kernel.protocol.build_protocol_stack`），已落地并用于生产路径。
-
-两条 stack 走的是完全一样的 `recv → decode → dispatch → encode → send`
-循环。
+`TransportFlags.stack` 选择。当前生产路径只注册 `acp` stack
+（见 `kernel.protocol.build_protocol_stack`），默认值也是 `acp`。
+所有消息走同一段 `recv → decode → dispatch → encode → send` 循环。
 
 **协议层** 直接采用 **ACP (Agent Client Protocol)**，不重复
 发明轮子。ACP 是标准化 IDE ↔ AI agent 通信的协议（类似 LSP

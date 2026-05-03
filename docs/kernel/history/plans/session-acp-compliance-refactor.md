@@ -29,7 +29,7 @@ kernel 代码后的核验结果：
 | `session/list` cursor | malformed cursor 只 warning，然后从第一页重新返回 | ACP 说 agent SHOULD 对 invalid cursor 返回 error |
 | Prompt content | 支持 text / image / resource / resource_link | 需要确保 `_meta` 被保留；如果 capability 不支持某内容类型，不应静默丢弃 |
 | `session/cancel` | 已实现 | inbound `$/cancel_request` 已支持，按 request id 取消当前 kernel 正在处理的 JSON-RPC request |
-| Lifecycle actions | 已实现 | `session/delete`、`session/rename`、`session/archive` 已通过 ACP 暴露；archive/list filtering 已有 schema v2 |
+| Lifecycle actions | 已实现 | `session/delete`、`session/rename`、`session/archive` 已通过 ACP 暴露；archive/list filtering 已折叠进未发布 schema v1 baseline |
 
 ## 非目标
 
@@ -45,7 +45,8 @@ kernel 代码后的核验结果：
   继续放在 `protocol/interfaces/contracts/*`；`SessionManager` 不 import ACP wire type。
 - 只要 capability 声明某功能可用，对应 response 就必须给 generic ACP client 足够的结构化数据来渲染。
 - 会影响持久化或过滤的 metadata 应进入 SQLite，不只藏在 `_meta`。
-- schema 变更要集中处理，因为 D21 规定 session `SCHEMA_VERSION` 和 kernel major version 绑定。
+- schema 变更要集中处理；D21 后来已改为 product semver 与 session
+  `SCHEMA_VERSION` 解耦，schema 号仍必须单调递增。
 - 当前 `src/kernel/kernel/session/` 已完成文件长度重构和 readability 审阅，是已审阅过的结构。
   本计划的所有实现必须沿用现有分层：ACP handler 只放 request 编排，lifecycle 只管 runtime
   创建/加载/关闭，store 只管持久化，runtime helpers/types 放纯函数和状态类型，client_stream

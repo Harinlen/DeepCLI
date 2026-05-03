@@ -81,8 +81,6 @@ def prepare_test_home(label: str) -> Path:
                 yaml.safe_dump({"llm": llm_section}, sort_keys=False),
             )
 
-    # flags.yaml must set transport.stack=acp; without it the kernel
-    # defaults to "dummy" and ACP handshakes never respond.
     # Write the minimum required flags rather than copying the user's real
     # flags.yaml, which may contain user-specific settings (e.g.
     # tools.repl=true) that would interfere with tests that assume

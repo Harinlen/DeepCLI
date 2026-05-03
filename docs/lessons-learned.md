@@ -68,13 +68,12 @@ wall twice.
   `--primary-token=<token>` / `--registration-token=<token>` for
   generated values.
 
-- **CLI/Probe sandbox homes must opt into the ACP transport stack**:
-  `TransportFlags.stack` defaults to `dummy`.  A live CLI smoke can
-  therefore connect and authenticate successfully but hang forever on
-  `initialize` because the dummy stack is an identity transport, not
-  ACP.  Test sandboxes that exercise real `/session` ACP must write
-  `~/.mustang/flags.yaml` with `transport.stack: acp` before starting
-  the Supervisor.
+- **CLI/Probe live smokes must assert ACP initialization, not just socket auth**:
+  before 2026-05-03 the kernel had a non-ACP echo stack, so a live
+  CLI smoke could connect and authenticate successfully but hang forever
+  on `initialize`.  The echo stack has been removed and `acp` is now the
+  only production stack; keep live smokes checking the actual ACP
+  handshake so this class of regression stays visible.
 
 - **Pydantic field validators cannot always see sibling fields**:
   `AgentRuntimeSpec` tried to require `command` when `kind` was

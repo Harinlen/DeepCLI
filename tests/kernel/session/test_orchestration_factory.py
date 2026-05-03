@@ -32,6 +32,15 @@ class _LLM:
         return ModelRef(provider="test", model="compact")
 
 
+class _NoDefaultLLM:
+    def model_for(self, role: str) -> ModelRef:
+        assert role == "default"
+        raise KeyError("No model assigned for role: 'default'")
+
+    def model_for_or_default(self, role: str) -> ModelRef:
+        raise KeyError("No model assigned for role: 'default'")
+
+
 class _Prompts:
     def get(self, name: str) -> str:
         return f"prompt:{name}"
@@ -173,3 +182,11 @@ def test_make_orchestrator_degrades_when_optional_subsystems_are_missing(tmp_pat
     assert deps.mcp_instructions() == []
     assert deps.route_agent_message("peer", "ping") is False
     assert deps.should_avoid_prompts_provider() is True
+
+
+def test_make_orchestrator_allows_missing_default_model(tmp_path: Path) -> None:
+    factory = _Factory(_ModuleTable({"LLMManager": _NoDefaultLLM()}))
+
+    orchestrator, _task_registry = factory._make_orchestrator("s-1", tmp_path, [], None)
+
+    assert orchestrator._config.model == ModelRef(provider="default", model="default")  # type: ignore[attr-defined]

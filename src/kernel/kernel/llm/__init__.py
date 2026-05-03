@@ -199,7 +199,7 @@ class LLMManager(Subsystem):
     def model_for(self, role: str) -> ModelRef:
         """Return the ModelRef assigned to ``role``.
 
-        ``role="default"`` is the only role guaranteed to exist.
+        ``role="default"`` exists only after the user configures a model.
 
         Raises:
             KeyError: if ``role`` is not a field of ``CurrentUsedConfig``
@@ -213,15 +213,16 @@ class LLMManager(Subsystem):
     def model_for_or_default(self, role: str) -> ModelRef:
         """Return the ModelRef for ``role`` with graceful fallback.
 
-        Unlike :meth:`model_for`, this never raises: if *role* is
-        unconfigured it returns the ``default`` ref.  Use this from
-        callers (Compactor, WebFetch secondary-model) that can happily
-        run on the main model when the user has not configured a
-        dedicated cheaper/faster model for their role.
+        Unlike :meth:`model_for`, this falls back to the ``default`` ref
+        when *role* is unconfigured.  If no default model is configured yet,
+        it raises ``KeyError`` just like ``model_for("default")``.
         """
         value = getattr(self._current_used, role, None)
         if value is None:
-            return self._current_used.default
+            default = self._current_used.default
+            if default is None:
+                raise KeyError("No model assigned for role: 'default'")
+            return default
         return value
 
     # ------------------------------------------------------------------
@@ -243,7 +244,8 @@ class LLMManager(Subsystem):
             provider = self._get_provider_instance(pcfg)
             for spec in pcfg.models or []:
                 is_default = (
-                    default_ref.provider == provider_name
+                    default_ref is not None
+                    and default_ref.provider == provider_name
                     and default_ref.model == spec.id
                 )
                 context_window = await provider.context_window(spec.id)
@@ -256,14 +258,17 @@ class LLMManager(Subsystem):
                         is_default=is_default,
                     )
                 )
-        default_label = f"{default_ref.provider}/{default_ref.model}"
+        default_label = (
+            f"{default_ref.provider}/{default_ref.model}"
+            if default_ref is not None
+            else ""
+        )
         return ListProfilesResult(profiles=profiles, default_model=default_label)
 
     async def list_providers(
         self, ctx: HandlerContext, params: ListProvidersParams
     ) -> ListProvidersResult:
         """Return all registered providers and their models."""
-        default_ref = self._current_used.default
         providers = []
         for name, pcfg in self._providers.items():
             model_ids = [s.id for s in (pcfg.models or [])]
@@ -284,7 +289,11 @@ class LLMManager(Subsystem):
             )
         return ListProvidersResult(
             providers=providers,
-            default_model=default_ref.to_list(),
+            default_model=(
+                self._current_used.default.to_list()
+                if self._current_used.default is not None
+                else []
+            ),
         )
 
     async def add_provider(
@@ -347,7 +356,10 @@ class LLMManager(Subsystem):
             raise ValueError("Cannot remove the last provider.")
 
         # Check if current_used references this provider.
-        if self._current_used.default.provider == params.name:
+        if (
+            self._current_used.default is not None
+            and self._current_used.default.provider == params.name
+        ):
             # Re-bind default to first remaining provider's first model.
             for other_name, other_pcfg in self._providers.items():
                 if other_name != params.name and other_pcfg.models:

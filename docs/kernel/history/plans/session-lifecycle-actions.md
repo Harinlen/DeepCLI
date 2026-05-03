@@ -28,7 +28,7 @@
 | Delete ACP route | 已实现 | `REQUEST_DISPATCH` 已有 `session/delete`；active session 默认需要 `force=true` |
 | Rename storage primitive | 部分存在 | `SessionStore.update_title()` 更新 `title` column；`SessionInfoChangedEvent` 可以广播 title change |
 | Rename ACP route | 已实现 | `session/rename` 设置 user-owned title 并广播 `session_info_update` |
-| Archive storage | 已实现 | `ConversationRecord` 有 `archived_at` / `title_source`，schema v2 migration |
+| Archive storage | 已实现 | `ConversationRecord` 有 `archived_at` / `title_source`，已折叠进未发布 schema v1 baseline |
 | Archive ACP route | 已实现 | `session/archive` 通过 `archived` bool 归档/取消归档 |
 | List summaries | 已扩展 | `AcpSessionInfo` 有 `updatedAt`、`archivedAt`、`titleSource` 和 `_meta` |
 
@@ -114,11 +114,12 @@ Wire format 保持 camelCase：
 - `sessions.archived_at TEXT NULL`
 - `sessions.title_source TEXT NULL`
 
-因为 D21 规定 `SCHEMA_VERSION == kernel major`，这是 kernel major schema bump：
+按当时的 D21 旧约束，这曾被记为 kernel major schema bump；产品尚未发布后，
+archive/title-source columns 已折叠进 `SCHEMA_VERSION = 1` baseline。因此
+这里仅保留历史背景：当时曾计划把 Kernel product version 和 session schema
+同时从 1 bump 到 2，并增加独立 v2 migration。当前代码不再保留这条迁移；
+`archived_at` / `title_source` 是 v1 baseline 的一部分。
 
-- `kernel.__version__` 从 `1.0.0` bump 到 `2.0.0`
-- `SessionStore` `SCHEMA_VERSION` 从 `1` bump 到 `2`
-- 在 `src/kernel/kernel/session/migrations.py` 增加 `_migrate_to_2()`
 
 Migration SQL：
 

@@ -438,15 +438,15 @@ bun run src/cli/tests/probe_phase_b_pty.ts
 ```
 
 真实端到端 smoke 使用临时 `HOME`、本地 OpenAI-compatible fake model、真实
-Supervisor -> Access -> Hub -> Primary Runtime 路径运行。测试沙箱必须写入：
+Supervisor -> Access -> Hub -> Primary Runtime 路径运行。测试沙箱可以显式写入：
 
 ```yaml
 transport:
   stack: acp
 ```
 
-否则 `/session` 会使用默认 `dummy` stack，CLI 连接可被接受但 `initialize`
-不会得到 ACP 响应。
+`acp` 现在也是 `TransportFlags.stack` 的默认值；这里显式写入只是为了
+让测试 fixture 不受用户本机 flags 干扰。
 
 通过的真实 CLI smoke：
 
@@ -471,7 +471,7 @@ cli_print_chinese_weather:
 
 - `tests/probe_phase_b_pty.ts` 是 repo-root relative；从 `src/cli` 目录直接运行会找错 `src/cli/src/main.ts`，应从 repo root 运行 `bun run src/cli/tests/probe_phase_b_pty.ts`。
 - `tests/run_all.ts` 需要 live Kernel；没有启动 Supervisor 时会因 `ws://localhost:8200` 不存在而失败，这不是 CLI 逻辑失败。
-- `transport.stack` 未显式设为 `acp` 时，WebSocket 会进入 `dummy` stack，表现为 CLI `initialize` 30 秒超时。
+- 历史上 `transport.stack` 默认不是 ACP 时，WebSocket 认证成功但 CLI `initialize` 会 30 秒超时；现在默认和唯一生产 stack 都是 `acp`，live smoke 仍需覆盖真实 ACP handshake。
 
 ## 全局完成标准
 

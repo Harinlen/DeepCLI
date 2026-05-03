@@ -271,15 +271,21 @@ class SessionOrchestratorFactoryMixin(_SessionMixinBase):
             except Exception:
                 logger.debug("prefs_section.get() failed — treating language as unset")
 
+        if llm_manager:
+            try:
+                default_model = llm_manager.model_for("default")
+            except KeyError:
+                default_model = ModelRef(provider="default", model="default")
+        else:
+            default_model = ModelRef(provider="default", model="default")
+
         orchestrator: Orchestrator = StandardOrchestrator(
             deps=deps,
             session_id=session_id,
             initial_history=initial_history,
             config=config
             or OrchestratorConfig(
-                model=llm_manager.model_for("default")
-                if llm_manager
-                else ModelRef(provider="default", model="default"),
+                model=default_model,
                 temperature=None,
                 language=prefs_language,
             ),

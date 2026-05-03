@@ -144,6 +144,40 @@ def test_start_launches_children_in_order_and_writes_runtime_file(
     assert payload["primary"] == {"runtimeFile": "primary-agent.json"}
 
 
+def test_start_removes_stale_runtime_files_before_waiting(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = SupervisorRuntime(
+        SupervisorConfig(
+            access_port=8331,
+            state_dir=tmp_path / "state",
+            workspace=tmp_path,
+        )
+    )
+    specs = runtime.build_specs()
+    runtime.config.runtime_file.write_text('{"ready": true}', encoding="utf-8")
+    for spec in specs.values():
+        spec.runtime_file.write_text('{"stale": true}', encoding="utf-8")
+    removed_before_start: dict[str, bool] = {}
+
+    def fake_start_child(spec: ChildSpec) -> None:
+        removed_before_start[spec.name] = not spec.runtime_file.exists()
+        runtime.children[spec.name] = _Proc(pid=len(runtime.children) + 1)
+
+    def fake_wait_runtime_file(path: Path) -> dict[str, object]:
+        return {"runtimeFile": path.name}
+
+    monkeypatch.setattr(runtime, "_start_child", fake_start_child)
+    monkeypatch.setattr(supervisor_runtime, "_wait_runtime_file", fake_wait_runtime_file)
+    monkeypatch.setattr(supervisor_runtime, "_wait_http_readiness", lambda *_args: None)
+    monkeypatch.setattr(supervisor_runtime, "_wait_default_route", lambda *_args: None)
+
+    runtime.start()
+
+    assert removed_before_start == {"hub": True, "access": True, "primary": True}
+
+
 def test_wait_raises_when_child_exits(tmp_path: Path) -> None:
     runtime = SupervisorRuntime(
         SupervisorConfig(

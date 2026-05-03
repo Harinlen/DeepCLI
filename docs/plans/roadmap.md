@@ -14,14 +14,6 @@ for shipped CLI milestones.
 
 ---
 
-## Standing gaps
-
-- **ACP default** — `TransportFlags.stack` currently defaults to
-  `dummy`; production builds select `acp` via `flags.yaml`.  Consider
-  flipping the default once clients are known to speak ACP.
-
----
-
 ## Superseded — ACP 跨 Session 通信
 
 此旧路线已被 [`agent-control-plane.md`](agent-control-plane.md) 的 durable Agent Router

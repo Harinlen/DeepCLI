@@ -124,9 +124,8 @@ def repl_kernel():
     sandbox_home = prepare_test_home("repl")
     token_path = token_path_for(sandbox_home)
 
-    # Write a temp flags file with repl enabled.
-    # Must include transport.stack: acp (same as the real flags.yaml)
-    # otherwise the kernel falls back to the dummy stack.
+    # Write a temp flags file with repl enabled and keep the transport
+    # stack explicit so this fixture is isolated from user flags.
     flags_fd, flags_path = tempfile.mkstemp(suffix=".yaml", prefix="mustang_repl_flags_")
     try:
         with os.fdopen(flags_fd, "w") as f:

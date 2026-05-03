@@ -43,7 +43,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ModelSpec(BaseModel):
@@ -150,8 +150,13 @@ class CurrentUsedConfig(BaseModel):
     role by name via ``LLMManager.model_for(role)``.
     """
 
-    default: ModelRef
-    """Fallback model when a session does not specify one explicitly."""
+    default: ModelRef | None = None
+    """Fallback model when a session does not specify one explicitly.
+
+    ``None`` is valid for a fresh install with no model configuration yet.
+    The kernel can still start and expose model-management commands; prompt
+    execution fails later with a clear no-model error.
+    """
 
     bash_judge: ModelRef | None = None
     """Model used by ``ToolAuthorizer.BashClassifier`` for LLMJudge
@@ -190,7 +195,7 @@ class LLMConfig(BaseModel):
     Read from the ``llm:`` section of ``kernel.yaml``.
     """
 
-    providers: dict[str, ProviderConfig] = {}
+    providers: dict[str, ProviderConfig] = Field(default_factory=dict)
     """Provider configuration table.
 
     Keys are user-chosen logical names (e.g. ``"anthropic"``,
@@ -198,12 +203,12 @@ class LLMConfig(BaseModel):
     and the models available under that provider.
     """
 
-    current_used: CurrentUsedConfig
+    current_used: CurrentUsedConfig = Field(default_factory=CurrentUsedConfig)
     """Role -> model ref mapping.  Consumed via
     ``LLMManager.model_for(role)`` by Orchestrator / Session / future
     Compactor.  Each role's value is validated at startup."""
 
-    model_aliases: dict[str, ModelRef] = {}
+    model_aliases: dict[str, ModelRef] = Field(default_factory=dict)
     """Extra alias -> ModelRef mappings.
 
     Allows short names like ``opus`` to resolve to a full

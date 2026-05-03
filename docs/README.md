@@ -63,10 +63,9 @@ consult this file first, then go directly to the file(s) they need.
 
 所有注册的 Subsystem 均有完整的 `startup`/`shutdown` 实现，无骨架残留。
 
-Protocol 层：两套 stack 都已在 `kernel.routes.stack.create_stack`
-注册——`dummy`（identity pass-through，默认值，仅用于验证 transport 循环）
-和 `acp`（`kernel.protocol.build_protocol_stack`，生产路径）——由
-`flags.yaml` 的 `[transport] stack` 选择。
+Protocol 层：生产路径只注册 `acp` stack
+（`kernel.protocol.build_protocol_stack`）。`TransportFlags.stack`
+默认值为 `acp`，`flags.yaml` 中的未知 stack 名称会在启动期校验失败。
 
 ### 接口层
 

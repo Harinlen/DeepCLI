@@ -45,34 +45,28 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION: int = 2
+SCHEMA_VERSION: int = 1
 """The schema version this codebase expects.
 
-**Convention**: ``SCHEMA_VERSION`` always equals the kernel *major* version.
-Every schema change requires a kernel major bump; every kernel major bump
-implies a schema change (or a fundamental architecture restructure).
+``SCHEMA_VERSION`` is the SQLite storage contract version.  It is deliberately
+independent from ``kernel.__version__`` because product semver can reset or
+move for release planning, while on-disk migrations must stay monotonic.
 
-    SCHEMA_VERSION 1  →  kernel 1.x.x   (SQLite session storage, initial)
-    SCHEMA_VERSION 2  →  kernel 2.x.x   (session archive + title source)
+    SCHEMA_VERSION 1  →  current pre-release SQLite session baseline
 
-Increment this value *and* ``kernel.__version__`` major together.
+Append migrations and increment this value only when the session DB shape
+changes.
 """
 
 MigrationFn = Callable[["AsyncConnection"], Awaitable[None]]
 
 
 # (target_version, description, migration_fn).  ``fn=None`` means the schema
-# at that version is what ``Base.metadata.create_all`` produces — only valid
-# for version 1, the initial schema.  Append new entries; never reorder.
-async def _migrate_to_2(conn: "AsyncConnection") -> None:
-    """Add archive and title-source metadata to existing session DBs."""
-    await conn.execute(sa.text("ALTER TABLE sessions ADD COLUMN archived_at TEXT"))
-    await conn.execute(sa.text("ALTER TABLE sessions ADD COLUMN title_source TEXT"))
-
-
+# at that version is what ``Base.metadata.create_all`` produces.  Because
+# DeepCLI has not shipped yet, archive/title-source columns are folded into the
+# v1 baseline rather than preserved as a v2 migration.
 _MIGRATIONS: list[tuple[int, str, MigrationFn | None]] = [
-    (1, "initial schema (sessions + session_events)", None),
-    (2, "session archive metadata + title source", _migrate_to_2),
+    (1, "pre-release baseline (sessions + session_events)", None),
 ]
 
 

@@ -41,6 +41,6 @@ class TransportFlags(BaseModel):
     """
 
     stack: StackName = Field(
-        "dummy",
+        "acp",
         description=("Registered ProtocolStack name — see kernel.routes.stack.create_stack."),
     )

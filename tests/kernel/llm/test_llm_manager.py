@@ -14,6 +14,7 @@ import pytest
 from kernel.llm import LLMManager
 from kernel.llm.config import (
     CurrentUsedConfig,
+    LLMConfig,
     ModelRef,
     ModelSpec,
     ProviderConfig,
@@ -368,6 +369,13 @@ class TestModelFor:
 
 
 class TestListProfiles:
+    def test_blank_config_is_valid(self):
+        cfg = LLMConfig.model_validate({})
+
+        assert cfg.providers == {}
+        assert cfg.current_used.default is None
+        assert cfg.model_aliases == {}
+
     @pytest.mark.anyio
     async def test_includes_context_window(self):
         p = FakeProvider()
@@ -378,6 +386,16 @@ class TestListProfiles:
         result = await mgr.list_profiles(MagicMock(), MagicMock())
 
         assert result.profiles[0].context_window == 123_456
+
+    @pytest.mark.anyio
+    async def test_empty_manager_lists_no_profiles(self):
+        mgr = _make_manager(providers={})
+        mgr._current_used = CurrentUsedConfig()
+
+        result = await mgr.list_profiles(MagicMock(), MagicMock())
+
+        assert result.profiles == []
+        assert result.default_model == ""
 
 
 # ---------------------------------------------------------------------------

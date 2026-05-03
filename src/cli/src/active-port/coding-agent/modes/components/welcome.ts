@@ -210,18 +210,29 @@ export class WelcomeComponent implements Component {
 			const maxWidth = Math.max(0, width - ellipsisWidth);
 			let truncated = "";
 			let currentWidth = 0;
-			let inEscape = false;
-			for (const char of str) {
-				if (char === "\x1b") inEscape = true;
-				if (inEscape) {
-					truncated += char;
-					if (char === "m") inEscape = false;
-				} else if (currentWidth < maxWidth) {
-					truncated += char;
-					currentWidth++;
+			for (let i = 0; i < str.length;) {
+				if (str[i] === "\x1b") {
+					const ansiMatch = /^\x1b\[[0-9;?]*[ -/]*[@-~]/.exec(str.slice(i));
+					if (ansiMatch) {
+						truncated += ansiMatch[0];
+						i += ansiMatch[0].length;
+						continue;
+					}
 				}
+
+				const codePoint = str.codePointAt(i);
+				if (codePoint === undefined) break;
+				const char = String.fromCodePoint(codePoint);
+				const charWidth = visibleWidth(char);
+				if (currentWidth + charWidth > maxWidth) {
+					break;
+				}
+				truncated += char;
+				currentWidth += charWidth;
+				i += char.length;
 			}
-			return `${truncated}${ellipsis}`;
+			const fitted = `${truncated}${ellipsis}`;
+			return fitted + padding(Math.max(0, width - visibleWidth(fitted)));
 		}
 		return str + padding(width - visLen);
 	}

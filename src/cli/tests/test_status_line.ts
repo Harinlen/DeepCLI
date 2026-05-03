@@ -7,7 +7,7 @@ const { StatusLineComponent } = await load("../src/active-port/coding-agent/mode
 await initTheme(false);
 
 const statusLine = new StatusLineComponent({
-	model: { id: "claude-sonnet", name: "sonnet", provider: "anthropic" },
+	model: { id: "claude-sonnet", name: "sonnet", provider: "anthropic", contextWindow: 200_000 },
 	thinkingLevel: "off",
 	agent: {
 		state: {
@@ -34,7 +34,7 @@ const statusLine = new StatusLineComponent({
 				usage: { input: 1200, output: 300 },
 			},
 		],
-		model: { id: "claude-sonnet", name: "sonnet", provider: "anthropic" },
+		model: { id: "claude-sonnet", name: "sonnet", provider: "anthropic", contextWindow: 200_000 },
 	},
 	kernelConnectionState: "connected",
 	isFastModeEnabled: () => false,
@@ -47,7 +47,7 @@ assert(border.width > 0, "status line top border should render visible content")
 assert(border.content.includes("⏺"), "status line should show connected kernel state");
 assert(border.content.includes("sonnet"), "status line should include model segment");
 assert(border.content.includes("mustang") || border.content.includes("/tmp"), "status line should include cwd path segment");
-assert(border.content.includes("0.0%") || border.content.includes("◫"), "status line should include context segment");
+assert(border.content.includes("0.8%/200,000"), "status line should include computed context usage");
 
 const noModelStatusLine = new StatusLineComponent({
 	model: { id: "no-model", name: "no-model", provider: "ACP" },

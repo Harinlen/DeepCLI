@@ -235,6 +235,26 @@ async def test_agent_resource_view_refreshes_at_turn_start(
     assert calls == 1
 
 
+async def test_prompt_broadcasts_usage_update(
+    manager: SessionManager, tmp_path: Path
+) -> None:
+    fake_orch = manager._make_orchestrator.return_value[0]
+    fake_orch.last_turn_usage = (100, 25)
+    new_ctx = _make_ctx()
+    result = await manager.new(new_ctx, NewSessionParams(cwd=str(tmp_path)))
+
+    await manager.prompt(
+        _make_ctx(),
+        PromptParams(session_id=result.session_id, prompt=[TextBlock(text="hello")]),
+    )
+
+    updates = [call.args[1] for call in new_ctx.sender.notify.call_args_list]
+    usage = [update.update for update in updates if update.update.session_update == "usage_update"]
+    assert len(usage) == 1
+    assert usage[0].input_tokens == 100
+    assert usage[0].output_tokens == 25
+
+
 async def test_prompt_replays_completed_client_turn_id(
     manager: SessionManager,
     tmp_path: Path,

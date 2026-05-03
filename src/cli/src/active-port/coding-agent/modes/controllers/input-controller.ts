@@ -2,7 +2,7 @@
 import * as fs from "node:fs/promises";
 import { type AgentMessage, ThinkingLevel } from "@/compat/agent-core.js";
 import { sanitizeText } from "@/compat/natives.js";
-import type { AutocompleteProvider, SlashCommand } from "@/tui/index.js";
+import { matchesKey, type AutocompleteProvider, type SlashCommand } from "@/tui/index.js";
 import { $env } from "@/compat/utils.js";
 import { settings } from "../../config/settings";
 import { createPromptActionAutocompleteProvider } from "../../modes/prompt-action-autocomplete";
@@ -11,6 +11,7 @@ import type { InteractiveModeContext } from "../../modes/types";
 import type { AgentSessionEvent } from "../../session/agent-session";
 import { SKILL_PROMPT_MESSAGE_TYPE, type SkillPromptDetails } from "../../session/messages";
 import { executeBuiltinSlashCommand } from "../../slash-commands/builtin-registry";
+import { AssistantMessageComponent } from "../components/assistant-message";
 import { copyToClipboard, readImageFromClipboard } from "../../utils/clipboard";
 import { getEditorCommand, openInEditor } from "../../utils/external-editor";
 import { ensureSupportedImageInput } from "../../utils/image-loading";
@@ -127,6 +128,16 @@ export class InputController {
 		this.ctx.editor.onCopyPrompt = () => this.handleCopyPrompt();
 		this.ctx.editor.setActionKeys("app.tools.expand", this.ctx.keybindings.getKeys("app.tools.expand"));
 		this.ctx.editor.onExpandTools = () => this.toggleToolOutputExpansion();
+		this.ctx.ui.addInputListener?.(data => {
+			if (this.ctx.ui.hasOverlay?.()) return undefined;
+			for (const key of this.ctx.keybindings.getKeys("app.tools.expand")) {
+				if (matchesKey(data, key)) {
+					this.toggleToolOutputExpansion();
+					return { consume: true };
+				}
+			}
+			return undefined;
+		});
 		this.ctx.editor.setActionKeys("app.message.dequeue", this.ctx.keybindings.getKeys("app.message.dequeue"));
 		this.ctx.editor.onDequeue = () => this.handleDequeue();
 
@@ -661,18 +672,21 @@ export class InputController {
 		this.ctx.hideThinkingBlock = !this.ctx.hideThinkingBlock;
 		settings.set("hideThinkingBlock", this.ctx.hideThinkingBlock);
 
-		// Rebuild chat from session messages
-		this.ctx.chatContainer.clear();
-		this.ctx.rebuildChatFromMessages();
-
-		// If streaming, re-add the streaming component with updated visibility and re-render
+		// Update existing assistant components in place. Rebuilding the chat from
+		// session history can drop active ACP-only render blocks while streaming.
+		for (const child of this.ctx.chatContainer.children) {
+			if (child instanceof AssistantMessageComponent) {
+				child.setHideThinkingBlock(this.ctx.hideThinkingBlock);
+				child.invalidate();
+			}
+		}
 		if (this.ctx.streamingComponent && this.ctx.streamingMessage) {
 			this.ctx.streamingComponent.setHideThinkingBlock(this.ctx.hideThinkingBlock);
 			this.ctx.streamingComponent.updateContent(this.ctx.streamingMessage);
-			this.ctx.chatContainer.addChild(this.ctx.streamingComponent);
 		}
 
 		this.ctx.showStatus(`Thinking blocks: ${this.ctx.hideThinkingBlock ? "hidden" : "visible"}`);
+		this.ctx.ui.requestRender();
 	}
 
 	#getEditorTerminalPath(): string | null {

@@ -6,6 +6,9 @@ import { assert } from "./helpers.js";
 const load = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<any>;
 const { InputController } = await load("../src/active-port/coding-agent/modes/controllers/input-controller.ts");
 const { CommandController } = await load("../src/active-port/coding-agent/modes/controllers/command-controller.ts");
+const { AssistantMessageComponent } = await load("../src/active-port/coding-agent/modes/components/assistant-message.ts");
+
+await initTheme(false, "unicode", false, "dark", "dark");
 
 class FakeEditor {
 	text = "";
@@ -33,6 +36,7 @@ class FakeEditor {
 
 function makeContext() {
 	const calls: string[] = [];
+	const inputListeners: Array<(data: string) => { consume?: boolean } | undefined> = [];
 	const editor = new FakeEditor();
 	const session = {
 		isStreaming: false,
@@ -83,8 +87,20 @@ function makeContext() {
 		pendingPythonComponents: [],
 		bashComponent: undefined,
 		pythonComponent: undefined,
-		ui: { requestRender: () => calls.push("render"), onDebug: undefined },
-		chatContainer: { addChild: () => calls.push("chat-add") },
+		ui: {
+			requestRender: () => calls.push("render"),
+			onDebug: undefined,
+			hasOverlay: () => false,
+			addInputListener: (listener: (data: string) => { consume?: boolean } | undefined) => {
+				inputListeners.push(listener);
+				return () => {};
+			},
+		},
+		toolOutputExpanded: false,
+		chatContainer: {
+			children: [{ setExpanded: (expanded: boolean) => calls.push(`expand:${expanded}`) }],
+			addChild: () => calls.push("chat-add"),
+		},
 		pendingMessagesContainer: { addChild: () => calls.push("pending-add") },
 		hasActiveBtw: () => false,
 		handleBtwEscape: () => false,
@@ -123,13 +139,45 @@ function makeContext() {
 			await session.executePython(code, () => {}, { excludeFromContext: excluded });
 		},
 	};
-	return { ctx, editor, calls };
+	return { ctx, editor, calls, inputListeners };
 }
 
-const { ctx, editor, calls } = makeContext();
+const { ctx, editor, calls, inputListeners } = makeContext();
 const controller = new InputController(ctx);
 controller.setupKeyHandlers();
 controller.setupEditorSubmitHandler();
+
+const expandResult = inputListeners[0]?.("\x0f");
+assert(expandResult?.consume === true, "TUI-level Ctrl+O handler should consume the expand shortcut");
+assert(ctx.toolOutputExpanded === true, "TUI-level Ctrl+O should toggle tool output expansion");
+assert(calls.includes("expand:true"), "TUI-level Ctrl+O should update expandable chat components");
+
+let thinkingHideValue: boolean | undefined;
+let thinkingInvalidated: boolean = false;
+const thinkingComponent = new AssistantMessageComponent({
+	role: "assistant",
+	content: [{ type: "thinking", thinking: "trace" }],
+	timestamp: 0,
+} as never, false);
+thinkingComponent.setHideThinkingBlock = (hide: boolean) => {
+	thinkingHideValue = hide;
+};
+thinkingComponent.invalidate = () => {
+	thinkingInvalidated = true;
+};
+ctx.chatContainer.children.push(thinkingComponent);
+ctx.streamingComponent = thinkingComponent;
+ctx.streamingMessage = {
+	role: "assistant",
+	content: [{ type: "thinking", thinking: "trace" }],
+	timestamp: 0,
+};
+controller.toggleThinkingBlockVisibility();
+assert(ctx.hideThinkingBlock === true, "thinking toggle should update hidden flag");
+assert(thinkingHideValue === true, "thinking toggle should update existing assistant components");
+assert(thinkingInvalidated, "thinking toggle should re-render existing assistant components");
+assert(!calls.includes("chat-clear"), "thinking toggle must not clear and rebuild the chat");
+assert(calls.some(item => item === "status:Thinking blocks: hidden"), "thinking toggle should report hidden state");
 
 editor.setText("!");
 assert(ctx.isBashMode, "typing ! should enter bash mode");
@@ -237,7 +285,6 @@ assert(
 	"builtin slash commands should fail through the TUI error path",
 );
 
-await initTheme(false, "unicode", false, "dark", "dark");
 const themeCalls: string[] = [];
 const themeCtx = {
 	enableThemeWatcher: false,

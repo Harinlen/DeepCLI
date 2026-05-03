@@ -464,6 +464,7 @@ async def _handle_profile_list(
                 name=info.name,
                 provider_type=info.provider_type,
                 model_id=info.model_id,
+                context_window=info.context_window,
                 is_default=info.is_default,
             )
             for info in result.profiles

@@ -97,6 +97,16 @@ class AvailableCommandsUpdate(AcpModel):
     meta: dict[str, Any] | None = None
 
 
+class UsageUpdate(AcpModel):
+    session_update: Literal["usage_update"] = "usage_update"
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    duration_ms: int | None = None
+    meta: dict[str, Any] | None = None
+
+
 class MustangExecution(AcpModel):
     phase: Literal["start", "chunk", "end"]
     kind: Literal["shell", "python"]
@@ -128,6 +138,7 @@ SessionUpdate = Annotated[
         ConfigOptionUpdate,
         SessionInfoUpdate,
         AvailableCommandsUpdate,
+        UsageUpdate,
     ],
     Field(discriminator="session_update"),
 ]

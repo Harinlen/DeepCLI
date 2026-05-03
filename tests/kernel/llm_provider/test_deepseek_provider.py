@@ -118,3 +118,14 @@ async def test_stream_enables_reasoning_and_replays_reasoning_content() -> None:
         TextChunk(content="answer"),
         UsageChunk(input_tokens=0, output_tokens=0),
     ]
+
+
+async def test_context_window_for_current_models() -> None:
+    provider = DeepSeekProvider(api_key=None, base_url=None)
+    try:
+        assert await provider.context_window("deepseek-v4-pro") == 1_000_000
+        assert await provider.context_window("deepseek-v4-flash") == 1_000_000
+        assert await provider.context_window("deepseek-chat") == 1_000_000
+        assert await provider.context_window("unknown") is None
+    finally:
+        await provider.aclose()

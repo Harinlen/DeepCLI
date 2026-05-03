@@ -14,6 +14,7 @@ type AssistantMessage = {
 	content: Array<{ type: "thinking"; thinking: string } | { type: "text"; text: string } | { type: "toolCall"; id: string; name: string; arguments: Record<string, unknown>; partialJson?: string }>;
 	stopReason?: string;
 	usage?: Record<string, unknown>;
+	duration?: number;
 	timestamp: number;
 };
 
@@ -49,8 +50,8 @@ export class MustangAgentSessionAdapter {
 	readonly sessionId: string;
 
 	messages: any[] = [];
-	state: { messages: any[]; model: { id: string; name: string; provider: string; thinking?: boolean } };
-	model: { id: string; name: string; provider: string; thinking?: boolean };
+	state: { messages: any[]; model: { id: string; name: string; provider: string; thinking?: boolean; contextWindow?: number | null } };
+	model: { id: string; name: string; provider: string; thinking?: boolean; contextWindow?: number | null };
 	thinkingLevel = "off";
 	isStreaming = false;
 	isCompacting = false;
@@ -80,6 +81,7 @@ export class MustangAgentSessionAdapter {
 			id: profile?.modelId ?? defaultModel,
 			name: profile?.name ?? defaultModel,
 			provider: profile?.providerType ?? "ACP",
+			contextWindow: profile?.contextWindow ?? null,
 		};
 		this.agent = {
 			model: this.model,
@@ -283,6 +285,7 @@ export class MustangAgentSessionAdapter {
 			id: profile?.modelId ?? state.defaultModel ?? "no-model",
 			name: profile?.name ?? state.defaultModel ?? "no-model",
 			provider: profile?.providerType ?? "ACP",
+			contextWindow: profile?.contextWindow ?? null,
 		};
 		this.agent.model = this.model;
 		this.state.model = this.model;
@@ -361,6 +364,22 @@ export class MustangAgentSessionAdapter {
 			case "session_info_update":
 				if (typeof update.title === "string") this.sessionManager.setSessionNameLocal(update.title, "auto");
 				break;
+			case "usage_update":
+				this.#applyUsageUpdate(update);
+				break;
+		}
+	}
+
+	#applyUsageUpdate(update: SessionUpdateParams): void {
+		if (!this.#activeAssistant) return;
+		const input = numberFromUpdate(update.inputTokens ?? update.input_tokens);
+		const output = numberFromUpdate(update.outputTokens ?? update.output_tokens);
+		const cacheRead = numberFromUpdate(update.cacheReadTokens ?? update.cache_read_tokens);
+		const cacheWrite = numberFromUpdate(update.cacheWriteTokens ?? update.cache_write_tokens);
+		this.#activeAssistant.usage = { input, output, cacheRead, cacheWrite };
+		const duration = numberFromUpdate(update.durationMs ?? update.duration_ms);
+		if (duration > 0) {
+			this.#activeAssistant.duration = duration;
 		}
 	}
 
@@ -519,6 +538,10 @@ function normalizeToolContent(content: unknown, status: string): Array<{ type: s
 	if (typeof content === "string") return [{ type: "text", text: content }];
 	if (status === "in_progress") return [{ type: "text", text: "Running..." }];
 	return status ? [{ type: "text", text: status }] : [];
+}
+
+function numberFromUpdate(value: unknown): number {
+	return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function normalizeTitleSource(value: unknown): "auto" | "user" | undefined {

@@ -17,6 +17,9 @@ class ProfileInfo(BaseModel):
     model_id: str
     """Actual API model identifier (e.g. ``"claude-opus-4-6"``)."""
 
+    context_window: int | None = None
+    """Max context window in tokens, if known."""
+
     is_default: bool
     """Whether this profile is the current kernel default."""
 

@@ -124,6 +124,7 @@ export class AssistantMessageComponent extends Container {
 					this.#contentContainer.addChild(
 						new Markdown(content.thinking.trim(), 1, 0, getMarkdownTheme(), {
 							color: (text: string) => theme.fg("thinkingText", text),
+							codeColor: (text: string) => theme.fg("thinkingText", text),
 							italic: true,
 						}),
 					);

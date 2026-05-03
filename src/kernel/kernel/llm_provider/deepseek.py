@@ -7,6 +7,12 @@ from kernel.llm_provider.format.openai import messages_to_openai
 from kernel.llm_provider.openai_compatible import OpenAICompatibleProvider
 
 _DEFAULT_BASE_URL = "https://api.deepseek.com"
+_CONTEXT_WINDOWS: dict[str, int] = {
+    "deepseek-v4-flash": 1_000_000,
+    "deepseek-v4-pro": 1_000_000,
+    "deepseek-chat": 1_000_000,
+    "deepseek-reasoner": 1_000_000,
+}
 
 
 class DeepSeekProvider(OpenAICompatibleProvider):
@@ -63,3 +69,6 @@ class DeepSeekProvider(OpenAICompatibleProvider):
             system,
             include_reasoning_content=True,
         )
+
+    async def context_window(self, model_id: str) -> int | None:
+        return _CONTEXT_WINDOWS.get(model_id)

@@ -29,6 +29,7 @@ class AcpProfileEntry(AcpModel):
     name: str
     provider_type: str
     model_id: str
+    context_window: int | None = None
     is_default: bool
 
 

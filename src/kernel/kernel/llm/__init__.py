@@ -240,16 +240,19 @@ class LLMManager(Subsystem):
         default_ref = self._current_used.default
         profiles: list[ProfileInfo] = []
         for provider_name, pcfg in self._providers.items():
+            provider = self._get_provider_instance(pcfg)
             for spec in pcfg.models or []:
                 is_default = (
                     default_ref.provider == provider_name
                     and default_ref.model == spec.id
                 )
+                context_window = await provider.context_window(spec.id)
                 profiles.append(
                     ProfileInfo(
                         name=f"{provider_name}/{spec.id}",
                         provider_type=pcfg.type,
                         model_id=spec.id,
+                        context_window=context_window,
                         is_default=is_default,
                     )
                 )

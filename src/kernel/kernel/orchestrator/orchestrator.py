@@ -420,6 +420,7 @@ def _merge_config_patch(
         if patch.streaming_tools is not None
         else current.streaming_tools,
         language=patch.language if patch.language is not None else current.language,
+        thinking=patch.thinking if patch.thinking is not None else current.thinking,
     )
 
 

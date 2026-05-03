@@ -167,10 +167,18 @@ export class InteractiveMode {
       return controller.handleRequest(req);
     });
     this.client.onDisconnect((error) => {
+      if (this.adapter.isStreaming) {
+        this.mode.ui?.requestRender?.();
+        return;
+      }
       this.mode.showError(error.message);
     });
     this.client.onReconnect(() => {
-      this.mode.showError("Kernel connection restored.");
+      if (this.adapter.isStreaming) {
+        this.mode.ui?.requestRender?.();
+        return;
+      }
+      this.mode.showStatus("Kernel connection restored.");
     });
     await this.mode.init();
     void this.inputLoop();

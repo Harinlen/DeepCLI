@@ -4,6 +4,7 @@ export interface ModelProfile {
   name: string;
   providerType: string;
   modelId: string;
+  contextWindow?: number | null;
   isDefault: boolean;
 }
 
@@ -22,6 +23,8 @@ interface RawProfile {
   provider_type?: unknown;
   modelId?: unknown;
   model_id?: unknown;
+  contextWindow?: unknown;
+  context_window?: unknown;
   isDefault?: unknown;
   is_default?: unknown;
 }
@@ -68,6 +71,11 @@ function mapProfile(raw: RawProfile): ModelProfile | null {
     name,
     providerType,
     modelId,
+    contextWindow: numberOrNull(raw.contextWindow ?? raw.context_window),
     isDefault: Boolean(raw.isDefault ?? raw.is_default),
   };
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }

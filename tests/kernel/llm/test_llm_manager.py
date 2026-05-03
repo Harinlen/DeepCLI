@@ -67,6 +67,9 @@ class FakeProvider(Provider):
     async def models(self) -> list[ModelInfo]:
         return []
 
+    async def context_window(self, model_id: str) -> int | None:
+        return 123_456
+
 
 # ---------------------------------------------------------------------------
 # Helper -- build LLMManager with pre-populated internal state
@@ -357,6 +360,24 @@ class TestModelFor:
         )
         with pytest.raises(KeyError):
             mgr.model_for("compact")
+
+
+# ---------------------------------------------------------------------------
+# list_profiles
+# ---------------------------------------------------------------------------
+
+
+class TestListProfiles:
+    @pytest.mark.anyio
+    async def test_includes_context_window(self):
+        p = FakeProvider()
+        mgr = _make_manager(
+            providers={"anthropic": (_pcfg("claude-opus-4-6"), p)},
+        )
+
+        result = await mgr.list_profiles(MagicMock(), MagicMock())
+
+        assert result.profiles[0].context_window == 123_456
 
 
 # ---------------------------------------------------------------------------

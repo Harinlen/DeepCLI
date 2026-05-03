@@ -24,6 +24,8 @@ class OrchestratorConfig:
     streaming_tools: bool = False
     # Optional natural-language hint injected into the system prompt.
     language: str | None = None
+    # Request provider reasoning/thinking when the selected model supports it.
+    thinking: bool = True
 
 
 @dataclass
@@ -39,3 +41,4 @@ class OrchestratorConfigPatch:
     temperature: float | None = None
     streaming_tools: bool | None = None
     language: str | None = None
+    thinking: bool | None = None

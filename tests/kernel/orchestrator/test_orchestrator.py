@@ -20,6 +20,7 @@ import asyncio
 from typing import Any
 
 
+from kernel.llm.config import ModelRef
 from kernel.llm.types import (
     TextContent,
     ThinkingContent,
@@ -155,6 +156,30 @@ async def test_thinking_chunks_yield_thought_delta(
     thought_events = [e for e in events if isinstance(e, ThoughtDelta)]
     assert len(thought_events) >= 1
     assert any("Let me reason" in e.content for e in thought_events)
+
+
+async def test_thinking_enabled_by_default_for_model_spec(
+    make_orchestrator, fake_provider: FakeLLMProvider
+) -> None:
+    fake_provider.add_text_response("ok")
+    orc = make_orchestrator()
+    await collect(orc.query([TextContent(text="q")], on_permission=no_permission))
+    assert fake_provider.calls[0]["thinking"] is True
+
+
+async def test_thinking_can_be_disabled_by_orchestrator_config(
+    make_orchestrator, fake_provider: FakeLLMProvider
+) -> None:
+    fake_provider.add_text_response("ok")
+    orc = make_orchestrator(
+        config=OrchestratorConfig(
+            model=ModelRef(provider="fake", model="fake-model"),
+            temperature=None,
+            thinking=False,
+        )
+    )
+    await collect(orc.query([TextContent(text="q")], on_permission=no_permission))
+    assert fake_provider.calls[0]["thinking"] is False
 
 
 async def test_thinking_content_stored_in_history(

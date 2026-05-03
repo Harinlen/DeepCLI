@@ -8,6 +8,7 @@ const updates = [
 	{ sessionUpdate: "tool_call_update", toolCallId: "tool-1", status: "in_progress", content: "running" },
 	{ sessionUpdate: "tool_call_update", toolCallId: "tool-1", status: "completed", content: "done" },
 	{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "after" } },
+	{ sessionUpdate: "usage_update", inputTokens: 123, outputTokens: 45, durationMs: 1500 },
 	{ sessionUpdate: "session_info_update", title: "New title" },
 ];
 
@@ -39,7 +40,7 @@ const adapter = new MustangAgentSessionAdapter({
 	client: {} as never,
 	session: fakeSession as never,
 	sessionService: fakeSessionService as never,
-	modelProfiles: [],
+	modelProfiles: [{ name: "deepseek/deepseek-chat", providerType: "deepseek", modelId: "deepseek-chat", isDefault: true, contextWindow: 64_000 }],
 });
 
 const events: string[] = [];
@@ -78,7 +79,10 @@ assert(stats.sessionId === "sess-1", "/session stats should include session id")
 assert(stats.userMessages === 1, "/session stats should count user messages");
 assert(stats.assistantMessages === 1, "/session stats should count assistant messages");
 assert(stats.toolCalls === 1, "/session stats should count tool calls");
-assert(stats.tokens.total === 0, "/session stats should expose token totals");
+assert(stats.tokens.input === 123, "/session stats should include live input token totals");
+assert(stats.tokens.output === 45, "/session stats should include live output token totals");
+assert(stats.tokens.total === 168, "/session stats should expose token totals");
+assert(adapter.state.model.contextWindow === 64_000, "adapter should expose model context window to status line");
 assert(adapter.getAsyncJobSnapshot().running.length === 0, "adapter should expose empty async job snapshot");
 assert(adapter.modelRegistry.authStorage.hasOAuth("deepseek") === false, "adapter should expose no-op OAuth auth storage");
 assert(adapter.modelRegistry.authStorage.has("deepseek") === false, "adapter should expose no-op API key auth storage");
@@ -93,6 +97,7 @@ assert(assistant?.content.some((block: { type: string; text?: string }) => block
 assert(assistant?.content.some((block: { type: string; text?: string }) => block.type === "text" && block.text === "after"), "assistant text after tool should be appended");
 assert(assistant?.content.some((block: { type: string; thinking?: string }) => block.type === "thinking" && block.thinking === "thinking"), "assistant thinking chunk should be appended");
 assert(assistant?.content.some((block: { type: string; id?: string }) => block.type === "toolCall" && block.id === "tool-1"), "tool call should be appended to assistant message");
+assert(assistant?.usage?.input === 123 && assistant?.usage?.output === 45, "usage_update should attach usage to assistant message");
 
 const delayedAdapter = new MustangAgentSessionAdapter({
 	client: {} as never,

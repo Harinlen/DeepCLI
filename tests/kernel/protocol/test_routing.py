@@ -37,6 +37,7 @@ from kernel.protocol.acp.routing import (
     _handle_rename_session,
     _handle_resume,
     _handle_cancel,
+    _handle_profile_list,
     _handle_provider_list,
     _handle_provider_add,
     _handle_provider_remove,
@@ -45,6 +46,7 @@ from kernel.protocol.acp.routing import (
 )
 from kernel.protocol.acp.schemas.model import (
     AddProviderRequest,
+    ListProfilesRequest,
     ListProvidersRequest,
     RefreshModelsRequest,
     RemoveProviderRequest,
@@ -75,6 +77,10 @@ from kernel.protocol.interfaces.contracts.execution_result import ExecutionResul
 from kernel.protocol.interfaces.contracts.list_providers_result import (
     ListProvidersResult,
     ProviderInfo,
+)
+from kernel.protocol.interfaces.contracts.list_profiles_result import (
+    ListProfilesResult,
+    ProfileInfo,
 )
 from kernel.protocol.interfaces.contracts.new_session_result import NewSessionResult
 from kernel.protocol.interfaces.contracts.load_session_result import LoadSessionResult
@@ -490,6 +496,28 @@ class TestHandleUserRepl:
 # ---------------------------------------------------------------------------
 # Model handler wrappers
 # ---------------------------------------------------------------------------
+
+
+class TestHandleProfileList:
+    async def test_converts_context_window(self) -> None:
+        mh = MagicMock()
+        mh.list_profiles = AsyncMock(
+            return_value=ListProfilesResult(
+                profiles=[
+                    ProfileInfo(
+                        name="anthropic/claude-opus-4-6",
+                        provider_type="anthropic",
+                        model_id="claude-opus-4-6",
+                        context_window=200_000,
+                        is_default=True,
+                    ),
+                ],
+                default_model="anthropic/claude-opus-4-6",
+            )
+        )
+        result = await _handle_profile_list(mh, _ctx(), ListProfilesRequest())
+        assert len(result.profiles) == 1
+        assert result.profiles[0].context_window == 200_000
 
 
 class TestHandleProviderList:

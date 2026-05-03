@@ -179,7 +179,20 @@ for (const frame of frames) {
 	assertNoOverflow(frame.name, frame.lines, 90);
 }
 
-console.log(`PASS: R5 UI golden frames (${frames.length})`);
+const cjkWelcomeWidth = 70;
+const cjkWelcome = new WelcomeComponent(
+	"0.1.0",
+	"deepseek/deepseek-v4-pro",
+	"deepseek",
+	[
+		{ name: "帮我看一下这个题怎么做：https://acm.hdu.edu.cn/showproblem.php?pid=1055", timeAgo: "11m ago" },
+		{ name: "那这个呢：https://acm.hdu.edu.cn/showproblem.php?pid=1087", timeAgo: "16m ago" },
+	],
+	[],
+).render(cjkWelcomeWidth + 2);
+assertNoOverflow("welcome with CJK recent sessions", cjkWelcome, cjkWelcomeWidth);
+
+console.log(`PASS: R5 UI golden frames (${frames.length + 1})`);
 process.exit(0);
 
 function normalize(lines: string[]): string {

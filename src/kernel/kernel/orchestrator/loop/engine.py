@@ -160,6 +160,7 @@ async def run_query(
                     tool_schemas=tool_schemas,
                     model=orchestrator._config.model,
                     temperature=orchestrator._config.temperature,
+                    thinking=orchestrator._config.thinking,
                     max_tokens=turn.max_tokens_override,
                 )
                 async for chunk in stream:

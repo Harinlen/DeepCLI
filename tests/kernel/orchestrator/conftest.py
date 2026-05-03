@@ -118,6 +118,7 @@ class FakeLLMProvider:
                 "tool_schemas": tool_schemas,
                 "model": model,
                 "temperature": temperature,
+                "thinking": thinking,
                 "max_tokens": max_tokens,
             }
         )

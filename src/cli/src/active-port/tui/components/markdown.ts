@@ -11,6 +11,8 @@ import { applyBackgroundToLine, padding, replaceTabs, visibleWidth, wrapTextWith
 export interface DefaultTextStyle {
 	/** Foreground color function */
 	color?: (text: string) => string;
+	/** Inline code color function. Defaults to MarkdownTheme.code. */
+	codeColor?: (text: string) => string;
 	/** Background color function */
 	bgColor?: (text: string) => string;
 	/** Bold text */
@@ -486,7 +488,7 @@ export class Markdown implements Component {
 				}
 
 				case "codespan":
-					result += this.#theme.code(token.text) + stylePrefix;
+					result += (this.#defaultTextStyle?.codeColor ?? this.#theme.code)(token.text) + stylePrefix;
 					break;
 
 				case "link": {

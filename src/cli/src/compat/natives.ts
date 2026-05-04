@@ -254,6 +254,7 @@ export function parseKey(data: string, ..._rest: unknown[]): string | undefined 
 		"\x1b[B": "down",
 		"\x1b[C": "right",
 		"\x1b[D": "left",
+		"\x1b[Z": "shift+tab",
 	};
 	const mapped = map[data];
 	if (mapped) return mapped;

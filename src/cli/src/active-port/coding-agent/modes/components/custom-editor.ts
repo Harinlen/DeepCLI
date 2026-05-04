@@ -11,6 +11,7 @@ type ConfigurableEditorAction = Extract<
 	| "app.thinking.cycle"
 	| "app.model.cycleForward"
 	| "app.model.cycleBackward"
+	| "app.permissionMode.cycle"
 	| "app.model.select"
 	| "app.model.selectTemporary"
 	| "app.tools.expand"
@@ -27,9 +28,10 @@ const DEFAULT_ACTION_KEYS: Record<ConfigurableEditorAction, KeyId[]> = {
 	"app.clear": ["ctrl+c"],
 	"app.exit": ["ctrl+d"],
 	"app.suspend": ["ctrl+z"],
-	"app.thinking.cycle": ["shift+tab"],
+	"app.thinking.cycle": [],
 	"app.model.cycleForward": ["ctrl+p"],
 	"app.model.cycleBackward": ["shift+ctrl+p"],
+	"app.permissionMode.cycle": ["shift+tab"],
 	"app.model.select": ["ctrl+l"],
 	"app.model.selectTemporary": ["alt+p"],
 	"app.tools.expand": ["ctrl+o"],
@@ -50,6 +52,7 @@ export class CustomEditor extends Editor {
 	onClear?: () => void;
 	onExit?: () => void;
 	onCycleThinkingLevel?: () => void;
+	onCyclePermissionMode?: () => void;
 	onCycleModelForward?: () => void;
 	onCycleModelBackward?: () => void;
 	onSelectModel?: () => void;
@@ -150,6 +153,12 @@ export class CustomEditor extends Editor {
 		// Intercept configured model selector shortcut
 		if (this.#matchesAction(data, "app.model.select") && this.onSelectModel) {
 			this.onSelectModel();
+			return;
+		}
+
+		// Intercept configured permission-mode cycling
+		if (this.#matchesAction(data, "app.permissionMode.cycle") && this.onCyclePermissionMode) {
+			this.onCyclePermissionMode();
 			return;
 		}
 

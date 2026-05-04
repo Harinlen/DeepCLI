@@ -4,12 +4,14 @@ import { setMustangSessionProvider, type SessionInfo } from "@/active-port/codin
 import type { AgentSessionEvent } from "@/active-port/coding-agent/session/agent-session.js";
 import type { AcpClient, KernelConnectionState, SessionUpdateParams } from "@/acp/client.js";
 import { ModelService, type ModelProfile, type ProviderModelItem, type ProviderModelState } from "@/models/service.js";
-import { MustangSession } from "@/session.js";
+import { MustangSession, type PermissionMode } from "@/session.js";
 import { SessionService } from "@/sessions/service.js";
 import type { CliSessionInfo } from "@/sessions/types.js";
 import { Box, Text } from "@/tui/index.js";
 
 type Listener = (event: AgentSessionEvent) => void | Promise<void>;
+
+const PERMISSION_MODE_CYCLE: PermissionMode[] = ["default", "accept_edits", "plan", "dont_ask", "auto", "bypass"];
 
 type AssistantMessage = {
 	role: "assistant";
@@ -63,6 +65,7 @@ export class MustangAgentSessionAdapter {
 	isTtsrAbortPending = false;
 	retryAttempt = 0;
 	queuedMessageCount = 0;
+	currentPermissionMode: PermissionMode = "default";
 
 	#listeners = new Set<Listener>();
 	#activeAssistant: AssistantMessage | undefined;
@@ -90,6 +93,10 @@ export class MustangAgentSessionAdapter {
 			messages: this.messages,
 		};
 		this.state = { messages: this.messages, model: this.model };
+		this.currentPermissionMode = extractPermissionMode(options.session?.summary) ?? "default";
+		if (typeof options.client.onUpdate === "function") {
+			options.client.onUpdate(update => this.#handleAmbientUpdate(update));
+		}
 		setMustangSessionProvider({
 			listSessions: async (_cwd?: string, limit = 50) => this.listSessionInfos(limit),
 		});
@@ -325,6 +332,20 @@ export class MustangAgentSessionAdapter {
 		return this.setCurrentModelRole(role, item.providerName, item.modelId);
 	}
 
+	async cyclePermissionMode(): Promise<PermissionMode> {
+		const currentIndex = PERMISSION_MODE_CYCLE.indexOf(this.currentPermissionMode);
+		const nextMode = PERMISSION_MODE_CYCLE[(currentIndex + 1) % PERMISSION_MODE_CYCLE.length] ?? "default";
+		await this.setPermissionMode(nextMode);
+		return nextMode;
+	}
+
+	async setPermissionMode(mode: PermissionMode): Promise<void> {
+		if (this.options.session) {
+			await this.options.session.setMode(mode);
+		}
+		this.currentPermissionMode = mode;
+	}
+
 	listSessions(limit = 20): Promise<CliSessionInfo[]> {
 		return this.options.sessionService.list({ cwd: this.sessionManager.getCwd(), limit });
 	}
@@ -338,6 +359,11 @@ export class MustangAgentSessionAdapter {
 		const result = await this.options.sessionService.create(this.sessionManager.getCwd());
 		this.options.session = new MustangSession(this.options.sessionService.clientForSession(), result.sessionId);
 		this.sessionManager.replaceSession(this.options.session);
+		if (this.currentPermissionMode !== "default") {
+			await this.options.session.setMode(this.currentPermissionMode);
+		} else {
+			this.#applySessionSetupMode(result);
+		}
 		return result.sessionId;
 	}
 
@@ -346,6 +372,7 @@ export class MustangAgentSessionAdapter {
 		const summary = "session" in result ? result.session as any : undefined;
 		this.options.session = new MustangSession(this.options.sessionService.clientForSession(), result.sessionId, summary);
 		this.sessionManager.replaceSession(this.options.session);
+		this.#applySessionSetupMode(result);
 		return result.sessionId;
 	}
 
@@ -378,12 +405,28 @@ export class MustangAgentSessionAdapter {
 		const session = new MustangSession(this.options.sessionService.clientForSession(), result.sessionId);
 		this.options.session = session;
 		this.sessionManager.replaceSession(session);
+		if (this.currentPermissionMode !== "default") {
+			await session.setMode(this.currentPermissionMode);
+		} else {
+			this.#applySessionSetupMode(result);
+		}
 		return session;
 	}
 
 	#requireSession(message: string): MustangSession {
 		if (!this.options.session) throw new Error(message);
 		return this.options.session;
+	}
+
+	#applySessionSetupMode(result: unknown): void {
+		this.currentPermissionMode = extractPermissionMode(result) ?? this.currentPermissionMode;
+	}
+
+	#handleAmbientUpdate(update: SessionUpdateParams): void {
+		if (this.options.session && update.sessionId !== this.options.session.sessionId) return;
+		if (update.sessionUpdate !== "current_mode_update") return;
+		const mode = parsePermissionMode(update.modeId ?? update.mode_id);
+		if (mode) this.currentPermissionMode = mode;
 	}
 
 	#handleUpdate(update: SessionUpdateParams): void {
@@ -403,6 +446,7 @@ export class MustangAgentSessionAdapter {
 				this.#updateTool(update, false);
 				break;
 			case "current_mode_update":
+				this.#handleAmbientUpdate(update);
 				break;
 			case "session_info_update":
 				if (typeof update.title === "string") this.sessionManager.setSessionNameLocal(update.title, "auto");
@@ -723,6 +767,29 @@ function numberFromUpdate(value: unknown): number {
 
 function normalizeTitleSource(value: unknown): "auto" | "user" | undefined {
 	return value === "auto" || value === "user" ? value : undefined;
+}
+
+function parsePermissionMode(value: unknown): PermissionMode | undefined {
+	return typeof value === "string" && (PERMISSION_MODE_CYCLE as string[]).includes(value)
+		? value as PermissionMode
+		: undefined;
+}
+
+function extractPermissionMode(value: unknown): PermissionMode | undefined {
+	const item = value as { modes?: unknown; configOptions?: unknown; raw?: unknown } | undefined;
+	const modes = item?.modes as { currentModeId?: unknown; current_mode_id?: unknown } | undefined;
+	const fromModes = parsePermissionMode(modes?.currentModeId ?? modes?.current_mode_id);
+	if (fromModes) return fromModes;
+
+	const configOptions = Array.isArray(item?.configOptions) ? item.configOptions : undefined;
+	const modeConfig = configOptions?.find(option => {
+		const record = option as { configId?: unknown; config_id?: unknown } | undefined;
+		return record?.configId === "mode" || record?.config_id === "mode";
+	}) as { currentValue?: unknown; current_value?: unknown } | undefined;
+	const fromConfig = parsePermissionMode(modeConfig?.currentValue ?? modeConfig?.current_value);
+	if (fromConfig) return fromConfig;
+
+	return item?.raw ? extractPermissionMode(item.raw) : undefined;
 }
 
 function cliSessionToOmpSessionInfo(session: CliSessionInfo): SessionInfo {

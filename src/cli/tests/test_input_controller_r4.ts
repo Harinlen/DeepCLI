@@ -22,6 +22,7 @@ class FakeEditor {
 	onHistorySearch?: () => void;
 	onDequeue?: () => void;
 	onShowHotkeys?: () => void;
+	onCyclePermissionMode?: () => void;
 
 	setActionKeys() {}
 	clearCustomKeyHandlers() {}
@@ -68,6 +69,10 @@ function makeContext() {
 			calls.push("session-delete-confirm");
 			return "new-session";
 		},
+		cyclePermissionMode: async () => {
+			calls.push("cycle-permission");
+			return "accept_edits";
+		},
 	};
 	const ctx: any = {
 		editor,
@@ -102,6 +107,7 @@ function makeContext() {
 			addChild: () => calls.push("chat-add"),
 		},
 		pendingMessagesContainer: { addChild: () => calls.push("pending-add") },
+		statusLine: { invalidate: () => calls.push("status-invalidate") },
 		hasActiveBtw: () => false,
 		handleBtwEscape: () => false,
 		updateEditorBorderColor: () => calls.push(`border:${ctx.isBashMode ? "bash" : ctx.isPythonMode ? "python" : "normal"}`),
@@ -151,6 +157,13 @@ const expandResult = inputListeners[0]?.("\x0f");
 assert(expandResult?.consume === true, "TUI-level Ctrl+O handler should consume the expand shortcut");
 assert(ctx.toolOutputExpanded === true, "TUI-level Ctrl+O should toggle tool output expansion");
 assert(calls.includes("expand:true"), "TUI-level Ctrl+O should update expandable chat components");
+editor.onCyclePermissionMode?.();
+await new Promise(resolve => setTimeout(resolve, 0));
+assert(calls.includes("cycle-permission"), "Shift+Tab handler should cycle permission mode");
+assert(
+	calls.some(item => item.includes("Switch mode to") && item.includes("Edit automatically") && item.includes("DeepCLI will edit")),
+	"permission cycle should report the next mode behavior",
+);
 
 let thinkingHideValue: boolean | undefined;
 let thinkingInvalidated: boolean = false;

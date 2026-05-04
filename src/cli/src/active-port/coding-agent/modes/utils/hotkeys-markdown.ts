@@ -38,7 +38,7 @@ export function buildHotkeysMarkdown(bindings: HotkeysMarkdownBindings): string 
 		`| \`${appKey(bindings, "app.clear")}\` | Clear editor (first) / exit (second) |`,
 		`| \`${appKey(bindings, "app.exit")}\` | Exit (when editor is empty) |`,
 		`| \`${appKey(bindings, "app.suspend")}\` | Suspend to background |`,
-		`| \`${appKey(bindings, "app.thinking.cycle")}\` | Cycle thinking level |`,
+		`| \`${appKey(bindings, "app.permissionMode.cycle")}\` | Cycle permission mode |`,
 		`| \`${appKey(bindings, "app.model.cycleForward")}\` | Cycle role models (slow/default/smol) |`,
 		`| \`${appKey(bindings, "app.model.cycleBackward")}\` | Cycle role models (temporary) |`,
 		`| \`${appKey(bindings, "app.model.selectTemporary")}\` | Select model (temporary) |`,

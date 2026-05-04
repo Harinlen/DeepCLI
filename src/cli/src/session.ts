@@ -16,6 +16,8 @@ type MustangSessionClient = Pick<
   "request" | "notify" | "promptRequest" | "executeShellRequest" | "executePythonRequest" | "onUpdate"
 >;
 
+export type PermissionMode = "default" | "accept_edits" | "plan" | "auto" | "dont_ask" | "bypass";
+
 const RESUME_RETRY_ATTEMPTS = 24;
 const RESUME_RETRY_DELAY_MS = 250;
 
@@ -104,7 +106,7 @@ export class MustangSession {
     this.client.notify(MustangMethod.sessionCancelExecution, { sessionId: this.sessionId, kind });
   }
 
-  async setMode(mode: "default" | "plan"): Promise<void> {
+  async setMode(mode: PermissionMode): Promise<void> {
     await this.client.request(AcpMethod.sessionSetMode, {
       sessionId: this.sessionId,
       modeId: mode,

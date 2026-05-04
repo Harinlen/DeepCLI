@@ -8,6 +8,7 @@ import { settings } from "../../config/settings";
 import { createPromptActionAutocompleteProvider } from "../../modes/prompt-action-autocomplete";
 import { theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext } from "../../modes/types";
+import { permissionModeDisplay } from "../components/status-line/permission-mode";
 import type { AgentSessionEvent } from "../../session/agent-session";
 import { SKILL_PROMPT_MESSAGE_TYPE, type SkillPromptDetails } from "../../session/messages";
 import { executeBuiltinSlashCommand } from "../../slash-commands/builtin-registry";
@@ -20,6 +21,14 @@ import { setSessionTerminalTitle } from "@/terminal-title.js";
 
 interface Expandable {
 	setExpanded(expanded: boolean): void;
+}
+
+function colorPermissionModeText(color: string, text: string): string {
+	if (color.startsWith("#")) {
+		const ansi = Bun.color(color, "ansi-16m");
+		return ansi ? `${ansi}${text}\x1b[39m` : text;
+	}
+	return theme.fg(color, text);
 }
 
 function isExpandable(obj: unknown): obj is Expandable {
@@ -95,6 +104,8 @@ export class InputController {
 		this.ctx.editor.onSuspend = () => this.handleCtrlZ();
 		this.ctx.editor.setActionKeys("app.thinking.cycle", this.ctx.keybindings.getKeys("app.thinking.cycle"));
 		this.ctx.editor.onCycleThinkingLevel = () => this.cycleThinkingLevel();
+		this.ctx.editor.setActionKeys("app.permissionMode.cycle", this.ctx.keybindings.getKeys("app.permissionMode.cycle"));
+		this.ctx.editor.onCyclePermissionMode = () => void this.cyclePermissionMode();
 		this.ctx.editor.setActionKeys("app.model.cycleForward", this.ctx.keybindings.getKeys("app.model.cycleForward"));
 		this.ctx.editor.onCycleModelForward = () => this.cycleRoleModel();
 		this.ctx.editor.setActionKeys("app.model.cycleBackward", this.ctx.keybindings.getKeys("app.model.cycleBackward"));
@@ -614,6 +625,21 @@ export class InputController {
 		} else {
 			this.ctx.statusLine.invalidate();
 			this.ctx.updateEditorBorderColor();
+		}
+	}
+
+	async cyclePermissionMode(): Promise<void> {
+		try {
+			const mode = await this.ctx.session.cyclePermissionMode();
+			this.ctx.statusLine.invalidate();
+			this.ctx.updateEditorBorderColor();
+			const display = permissionModeDisplay(mode);
+			this.ctx.showStatus(
+				`Switch mode to ${theme.bold(colorPermissionModeText(display.color, display.title))} - ${display.description}`,
+				{ dim: false },
+			);
+		} catch (error) {
+			this.ctx.showError(error instanceof Error ? error.message : String(error));
 		}
 	}
 

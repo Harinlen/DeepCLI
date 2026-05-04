@@ -23,6 +23,7 @@ interface AppKeybindings {
 	"app.suspend": true;
 	"app.thinking.cycle": true;
 	"app.thinking.toggle": true;
+	"app.permissionMode.cycle": true;
 	"app.model.cycleForward": true;
 	"app.model.cycleBackward": true;
 	"app.model.select": true;
@@ -79,12 +80,16 @@ export const KEYBINDINGS = {
 		description: "Suspend application",
 	},
 	"app.thinking.cycle": {
-		defaultKeys: "shift+tab",
+		defaultKeys: [],
 		description: "Cycle thinking level",
 	},
 	"app.thinking.toggle": {
 		defaultKeys: "ctrl+t",
 		description: "Toggle thinking mode",
+	},
+	"app.permissionMode.cycle": {
+		defaultKeys: "shift+tab",
+		description: "Cycle permission mode",
 	},
 	"app.model.cycleForward": {
 		defaultKeys: "ctrl+p",
@@ -202,6 +207,7 @@ const KEYBINDING_NAME_MIGRATIONS = {
 	exit: "app.exit",
 	suspend: "app.suspend",
 	cycleThinkingLevel: "app.thinking.cycle",
+	cyclePermissionMode: "app.permissionMode.cycle",
 	cycleModelForward: "app.model.cycleForward",
 	cycleModelBackward: "app.model.cycleBackward",
 	selectModel: "app.model.select",

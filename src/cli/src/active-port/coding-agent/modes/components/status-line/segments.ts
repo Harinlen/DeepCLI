@@ -9,6 +9,7 @@ import { shortenPath } from "../../../tools/render-utils";
 import { getSessionAccentAnsi, getSessionAccentHex } from "../../../utils/session-color";
 import { sanitizeStatusText } from "../../shared";
 import { getContextUsageLevel, getContextUsageThemeColor } from "./context-thresholds";
+import { permissionModeDisplay } from "./permission-mode";
 import type { RenderedSegment, SegmentContext, StatusLineSegment, StatusLineSegmentId } from "./types";
 
 export type { SegmentContext } from "./types";
@@ -19,6 +20,14 @@ export type { SegmentContext } from "./types";
 
 function withIcon(icon: string, text: string): string {
 	return icon ? `${icon} ${text}` : text;
+}
+
+function modeColor(color: string, text: string): string {
+	if (color.startsWith("#")) {
+		const ansi = Bun.color(color, "ansi-16m");
+		return ansi ? `${ansi}${text}\x1b[39m` : text;
+	}
+	return theme.fg(color, text);
 }
 
 function stripDisplayRoot(pwd: string): string {
@@ -83,6 +92,15 @@ const modelSegment: StatusLineSegment = {
 		}
 
 		return { content: theme.fg("statusLineModel", content), visible: true };
+	},
+};
+
+const permissionModeSegment: StatusLineSegment = {
+	id: "permission_mode",
+	render(ctx) {
+		const display = permissionModeDisplay(ctx.session.currentPermissionMode);
+		const content = withIcon(display.icon, display.label);
+		return { content: modeColor(display.color, content), visible: true };
 	},
 };
 
@@ -385,6 +403,7 @@ const sessionNameSegment: StatusLineSegment = {
 
 export const SEGMENTS: Record<StatusLineSegmentId, StatusLineSegment> = {
 	pi: connectionSegment,
+	permission_mode: permissionModeSegment,
 	model: modelSegment,
 	plan_mode: planModeSegment,
 	path: pathSegment,

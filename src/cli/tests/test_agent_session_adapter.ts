@@ -24,6 +24,7 @@ const fakeSession = {
 		for (const update of updates) onUpdate(update);
 		return { stopReason: "stop" };
 	},
+	setMode: async (_mode: string) => {},
 	cancel() {},
 	cancelExecution() {},
 };
@@ -32,7 +33,7 @@ const fakeSessionService = {
 	async rename(_sessionId: string, title: string) {
 		return { ...fakeSession.summary, title, titleSource: "user" };
 	},
-	create: async () => ({ sessionId: "new-session" }),
+	create: async () => ({ sessionId: "new-session", modes: { currentModeId: "default" } }),
 	clientForSession: () => ({}),
 };
 
@@ -87,6 +88,7 @@ assert(adapter.getAsyncJobSnapshot().running.length === 0, "adapter should expos
 assert(adapter.modelRegistry.authStorage.hasOAuth("deepseek") === false, "adapter should expose no-op OAuth auth storage");
 assert(adapter.modelRegistry.authStorage.has("deepseek") === false, "adapter should expose no-op API key auth storage");
 assert(adapter.modelRegistry.authStorage.hasAuth("deepseek") === false, "adapter should expose no-op fallback auth storage");
+assert(adapter.currentPermissionMode === "default", "adapter should default to Ask permission mode");
 assert(
 	renderOrder.join("|") === "assistant:start|assistant:end:thinkinghello|tool:tool-1|assistant:start|assistant:end:after",
 	`adapter should project ACP stream into ordered render blocks, got: ${renderOrder.join("|")}`,
@@ -215,8 +217,42 @@ try {
 	assert((error as Error).message.includes("Run a chat prompt"), "shell execution should fail without creating a session");
 }
 assert(lazyCreateCalls === 0, "commands should not create lazy chat sessions");
+await lazyAdapter.cyclePermissionMode();
+assert(lazyAdapter.currentPermissionMode === "accept_edits", "Shift+Tab cycle should advance pending mode before session creation");
 await lazyAdapter.prompt("hello");
 assert(lazyCreateCalls === 1, "first chat prompt should create the lazy session");
 assert(lazyAdapter.sessionId === "lazy-session", "lazy session id should update after first prompt");
+
+const modeCalls: Array<{ method: string; params: { modeId?: string; sessionId?: string } }> = [];
+const modeClient = {
+	request: async (method: string, params: { modeId?: string; sessionId?: string }) => {
+		modeCalls.push({ method, params });
+		return {};
+	},
+	notify: () => {},
+	promptRequest: async (_sessionId: string, _text: string) => ({ stopReason: "stop" }),
+	executeShellRequest: async () => ({ exitCode: 0, cancelled: false }),
+	executePythonRequest: async () => ({ exitCode: 0, cancelled: false }),
+	onUpdate: (handler: (update: unknown) => void) => {
+		handler({ sessionUpdate: "current_mode_update", sessionId: "mode-session", modeId: "auto" });
+		return () => {};
+	},
+};
+const modeAdapter = new MustangAgentSessionAdapter({
+	client: modeClient as never,
+	session: new (class extends Object {
+		sessionId = "mode-session";
+		setMode(mode: string) {
+			return modeClient.request("session/set_mode", { sessionId: this.sessionId, modeId: mode });
+		}
+		cancel() {}
+		cancelExecution() {}
+	})() as never,
+	sessionService: fakeSessionService as never,
+});
+assert(modeAdapter.currentPermissionMode === "auto", "ambient current_mode_update should refresh adapter mode");
+await modeAdapter.cyclePermissionMode();
+assert(modeAdapter.currentPermissionMode === "bypass", "cycle should follow Auto -> Bypass");
+assert(modeCalls.some(call => call.params.modeId === "bypass"), "cycle should call session/set_mode with next mode");
 
 console.log("PASS: agent session adapter");

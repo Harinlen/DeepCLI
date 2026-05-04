@@ -42,9 +42,11 @@ const statusLine = new StatusLineComponent({
 	modelRegistry: { isUsingOAuth: () => false },
 } as never);
 
-const border = statusLine.getTopBorder(80);
+const border = statusLine.getTopBorder(100);
 assert(border.width > 0, "status line top border should render visible content");
 assert(border.content.includes("⏺"), "status line should show connected kernel state");
+assert(border.content.includes("Ask"), "status line should show default permission mode as Ask");
+assert(border.content.indexOf("Ask") < border.content.indexOf("sonnet"), "permission mode should render before model");
 assert(border.content.includes("sonnet"), "status line should include model segment");
 assert(border.content.includes("mustang") || border.content.includes("/tmp"), "status line should include cwd path segment");
 assert(border.content.includes("1.5K (0.8%/200K)"), "status line should include computed context usage");
@@ -82,7 +84,7 @@ const millionWindowStatusLine = new StatusLineComponent({
 	getAsyncJobSnapshot: () => ({ running: [] }),
 	modelRegistry: { isUsingOAuth: () => false },
 } as never);
-const millionBorder = millionWindowStatusLine.getTopBorder(80).content;
+const millionBorder = millionWindowStatusLine.getTopBorder(100).content;
 assert(millionBorder.includes("29K (2.9%/1M)"), `status line should show actual compact tokens plus percent/window, got: ${millionBorder}`);
 assert(!millionBorder.includes("1,000,000"), "status line should not render long context windows");
 
@@ -129,5 +131,20 @@ const disconnectedBorder = new StatusLineComponent({
 	kernelConnectionState: "disconnected",
 } as never).getTopBorder(80).content;
 assert(disconnectedBorder.includes("○"), "status line should show disconnected kernel state");
+
+const modeCases = [
+	["accept_edits", "✎", "Edits"],
+	["plan", "▤", "Plan"],
+	["auto", "⚡", "Auto"],
+	["dont_ask", "⏭", "No ask"],
+	["bypass", "⚠", "Bypass"],
+];
+for (const [mode, icon, label] of modeCases) {
+	const content = new StatusLineComponent({
+		...connectionSession,
+		currentPermissionMode: mode,
+	} as never).getTopBorder(80).content;
+	assert(content.includes(icon) && content.includes(label), `status line should render ${mode} as ${icon} ${label}, got: ${content}`);
+}
 
 console.log("PASS: status line");

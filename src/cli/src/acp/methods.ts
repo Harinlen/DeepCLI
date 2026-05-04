@@ -19,4 +19,5 @@ export const MustangMethod = {
   modelProfileList: "_mustang.agent/model/profile_list",
   modelProviderList: "_mustang.agent/model/provider_list",
   modelSetCurrent: "_mustang.agent/model/set_current",
+  modelUpdate: "_mustang.agent/model/update",
 } as const;

@@ -15,6 +15,7 @@ test_auth_bad_token_rejected   → ConnectionAuthenticator, transport auth guard
 test_before_initialize_error   → AcpSessionHandler pre-init guard
 test_model_profile_list        → LLMManager.list_profiles, ModelHandler
 test_model_provider_list       → LLMManager.list_providers, current_used schema
+test_model_update              → LLMManager.update_model, model/update ACP seam
 test_prompt_basic              → Orchestrator, LLMProvider, full turn pipeline
 """
 
@@ -388,6 +389,42 @@ def test_model_provider_list(kernel: tuple[int, str]) -> None:
     assert isinstance(result["providers"], list)
     assert isinstance(result["currentUsed"], dict)
     assert result["defaultContextWindow"] == 128_000
+
+
+def test_model_update(kernel: tuple[int, str]) -> None:
+    """Mustang model update extension persists model-level overrides."""
+    port, token = kernel
+
+    async def _run_test() -> tuple[dict[str, Any], dict[str, Any]]:
+        async with _client(port, token) as client:
+            await client.initialize()
+            listed: dict[str, Any] = await client._request(
+                "_mustang.agent/model/provider_list",
+                {},
+            )
+            providers = listed.get("providers", [])
+            if not providers or not providers[0].get("models"):
+                return listed, {}
+            provider = providers[0]
+            model_id = provider["models"][0]
+            updated: dict[str, Any] = await client._request(
+                "_mustang.agent/model/update",
+                {
+                    "provider": provider["name"],
+                    "model": model_id,
+                    "displayName": "E2E Model",
+                    "contextWindow": 256_000,
+                },
+            )
+        return listed, updated
+
+    listed, updated = _run(_run_test())
+    if not updated:
+        pytest.skip(f"No provider models configured: {listed}")
+
+    assert updated["displayName"] == "E2E Model"
+    assert updated["contextWindow"] == 256_000
+    assert isinstance(updated["roles"], list)
 
 
 # ---------------------------------------------------------------------------

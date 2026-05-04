@@ -59,6 +59,7 @@ ACP 里有很多"可选"能力。Kernel 作为 Agent 的采纳状态：
 | `model/profile_add` | Request | Model (LLMManager) | DeepCLI 扩展 |
 | `model/profile_remove` | Request | Model (LLMManager) | DeepCLI 扩展 |
 | `model/set_current` | Request | Model (LLMManager) | DeepCLI 扩展 |
+| `model/update` | Request | Model (LLMManager) | DeepCLI 扩展 |
 | `session/compact` | Request | Session | DeepCLI 扩展 —— 待实现 |
 | `session/delete` | Request | Session | DeepCLI 扩展 —— 待实现 |
 | `session/get_usage` | Request | Session | DeepCLI 扩展 —— 待实现 |
@@ -232,6 +233,7 @@ REQUEST_DISPATCH: dict[str, RequestSpec] = {
     "model/profile_add":         RequestSpec(..., target="model"),
     "model/profile_remove":      RequestSpec(..., target="model"),
     "model/set_current":         RequestSpec(..., target="model"),
+    "model/update":              RequestSpec(..., target="model"),
 }
 
 # 2. 入站 notification（Client → Kernel）
@@ -342,6 +344,11 @@ class ModelHandler(Protocol):
         self, ctx: HandlerContext, params: SetCurrentModelParams
     ) -> SetCurrentModelResult:
         """Set one llm.current_used role and persist."""
+
+    async def update_model(
+        self, ctx: HandlerContext, params: UpdateModelParams
+    ) -> UpdateModelResult:
+        """Update one provider model's display settings and roles."""
 ```
 
 `ModelHandler` 和 `SessionHandler` 共享 `HandlerContext`（连接上下文），但 `model/*` 方法的实现不使用 `ctx.sender` 发送 notification ——  它们是简单的 request/response 操作。`HandlerContext` 统一传入是为了保持接口一致性，方便未来按需扩展（例如 model 操作的 audit log）。
@@ -349,9 +356,10 @@ class ModelHandler(Protocol):
 isolation 保证同 SessionHandler：`LLMManager` 不 import 任何 `kernel.protocol.acp` 内容，只见 Pydantic contract 类型。
 
 `model/provider_list` exposes all configured provider models, role refs
-via `currentUsed`, per-model `contextWindows`, and
-`defaultContextWindow` for models whose provider cannot report an exact
-window.
+via `currentUsed`, per-model `contextWindows`, optional `displayNames`,
+and `defaultContextWindow` for models whose provider cannot report an
+exact window. `model/update` persists model-level display name,
+context-window override, and exact role assignments.
 
 ### 协议层 / 会话层的 seam
 

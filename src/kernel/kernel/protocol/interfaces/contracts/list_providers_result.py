@@ -20,6 +20,9 @@ class ProviderInfo(BaseModel):
     context_windows: dict[str, int]
     """Context windows by model id.  Values include kernel fallback defaults."""
 
+    display_names: dict[str, str]
+    """Optional user-facing display names by model id."""
+
     roles: dict[str, bool]
     """Role assignments: ``{"default": True, "bash_judge": False, ...}``."""
 

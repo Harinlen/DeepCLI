@@ -3,7 +3,7 @@ import { theme } from "@/active-port/coding-agent/modes/theme/theme.js";
 import { setMustangSessionProvider, type SessionInfo } from "@/active-port/coding-agent/session/session-manager.js";
 import type { AgentSessionEvent } from "@/active-port/coding-agent/session/agent-session.js";
 import type { AcpClient, KernelConnectionState, SessionUpdateParams } from "@/acp/client.js";
-import { ModelService, type ModelProfile, type ProviderModelItem, type ProviderModelState } from "@/models/service.js";
+import { ModelService, type ModelProfile, type ModelUpdateInput, type ProviderModelItem, type ProviderModelState } from "@/models/service.js";
 import { MustangSession, type PermissionMode } from "@/session.js";
 import { SessionService } from "@/sessions/service.js";
 import type { CliSessionInfo } from "@/sessions/types.js";
@@ -330,6 +330,12 @@ export class MustangAgentSessionAdapter {
 
 	async setCurrentModelFromItem(item: ProviderModelItem, role = "default"): Promise<boolean> {
 		return this.setCurrentModelRole(role, item.providerName, item.modelId);
+	}
+
+	async updateProviderModel(input: ModelUpdateInput): Promise<ProviderModelItem> {
+		const result = await this.modelService.updateModel(input);
+		await this.refreshModelProfiles().catch(() => {});
+		return result;
 	}
 
 	async cyclePermissionMode(): Promise<PermissionMode> {

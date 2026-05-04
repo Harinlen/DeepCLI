@@ -76,6 +76,19 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		}
 	}
 
+	async reload(selectRef?: { providerName: string; modelId: string }): Promise<void> {
+		await this.#load();
+		this.#filter(this.#searchInput.getValue());
+		if (selectRef) {
+			const index = this.#filteredModels.findIndex(
+				model => model.providerName === selectRef.providerName && model.modelId === selectRef.modelId,
+			);
+			if (index >= 0) this.#selectedIndex = index;
+			this.#updateList();
+		}
+		this.tui.requestRender();
+	}
+
 	#sortModels(models: ProviderModelItem[]): ProviderModelItem[] {
 		return [...models].sort((a, b) => {
 			const aDefault = a.roles.includes("default");

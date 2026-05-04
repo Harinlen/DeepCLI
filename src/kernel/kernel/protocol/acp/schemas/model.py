@@ -58,6 +58,7 @@ class AcpProviderEntry(AcpModel):
     provider_type: str
     models: list[str]
     context_windows: dict[str, int]
+    display_names: dict[str, str]
     roles: dict[str, bool]
 
 
@@ -149,3 +150,29 @@ class SetCurrentModelResponse(AcpModel):
 
     role: str
     model: list[str]
+
+
+# ---------------------------------------------------------------------------
+# model/update
+# ---------------------------------------------------------------------------
+
+
+class UpdateModelRequest(AcpModel):
+    """``model/update`` request params."""
+
+    provider: str
+    model: str
+    display_name: str | None = None
+    context_window: int | None = None
+    roles: list[str] | None = None
+
+    meta: dict[str, Any] | None = None
+
+
+class UpdateModelResponse(AcpModel):
+    """``model/update`` response."""
+
+    model: list[str]
+    display_name: str | None
+    context_window: int | None
+    roles: list[str]

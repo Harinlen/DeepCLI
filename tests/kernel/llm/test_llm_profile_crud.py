@@ -29,6 +29,7 @@ from kernel.protocol.interfaces.contracts.list_providers_params import ListProvi
 from kernel.protocol.interfaces.contracts.refresh_models_params import RefreshModelsParams
 from kernel.protocol.interfaces.contracts.remove_provider_params import RemoveProviderParams
 from kernel.protocol.interfaces.contracts.set_current_model_params import SetCurrentModelParams
+from kernel.protocol.interfaces.contracts.update_model_params import UpdateModelParams
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +121,27 @@ class TestListProviders:
         mgr = _make_manager()
         result = await mgr.list_providers(_ctx(), ListProvidersParams())
         assert result.current_used == {"default": ["anthropic", "claude-opus-4-6"]}
+
+    async def test_model_overrides(self) -> None:
+        mgr = _make_manager(
+            providers={
+                "anthropic": ProviderConfig(
+                    type="anthropic",
+                    api_key="sk-a",
+                    models=[
+                        ModelSpec(
+                            id="claude-opus-4-6",
+                            display_name="Opus",
+                            context_window=200_000,
+                        ),
+                    ],
+                ),
+            },
+            default=ModelRef(provider="anthropic", model="claude-opus-4-6"),
+        )
+        result = await mgr.list_providers(_ctx(), ListProvidersParams())
+        assert result.providers[0].display_names == {"claude-opus-4-6": "Opus"}
+        assert result.providers[0].context_windows == {"claude-opus-4-6": 200_000}
 
 
 # ---------------------------------------------------------------------------
@@ -299,3 +321,51 @@ class TestSetCurrentModel:
         ref = ModelRef(provider="anthropic", model="claude-sonnet-4-6")
         await mgr.set_current_model(_ctx(), SetCurrentModelParams(model=ref))
         mgr._cfg_section.update.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# update_model
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateModel:
+    async def test_updates_model_settings_and_roles(self) -> None:
+        mgr = _make_manager()
+        ref = ModelRef(provider="anthropic", model="claude-sonnet-4-6")
+        result = await mgr.update_model(
+            _ctx(),
+            UpdateModelParams(
+                model=ref,
+                display_name="Sonnet",
+                context_window=200_000,
+                roles=["default", "compact"],
+            ),
+        )
+        assert result.model == ["anthropic", "claude-sonnet-4-6"]
+        assert result.display_name == "Sonnet"
+        assert result.context_window == 200_000
+        assert result.roles == ["compact", "default"]
+        assert mgr._current_used.default == ref
+        assert mgr._current_used.compact == ref
+        assert mgr._providers["anthropic"].models[1].display_name == "Sonnet"
+        assert mgr._providers["anthropic"].models[1].context_window == 200_000
+        mgr._cfg_section.update.assert_awaited_once()
+
+    async def test_removes_existing_role_when_not_requested(self) -> None:
+        ref = ModelRef(provider="anthropic", model="claude-opus-4-6")
+        mgr = _make_manager(default=ref)
+        result = await mgr.update_model(
+            _ctx(),
+            UpdateModelParams(model=ref, roles=[]),
+        )
+        assert result.roles == []
+        assert mgr._current_used.default is None
+
+    async def test_unknown_role_raises(self) -> None:
+        mgr = _make_manager()
+        ref = ModelRef(provider="anthropic", model="claude-opus-4-6")
+        with pytest.raises(ValueError, match="Unknown model role"):
+            await mgr.update_model(
+                _ctx(),
+                UpdateModelParams(model=ref, roles=["ghost"]),
+            )

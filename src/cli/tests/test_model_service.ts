@@ -19,6 +19,7 @@ const service = new ModelService({
 						providerType: "deepseek",
 						models: ["deepseek-chat", "deepseek-reasoner"],
 						contextWindows: { "deepseek-chat": 1_000_000, "deepseek-reasoner": 128_000 },
+						displayNames: { "deepseek-chat": "DeepSeek Chat" },
 						roles: { default: true, compact: false },
 					},
 					{
@@ -43,6 +44,15 @@ const service = new ModelService({
 			return {
 				role: request.role ?? "default",
 				model: [request.provider, request.model],
+			} as R;
+		}
+		if (method === "_mustang.agent/model/update") {
+			const request = params as { provider?: string; model?: string; displayName?: string; contextWindow?: number; roles?: string[] };
+			return {
+				model: [request.provider, request.model],
+				displayName: request.displayName,
+				contextWindow: request.contextWindow,
+				roles: request.roles ?? [],
 			} as R;
 		}
 		assert(method === "_mustang.agent/model/profile_list", "model service should call a known model method");
@@ -78,7 +88,7 @@ assert(state.defaultModel === "deepseek/deepseek-chat", "model service should pr
 const providerState = await service.listProviders();
 assert(providerState.defaultContextWindow === 128_000, "provider list should expose kernel default context window");
 assert(providerState.models.length === 4, "provider list should flatten provider models");
-assert(providerState.models[0]?.displayName === "deepseek-chat", "provider list should expose model display name");
+assert(providerState.models[0]?.displayName === "DeepSeek Chat", "provider list should expose model display name");
 assert(providerState.models[0]?.roles.includes("default"), "provider list should mark default role");
 assert(providerState.models[2]?.roles.includes("compact"), "provider list should mark compact role");
 assert(providerState.models[0]?.contextWindow === 1_000_000, "provider list should prefer kernel provider context window");
@@ -91,5 +101,26 @@ assert(setResult.role === "compact", "setCurrent should preserve role");
 assert(setResult.provider === "local" && setResult.model === "qwen3", "setCurrent should preserve model ref");
 const setCall = calls.find(call => call.method === "_mustang.agent/model/set_current");
 assert(JSON.stringify(setCall?.params) === JSON.stringify({ role: "compact", provider: "local", model: "qwen3" }), "setCurrent should send role/provider/model");
+
+const updateResult = await service.updateModel({
+	providerName: "deepseek",
+	modelId: "deepseek-chat",
+	displayName: "Chat",
+	contextWindow: 200_000,
+	roles: ["default"],
+});
+assert(updateResult.displayName === "Chat", "updateModel should preserve display name");
+assert(updateResult.contextWindow === 200_000, "updateModel should preserve context window");
+const updateCall = calls.find(call => call.method === "_mustang.agent/model/update");
+assert(
+	JSON.stringify(updateCall?.params) === JSON.stringify({
+		provider: "deepseek",
+		model: "deepseek-chat",
+		displayName: "Chat",
+		contextWindow: 200_000,
+		roles: ["default"],
+	}),
+	"updateModel should send provider/model settings",
+);
 
 console.log("PASS: model service");

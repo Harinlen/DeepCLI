@@ -160,6 +160,7 @@ class ModelHandler(Protocol):
     async def remove_provider(...) -> RemoveProviderResult: ...
     async def refresh_models(...) -> RefreshModelsResult: ...
     async def set_current_model(...) -> SetCurrentModelResult: ...
+    async def update_model(...) -> UpdateModelResult: ...
 ```
 
 | ACP 方法 | ModelHandler 方法 |
@@ -169,12 +170,16 @@ class ModelHandler(Protocol):
 | `model/provider_remove` | `remove_provider` |
 | `model/provider_refresh` | `refresh_models` |
 | `model/set_current` | `set_current_model` |
+| `model/update` | `update_model` |
 
 `model/provider_list` returns provider entries with model ids,
-`context_windows`, `current_used`, and `default_context_window`; the
-wire response is camel-cased as `contextWindows`, `currentUsed`, and
+`context_windows`, `display_names`, `current_used`, and
+`default_context_window`; the wire response is camel-cased as
+`contextWindows`, `displayNames`, `currentUsed`, and
 `defaultContextWindow`. Missing provider-specific context values are
-filled by the kernel fallback before the UI renders them.
+filled by the kernel fallback before the UI renders them. `model/update`
+persists model-level display name, context-window override, and exact
+role assignments for one provider/model ref.
 
 ---
 
@@ -187,7 +192,7 @@ filled by the kernel fallback before the UI renders them.
 /provider refresh <name>                           重新发现模型
 /model current                                     显示 current_used 角色表
 /model use [role] <provider> <model_id>            设置 current_used role（默认 default）
-/model list                                        列出所有可用模型
+/model list                                        打开模型列表；Enter 进入编辑页
 ```
 
 ---

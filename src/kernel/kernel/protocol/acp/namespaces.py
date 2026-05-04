@@ -59,6 +59,7 @@ class MustangMethod:
     MODEL_PROVIDER_REMOVE = "_mustang.agent/model/provider_remove"
     MODEL_PROVIDER_REFRESH = "_mustang.agent/model/provider_refresh"
     MODEL_SET_CURRENT = "_mustang.agent/model/set_current"
+    MODEL_UPDATE = "_mustang.agent/model/update"
     SECRETS_AUTH = "_mustang.agent/secrets/auth"
 
 
@@ -77,6 +78,7 @@ MUSTANG_EXTENSION_METHODS = frozenset(
         MustangMethod.MODEL_PROVIDER_REMOVE,
         MustangMethod.MODEL_PROVIDER_REFRESH,
         MustangMethod.MODEL_SET_CURRENT,
+        MustangMethod.MODEL_UPDATE,
         MustangMethod.SECRETS_AUTH,
     }
 )

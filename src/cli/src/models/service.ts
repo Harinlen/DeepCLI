@@ -19,6 +19,7 @@ export interface ModelProviderInfo {
   providerType: string;
   models: string[];
   contextWindows: Record<string, number>;
+  displayNames: Record<string, string>;
   roles: Record<string, boolean>;
 }
 
@@ -29,6 +30,14 @@ export interface ProviderModelItem {
   modelId: string;
   roles: string[];
   contextWindow?: number | null;
+}
+
+export interface ModelUpdateInput {
+  providerName: string;
+  modelId: string;
+  displayName?: string | null;
+  contextWindow?: number | null;
+  roles?: string[];
 }
 
 export interface ProviderModelState {
@@ -69,6 +78,8 @@ interface RawProvider {
   models?: unknown;
   contextWindows?: unknown;
   context_windows?: unknown;
+  displayNames?: unknown;
+  display_names?: unknown;
   roles?: unknown;
 }
 
@@ -123,7 +134,7 @@ export class ModelService {
       for (const modelId of provider.models) {
         const profile = profileByRef.get(`${provider.name}/${modelId}`);
         models.push({
-          displayName: modelDisplayName(profile, provider.name, modelId),
+          displayName: provider.displayNames[modelId] ?? modelDisplayName(profile, provider.name, modelId),
           providerName: provider.name,
           providerType: provider.providerType,
           modelId,
@@ -153,6 +164,39 @@ export class ModelService {
       role: String(response.role ?? role),
       provider: String(ref[0] ?? provider),
       model: String(ref[1] ?? model),
+    };
+  }
+
+  async updateModel(input: ModelUpdateInput): Promise<ProviderModelItem> {
+    const response = await this.client.request<{
+      model?: unknown;
+      displayName?: unknown;
+      display_name?: unknown;
+      contextWindow?: unknown;
+      context_window?: unknown;
+      roles?: unknown;
+    }>(
+      MustangMethod.modelUpdate,
+      {
+        provider: input.providerName,
+        model: input.modelId,
+        displayName: input.displayName ?? null,
+        contextWindow: input.contextWindow ?? null,
+        roles: input.roles,
+      },
+      { timeoutMs: 10_000 },
+    );
+    const ref = Array.isArray(response.model) ? response.model : [input.providerName, input.modelId];
+    const providerName = String(ref[0] ?? input.providerName);
+    const modelId = String(ref[1] ?? input.modelId);
+    const displayName = String(response.displayName ?? response.display_name ?? input.displayName ?? "");
+    return {
+      displayName: displayName || modelId,
+      providerName,
+      providerType: "",
+      modelId,
+      roles: Array.isArray(response.roles) ? response.roles.map(role => String(role)).filter(Boolean).sort() : (input.roles ?? []),
+      contextWindow: numberOrNull(response.contextWindow ?? response.context_window) ?? input.contextWindow ?? null,
     };
   }
 }
@@ -191,11 +235,12 @@ function mapProvider(raw: RawProvider): ModelProviderInfo | null {
   const providerType = String(raw.providerType ?? raw.provider_type ?? "");
   const models = Array.isArray(raw.models) ? raw.models.map(item => String(item)).filter(Boolean) : [];
   const contextWindows = mapContextWindows(raw.contextWindows ?? raw.context_windows);
+  const displayNames = mapStringMap(raw.displayNames ?? raw.display_names);
   const roles = isRecord(raw.roles)
     ? Object.fromEntries(Object.entries(raw.roles).map(([key, value]) => [key, Boolean(value)]))
     : {};
   if (!name || !providerType) return null;
-  return { name, providerType, models, contextWindows, roles };
+  return { name, providerType, models, contextWindows, displayNames, roles };
 }
 
 function mapContextWindows(value: unknown): Record<string, number> {
@@ -205,6 +250,16 @@ function mapContextWindows(value: unknown): Record<string, number> {
     if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
       result[model] = raw;
     }
+  }
+  return result;
+}
+
+function mapStringMap(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {};
+  const result: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    const text = String(raw ?? "").trim();
+    if (text) result[key] = text;
   }
   return result;
 }

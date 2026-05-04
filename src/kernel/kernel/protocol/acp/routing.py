@@ -46,6 +46,8 @@ from kernel.protocol.acp.schemas.model import (
     RemoveProviderResponse,
     SetCurrentModelRequest,
     SetCurrentModelResponse,
+    UpdateModelRequest,
+    UpdateModelResponse,
 )
 from kernel.protocol.acp.schemas.session import (
     AcpSessionInfo,
@@ -157,6 +159,8 @@ from kernel.protocol.interfaces.contracts.set_current_model_params import (
 from kernel.protocol.interfaces.contracts.set_current_model_result import (
     SetCurrentModelResult,
 )
+from kernel.protocol.interfaces.contracts.update_model_params import UpdateModelParams
+from kernel.protocol.interfaces.contracts.update_model_result import UpdateModelResult
 from kernel.protocol.interfaces.contracts.set_mode_params import SetModeParams
 from kernel.protocol.interfaces.contracts.set_mode_result import SetModeResult
 from kernel.protocol.acp.schemas.auth import AuthRequest, AuthResult
@@ -484,6 +488,7 @@ async def _handle_provider_list(
                 provider_type=info.provider_type,
                 models=info.models,
                 context_windows=info.context_windows,
+                display_names=info.display_names,
                 roles=info.roles,
             )
             for info in result.providers
@@ -536,6 +541,26 @@ async def _handle_set_current(
         ),
     )
     return SetCurrentModelResponse(role=result.role, model=result.model)
+
+
+async def _handle_model_update(
+    mh: ModelHandler, ctx: HandlerContext, p: UpdateModelRequest
+) -> BaseModel:
+    result = await mh.update_model(
+        ctx,
+        UpdateModelParams(
+            model=ModelRef(provider=p.provider, model=p.model),
+            display_name=p.display_name,
+            context_window=p.context_window,
+            roles=p.roles,
+        ),
+    )
+    return UpdateModelResponse(
+        model=result.model,
+        display_name=result.display_name,
+        context_window=result.context_window,
+        roles=result.roles,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -716,6 +741,12 @@ REQUEST_DISPATCH: dict[str, RequestSpec] = {
         handler=_handle_set_current,
         params_type=SetCurrentModelRequest,
         result_type=SetCurrentModelResult,
+        target="model",
+    ),
+    MustangMethod.MODEL_UPDATE: RequestSpec(
+        handler=_handle_model_update,
+        params_type=UpdateModelRequest,
+        result_type=UpdateModelResult,
         target="model",
     ),
     # secrets/* -- routed to SecretManager (bootstrap service)

@@ -57,6 +57,12 @@ class ModelSpec(BaseModel):
     id: str
     """Actual model identifier sent to the API (e.g. ``"claude-opus-4-6"``)."""
 
+    display_name: str | None = None
+    """Optional user-facing name shown by model management UIs."""
+
+    context_window: int | None = None
+    """Optional context-window override in tokens."""
+
     max_tokens: int = 8192
     """Maximum tokens to request per completion."""
 

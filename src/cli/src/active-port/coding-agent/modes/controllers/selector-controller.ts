@@ -27,6 +27,7 @@ import { AgentDashboard } from "../components/agent-dashboard";
 import { AssistantMessageComponent } from "../components/assistant-message";
 import { ExtensionDashboard } from "../components/extensions";
 import { HistorySearchComponent } from "../components/history-search";
+import { ModelConfigEditorComponent } from "../components/model-config-editor";
 import { ModelSelectorComponent } from "../components/model-selector";
 import { OAuthSelectorComponent } from "../components/oauth-selector";
 import { SessionObserverOverlayComponent } from "../components/session-observer-overlay";
@@ -409,24 +410,57 @@ export class SelectorController {
 
 	showModelSelector(options?: { temporaryOnly?: boolean }): void {
 		this.showSelector(done => {
+			let modelState: Awaited<ReturnType<typeof this.ctx.session.listProviderModels>> | undefined;
+			const closeModelManager = () => {
+				this.ctx.editor.setText("");
+				this.ctx.editor.handleInput?.("\x1b");
+				done();
+			};
 			const selector = new ModelSelectorComponent(
 				this.ctx.ui,
-				() => this.ctx.session.listProviderModels(),
+				async () => {
+					modelState = await this.ctx.session.listProviderModels();
+					return modelState;
+				},
 				async model => {
-					try {
-						await this.ctx.session.setCurrentModelFromItem(model, "default");
-						this.ctx.statusLine.invalidate();
-						this.ctx.updateEditorBorderColor();
-						this.ctx.updateEditorTopBorder();
-						this.ctx.showStatus(`current_used.default: ${model.providerName}/${model.modelId}`);
-						done();
-						this.ctx.ui.requestRender();
-					} catch (error) {
-						this.ctx.showError(error instanceof Error ? error.message : String(error));
-					}
+					const providerModelCount = modelState?.providers.find(provider => provider.name === model.providerName)?.models.length ?? 1;
+					const editor = new ModelConfigEditorComponent(
+						this.ctx.ui,
+						model,
+						providerModelCount,
+						async update => {
+							await this.ctx.session.updateProviderModel?.({
+								providerName: model.providerName,
+								modelId: model.modelId,
+								displayName: update.displayName,
+								contextWindow: update.contextWindow,
+								roles: update.roles,
+							});
+							this.ctx.statusLine.invalidate();
+							this.ctx.updateEditorBorderColor();
+							this.ctx.updateEditorTopBorder();
+							this.ctx.showStatus(`Updated model: ${model.providerName}/${model.modelId}`);
+							this.ctx.editorContainer.clear();
+							this.ctx.editorContainer.addChild(selector);
+							this.ctx.ui.setFocus(selector);
+							await selector.reload({ providerName: model.providerName, modelId: model.modelId });
+							this.ctx.ui.requestRender();
+						},
+						() => {
+							this.ctx.editor.setText("");
+							this.ctx.editorContainer.clear();
+							this.ctx.editorContainer.addChild(selector);
+							this.ctx.ui.setFocus(selector);
+							this.ctx.ui.requestRender();
+						},
+					);
+					this.ctx.editorContainer.clear();
+					this.ctx.editorContainer.addChild(editor);
+					this.ctx.ui.setFocus(editor);
+					this.ctx.ui.requestRender();
 				},
 				() => {
-					done();
+					closeModelManager();
 					this.ctx.ui.requestRender();
 				},
 				undefined,

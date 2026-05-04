@@ -57,6 +57,8 @@ from kernel.protocol.interfaces.contracts.set_current_model_params import (
 from kernel.protocol.interfaces.contracts.set_current_model_result import (
     SetCurrentModelResult,
 )
+from kernel.protocol.interfaces.contracts.update_model_params import UpdateModelParams
+from kernel.protocol.interfaces.contracts.update_model_result import UpdateModelResult
 
 
 @runtime_checkable
@@ -113,5 +115,16 @@ class ModelHandler(Protocol):
         Raises ``ModelNotFoundError`` if the ref does not resolve to
         a known provider/model.
         Raises ``ValueError`` if the role is unknown.
+        """
+        ...
+
+    async def update_model(
+        self, ctx: HandlerContext, params: UpdateModelParams
+    ) -> UpdateModelResult:
+        """Update one provider model's display settings and roles.
+
+        Raises ``ModelNotFoundError`` if the ref does not resolve to
+        a known provider/model.
+        Raises ``ValueError`` if a requested role is unknown.
         """
         ...

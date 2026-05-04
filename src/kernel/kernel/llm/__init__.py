@@ -56,6 +56,8 @@ from kernel.protocol.interfaces.contracts.remove_provider_params import RemovePr
 from kernel.protocol.interfaces.contracts.remove_provider_result import RemoveProviderResult
 from kernel.protocol.interfaces.contracts.set_current_model_params import SetCurrentModelParams
 from kernel.protocol.interfaces.contracts.set_current_model_result import SetCurrentModelResult
+from kernel.protocol.interfaces.contracts.update_model_params import UpdateModelParams
+from kernel.protocol.interfaces.contracts.update_model_result import UpdateModelResult
 from kernel.subsystem import Subsystem
 
 if TYPE_CHECKING:
@@ -249,10 +251,10 @@ class LLMManager(Subsystem):
                     and default_ref.provider == provider_name
                     and default_ref.model == spec.id
                 )
-                context_window = await provider.context_window(spec.id)
+                context_window = spec.context_window or await provider.context_window(spec.id)
                 profiles.append(
                     ProfileInfo(
-                        name=f"{provider_name}/{spec.id}",
+                        name=spec.display_name or f"{provider_name}/{spec.id}",
                         provider_type=pcfg.type,
                         model_id=spec.id,
                         context_window=context_window or _DEFAULT_CONTEXT_WINDOW,
@@ -275,10 +277,13 @@ class LLMManager(Subsystem):
             model_ids = [s.id for s in (pcfg.models or [])]
             provider = self._get_provider_instance(pcfg)
             context_windows: dict[str, int] = {}
-            for model_id in model_ids:
-                context_windows[model_id] = (
-                    await provider.context_window(model_id)
+            display_names: dict[str, str] = {}
+            for spec in pcfg.models or []:
+                context_windows[spec.id] = (
+                    spec.context_window or await provider.context_window(spec.id)
                 ) or _DEFAULT_CONTEXT_WINDOW
+                if spec.display_name:
+                    display_names[spec.id] = spec.display_name
             # Compute role assignments for this provider
             roles: dict[str, bool] = {}
             for role_name, ref in self._current_used.model_dump().items():
@@ -292,6 +297,7 @@ class LLMManager(Subsystem):
                     provider_type=pcfg.type,
                     models=model_ids,
                     context_windows=context_windows,
+                    display_names=display_names,
                     roles=roles,
                 )
             )
@@ -432,6 +438,49 @@ class LLMManager(Subsystem):
         )
         return SetCurrentModelResult(role=params.role, model=ref.to_list())
 
+    async def update_model(
+        self, ctx: HandlerContext, params: UpdateModelParams
+    ) -> UpdateModelResult:
+        """Update one provider model's display settings and current-used roles."""
+        ref = params.model
+        spec = self._find_model_spec_for_ref(ref)
+
+        updates: dict[str, object] = {}
+        display_name = params.display_name.strip() if params.display_name else None
+        updates["display_name"] = display_name or None
+        updates["context_window"] = params.context_window
+
+        if params.context_window is not None and params.context_window <= 0:
+            raise ValueError("context_window must be a positive integer")
+
+        updated_spec = spec.model_copy(update=updates)
+        self._replace_model_spec(ref, updated_spec)
+
+        if params.roles is not None:
+            requested_roles = set(params.roles)
+            unknown = requested_roles.difference(CurrentUsedConfig.model_fields)
+            if unknown:
+                raise ValueError(f"Unknown model role: {sorted(unknown)[0]!r}")
+
+            current_updates: dict[str, ModelRef | None] = {}
+            for role_name, role_ref in self._current_used.model_dump().items():
+                existing = ModelRef.model_validate(role_ref) if role_ref is not None else None
+                if role_name in requested_roles:
+                    current_updates[role_name] = ref
+                elif existing == ref:
+                    current_updates[role_name] = None
+            self._current_used = self._current_used.model_copy(update=current_updates)
+
+        await self._persist()
+
+        logger.info("LLMManager: updated model [%s, %s]", ref.provider, ref.model)
+        return UpdateModelResult(
+            model=ref.to_list(),
+            display_name=updated_spec.display_name,
+            context_window=updated_spec.context_window,
+            roles=self._roles_for_ref(ref),
+        )
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
@@ -486,6 +535,46 @@ class LLMManager(Subsystem):
             if spec.id == model_id:
                 return spec
         return None
+
+    def _find_model_spec_for_ref(self, ref: ModelRef) -> ModelSpec:
+        """Find a ModelSpec by provider/model ref or raise ModelNotFoundError."""
+        pcfg = self._providers.get(ref.provider)
+        if pcfg is None:
+            raise ModelNotFoundError(
+                f"{ref.provider}/{ref.model}",
+                known=self._all_model_keys(),
+            )
+        spec = self._find_model_spec(pcfg, ref.model)
+        if spec is None:
+            raise ModelNotFoundError(
+                f"{ref.provider}/{ref.model}",
+                known=self._all_model_keys(),
+            )
+        return spec
+
+    def _replace_model_spec(self, ref: ModelRef, updated_spec: ModelSpec) -> None:
+        """Replace one ModelSpec in the in-memory provider table."""
+        pcfg = self._providers.get(ref.provider)
+        if pcfg is None or pcfg.models is None:
+            raise ModelNotFoundError(
+                f"{ref.provider}/{ref.model}",
+                known=self._all_model_keys(),
+            )
+        models = [
+            updated_spec if spec.id == ref.model else spec
+            for spec in pcfg.models
+        ]
+        self._providers[ref.provider] = pcfg.model_copy(update={"models": models})
+
+    def _roles_for_ref(self, ref: ModelRef) -> list[str]:
+        """Return current-used role names assigned to a model ref."""
+        roles: list[str] = []
+        for role_name, role_ref in self._current_used.model_dump().items():
+            if role_ref is None:
+                continue
+            if ModelRef.model_validate(role_ref) == ref:
+                roles.append(role_name)
+        return sorted(roles)
 
     def _validate_ref(self, ref: ModelRef) -> None:
         """Raise ModelNotFoundError if the ref doesn't resolve."""

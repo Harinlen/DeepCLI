@@ -10,6 +10,7 @@ const methods = {
 	modelProfileList: "_mustang.agent/model/profile_list",
 	modelProviderList: "_mustang.agent/model/provider_list",
 	modelSetCurrent: "_mustang.agent/model/set_current",
+	modelUpdate: "_mustang.agent/model/update",
 	sessionExecuteShell: "_mustang.agent/session/execute_shell",
 	sessionExecutePython: "_mustang.agent/session/execute_python",
 	sessionCancelExecution: "_mustang.agent/session/cancel_execution",
@@ -24,6 +25,8 @@ class FakeAcpKernel {
 	#sessionCounter = 0;
 	#permissionRequestId = 10_000;
 	#pendingServerRequests = new Map<number, (result: unknown) => void>();
+	#modelDisplayName: string | null = null;
+	#modelContextWindow = 128_000;
 	calls: string[] = [];
 	url = "";
 	permissionOutcome: string | undefined;
@@ -83,9 +86,31 @@ class FakeAcpKernel {
 			case methods.modelProfileList:
 				return this.#result(ws, id, { profiles: [], defaultModel: "" });
 			case methods.modelProviderList:
-				return this.#result(ws, id, { providers: [], currentUsed: {}, defaultContextWindow: 128_000 });
+				return this.#result(ws, id, {
+					defaultContextWindow: 128_000,
+					currentUsed: { default: ["fake", "fake-model"] },
+					providers: [
+						{
+							name: "fake",
+							providerType: "openai_compatible",
+							models: ["fake-model"],
+							contextWindows: { "fake-model": this.#modelContextWindow },
+							displayNames: this.#modelDisplayName ? { "fake-model": this.#modelDisplayName } : {},
+							roles: { default: true },
+						},
+					],
+				});
 			case methods.modelSetCurrent:
 				return this.#result(ws, id, { role: String(params.role ?? "default"), model: [String(params.provider ?? "fake"), String(params.model ?? "model")] });
+			case methods.modelUpdate:
+				this.#modelDisplayName = typeof params.displayName === "string" && params.displayName ? params.displayName : null;
+				this.#modelContextWindow = typeof params.contextWindow === "number" ? params.contextWindow : this.#modelContextWindow;
+				return this.#result(ws, id, {
+					model: [String(params.provider ?? "fake"), String(params.model ?? "model")],
+					displayName: this.#modelDisplayName,
+					contextWindow: this.#modelContextWindow,
+					roles: params.roles ?? [],
+				});
 			case "session/prompt":
 				await this.#handlePrompt(ws, id, sessionId, promptText(params.prompt));
 				return;
@@ -258,6 +283,8 @@ async function main(): Promise<void> {
 			"initialize",
 			"session/new",
 			methods.modelProfileList,
+			methods.modelProviderList,
+			methods.modelUpdate,
 			methods.sessionExecuteShell,
 			methods.sessionExecutePython,
 			methods.sessionDelete,
@@ -386,6 +413,15 @@ send("!echo PTY_SHELL\r")
 expect("bang shell execution", ["$ echo PTY_SHELL", "PTY_SHELL"])
 send('$print("PTY_PY")\r')
 expect("dollar python execution", ["PTY_PY"])
+send("/model list\r")
+expect("model list opens editor flow", ["fake-model", "[fake]", "@default"])
+send("\r")
+expect("model editor opens", ["Provider Settings", "Provider: fake", "Model Settings", "Context"])
+send("Fake Model")
+send("\r")
+expect("model editor saves", ["Updated model: fake/fake-model"])
+expect("model list refreshes after save", ["Fake Model", "Context: 128K tokens"])
+send("\x1b")
 send("/session list\r")
 expect("session list renders via OMP selector", ["Resume Session", "Second session", "Enter to select"])
 send("\r")

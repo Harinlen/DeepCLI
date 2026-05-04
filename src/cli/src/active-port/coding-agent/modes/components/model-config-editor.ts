@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { Container, extractPrintableText, matchesKey, Spacer, Text, type Focusable, type TUI } from "@/tui/index.js";
+import { Container, CURSOR_MARKER, extractPrintableText, matchesKey, Spacer, Text, type Focusable, type TUI } from "@/tui/index.js";
 import type { ProviderModelItem } from "@/models/service.js";
 import { formatCompactNumber } from "@/compat/utils.js";
 import { theme } from "../theme/theme";
@@ -82,9 +82,9 @@ export class ModelConfigEditorComponent extends Container implements Focusable {
 		this.addChild(new Text(theme.fg("muted", `  Models: ${this.providerModelCount} configured`), 0, 0));
 		this.addChild(new Spacer(1));
 		this.addChild(new Text(theme.fg("accent", "  Model Settings"), 0, 0));
-		this.#addValueField("Name:", fieldValue(this.#displayName, "<empty>"), 0);
+		this.#addValueField("Name:", fieldValue(this.#displayName, "<empty>", this.#focused && this.#fieldIndex === 0), 0);
 		this.#addStaticField("Model ID:", this.model.modelId);
-		this.#addValueField("Context tokens:", fieldValue(this.#contextWindow, "<default>"), 1);
+		this.#addValueField("Context tokens:", fieldValue(this.#contextWindow, "<default>", this.#focused && this.#fieldIndex === 1), 1);
 		this.#addValueField("Roles:", this.#formatRoles(), 2);
 		if (this.#error) {
 			this.addChild(new Spacer(1));
@@ -168,9 +168,10 @@ export class ModelConfigEditorComponent extends Container implements Focusable {
 	dispose(): void {}
 }
 
-function fieldValue(value: string, emptyLabel: string): string {
+function fieldValue(value: string, emptyLabel: string, showCursor: boolean): string {
 	const text = value.trim();
-	return text ? theme.fg("text", text) : theme.fg("muted", emptyLabel);
+	if (text) return `${theme.fg("text", text)}${showCursor ? CURSOR_MARKER : ""}`;
+	return `${theme.fg("muted", emptyLabel)}${showCursor ? CURSOR_MARKER : ""}`;
 }
 
 function normalizeDisplayName(value: string, model: ProviderModelItem): string | null {

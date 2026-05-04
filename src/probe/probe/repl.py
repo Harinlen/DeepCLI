@@ -250,19 +250,40 @@ async def _handle_model_command(client: ProbeClient, line: str) -> None:
         return
 
     if len(tokens) < 2:
-        print("[usage: /model default|list]")
+        print("[usage: /model current|use|list]")
         return
 
     sub = tokens[1]
 
-    if sub == "default":
+    if sub == "use":
         if len(tokens) < 4:
-            print("[usage: /model default <provider> <model_id>]")
+            print("[usage: /model use [role] <provider> <model_id>]")
             return
+        if len(tokens) >= 5:
+            role = tokens[2]
+            provider = tokens[3]
+            model = tokens[4]
+        else:
+            role = "default"
+            provider = tokens[2]
+            model = tokens[3]
         try:
-            result = await client.set_default_model(tokens[2], tokens[3])
-            default = result.get("defaultModel", [])
-            print(f"[default model set to {default}]")
+            result = await client.set_current_model(provider, model, role=role)
+            ref = result.get("model", [])
+            print(f"[current_used.{result.get('role', role)} set to {ref}]")
+        except Exception as exc:
+            print(f"[error: {exc}]")
+
+    elif sub == "current":
+        try:
+            result = await client.list_providers()
+            current = result.get("currentUsed", result.get("current_used", {}))
+            if not current:
+                print("[no current-used models configured]")
+                return
+            print("[current-used]")
+            for role, ref in current.items():
+                print(f"  {role}: {ref}")
         except Exception as exc:
             print(f"[error: {exc}]")
 
@@ -282,7 +303,7 @@ async def _handle_model_command(client: ProbeClient, line: str) -> None:
             print(f"[error: {exc}]")
 
     else:
-        print("[usage: /model default|list]")
+        print("[usage: /model current|use|list]")
 
 
 # ---------------------------------------------------------------------------

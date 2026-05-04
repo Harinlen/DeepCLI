@@ -388,6 +388,22 @@ class TestListProfiles:
         assert result.profiles[0].context_window == 123_456
 
     @pytest.mark.anyio
+    async def test_list_profiles_fills_missing_context_window(self):
+        p = FakeProvider()
+
+        async def _none_context_window(model_id: str) -> int | None:
+            return None
+
+        p.context_window = _none_context_window  # type: ignore[method-assign]
+        mgr = _make_manager(
+            providers={"local": (_pcfg("qwen3"), p)},
+        )
+
+        result = await mgr.list_profiles(MagicMock(), MagicMock())
+
+        assert result.profiles[0].context_window == 128_000
+
+    @pytest.mark.anyio
     async def test_empty_manager_lists_no_profiles(self):
         mgr = _make_manager(providers={})
         mgr._current_used = CurrentUsedConfig()

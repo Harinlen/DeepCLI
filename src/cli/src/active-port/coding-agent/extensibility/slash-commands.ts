@@ -18,9 +18,9 @@ const SESSION_ACTIONS: Item[] = [
 ];
 
 const MODEL_ACTIONS: Item[] = [
-	{ value: "list", label: "list", description: "List configured model profiles" },
-	{ value: "switch", label: "switch", description: "Switch default model profile" },
-	{ value: "set", label: "set", description: "Switch default model profile" },
+	{ value: "list", label: "list", description: "Open model selector" },
+	{ value: "current", label: "current", description: "Show current-used roles" },
+	{ value: "use", label: "use", description: "Set current-used role" },
 ];
 
 const THEME_ACTIONS: Item[] = [

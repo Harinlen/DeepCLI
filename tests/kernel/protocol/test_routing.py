@@ -42,7 +42,7 @@ from kernel.protocol.acp.routing import (
     _handle_provider_add,
     _handle_provider_remove,
     _handle_provider_refresh,
-    _handle_set_default,
+    _handle_set_current,
 )
 from kernel.protocol.acp.schemas.model import (
     AddProviderRequest,
@@ -50,7 +50,7 @@ from kernel.protocol.acp.schemas.model import (
     ListProvidersRequest,
     RefreshModelsRequest,
     RemoveProviderRequest,
-    SetDefaultModelRequest,
+    SetCurrentModelRequest,
 )
 from kernel.protocol.acp.schemas.session import (
     ArchiveSessionRequest,
@@ -94,8 +94,8 @@ from kernel.protocol.interfaces.contracts.set_config_option_result import (
 from kernel.protocol.interfaces.contracts.add_provider_result import AddProviderResult
 from kernel.protocol.interfaces.contracts.remove_provider_result import RemoveProviderResult
 from kernel.protocol.interfaces.contracts.refresh_models_result import RefreshModelsResult
-from kernel.protocol.interfaces.contracts.set_default_model_result import (
-    SetDefaultModelResult,
+from kernel.protocol.interfaces.contracts.set_current_model_result import (
+    SetCurrentModelResult,
 )
 
 
@@ -140,7 +140,7 @@ class TestDispatchTables:
             MustangMethod.MODEL_PROVIDER_ADD,
             MustangMethod.MODEL_PROVIDER_REMOVE,
             MustangMethod.MODEL_PROVIDER_REFRESH,
-            MustangMethod.MODEL_SET_DEFAULT,
+            MustangMethod.MODEL_SET_CURRENT,
         ]:
             assert method in REQUEST_DISPATCH
 
@@ -530,16 +530,20 @@ class TestHandleProviderList:
                         name="anthropic",
                         provider_type="anthropic",
                         models=["claude-opus-4-6"],
+                        context_windows={"claude-opus-4-6": 200_000},
                         roles={"default": True},
                     ),
                 ],
-                default_model=["anthropic", "claude-opus-4-6"],
+                current_used={"default": ["anthropic", "claude-opus-4-6"]},
+                default_context_window=128_000,
             )
         )
         result = await _handle_provider_list(mh, _ctx(), ListProvidersRequest())
         assert len(result.providers) == 1
         assert result.providers[0].name == "anthropic"
-        assert result.default_model == ["anthropic", "claude-opus-4-6"]
+        assert result.providers[0].context_windows == {"claude-opus-4-6": 200_000}
+        assert result.current_used == {"default": ["anthropic", "claude-opus-4-6"]}
+        assert result.default_context_window == 128_000
 
 
 class TestHandleProviderAdd:
@@ -578,12 +582,13 @@ class TestHandleProviderRefresh:
         assert result.models == ["m1", "m2"]
 
 
-class TestHandleSetDefault:
+class TestHandleSetCurrent:
     async def test_delegates(self) -> None:
         mh = MagicMock()
-        mh.set_default_model = AsyncMock(
-            return_value=SetDefaultModelResult(default_model=["anthropic", "sonnet"]),
+        mh.set_current_model = AsyncMock(
+            return_value=SetCurrentModelResult(role="compact", model=["anthropic", "sonnet"]),
         )
-        params = SetDefaultModelRequest(provider="anthropic", model="sonnet")
-        result = await _handle_set_default(mh, _ctx(), params)
-        assert result.default_model == ["anthropic", "sonnet"]
+        params = SetCurrentModelRequest(role="compact", provider="anthropic", model="sonnet")
+        result = await _handle_set_current(mh, _ctx(), params)
+        assert result.role == "compact"
+        assert result.model == ["anthropic", "sonnet"]

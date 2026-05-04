@@ -27,7 +27,7 @@
 | `session/cancel` | 取消进行中的 prompt（notification，无响应） |
 | `session/set_mode` | 切换模式（`default` / `plan`） |
 | `session/set_config_option` | 修改运行时配置 |
-| `model/profile_list` / `model/set_default` | 模型管理 |
+| `model/profile_list` / `model/set_current` | 模型管理 |
 | `secrets/auth` | 认证（密码换 token） |
 
 ### Kernel → Client（推送）

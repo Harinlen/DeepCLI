@@ -6,12 +6,12 @@ Implements two Protocols consumed by the rest of the kernel:
   ``context_window`` / ``model_for``.
 - ``ModelHandler`` (consumed by protocol layer) -- runtime CRUD for
   providers: ``list_providers`` / ``add_provider`` / ``remove_provider`` /
-  ``refresh_models`` / ``set_default_model``.
+  ``refresh_models`` / ``set_current_model``.
 
 Reads user-defined provider configs, resolves aliases, and routes
 ``stream()`` calls to the correct ``Provider`` via ``LLMProviderManager``.
 
-Runtime mutation (``add_provider``, ``remove_provider``, ``set_default_model``)
+Runtime mutation (``add_provider``, ``remove_provider``, ``set_current_model``)
 updates both the in-memory registry and the on-disk config atomically via
 ``MutableSection.update()``.
 """
@@ -54,8 +54,8 @@ from kernel.protocol.interfaces.contracts.refresh_models_params import RefreshMo
 from kernel.protocol.interfaces.contracts.refresh_models_result import RefreshModelsResult
 from kernel.protocol.interfaces.contracts.remove_provider_params import RemoveProviderParams
 from kernel.protocol.interfaces.contracts.remove_provider_result import RemoveProviderResult
-from kernel.protocol.interfaces.contracts.set_default_model_params import SetDefaultModelParams
-from kernel.protocol.interfaces.contracts.set_default_model_result import SetDefaultModelResult
+from kernel.protocol.interfaces.contracts.set_current_model_params import SetCurrentModelParams
+from kernel.protocol.interfaces.contracts.set_current_model_result import SetCurrentModelResult
 from kernel.subsystem import Subsystem
 
 if TYPE_CHECKING:
@@ -67,6 +67,7 @@ logger = logging.getLogger(__name__)
 
 _CONFIG_FILE = "kernel"
 _CONFIG_SECTION = "llm"
+_DEFAULT_CONTEXT_WINDOW = 128_000
 
 
 class LLMManager(Subsystem):
@@ -254,7 +255,7 @@ class LLMManager(Subsystem):
                         name=f"{provider_name}/{spec.id}",
                         provider_type=pcfg.type,
                         model_id=spec.id,
-                        context_window=context_window,
+                        context_window=context_window or _DEFAULT_CONTEXT_WINDOW,
                         is_default=is_default,
                     )
                 )
@@ -272,6 +273,12 @@ class LLMManager(Subsystem):
         providers = []
         for name, pcfg in self._providers.items():
             model_ids = [s.id for s in (pcfg.models or [])]
+            provider = self._get_provider_instance(pcfg)
+            context_windows: dict[str, int] = {}
+            for model_id in model_ids:
+                context_windows[model_id] = (
+                    await provider.context_window(model_id)
+                ) or _DEFAULT_CONTEXT_WINDOW
             # Compute role assignments for this provider
             roles: dict[str, bool] = {}
             for role_name, ref in self._current_used.model_dump().items():
@@ -284,16 +291,14 @@ class LLMManager(Subsystem):
                     name=name,
                     provider_type=pcfg.type,
                     models=model_ids,
+                    context_windows=context_windows,
                     roles=roles,
                 )
             )
         return ListProvidersResult(
             providers=providers,
-            default_model=(
-                self._current_used.default.to_list()
-                if self._current_used.default is not None
-                else []
-            ),
+            current_used=self._current_used_refs(),
+            default_context_window=_DEFAULT_CONTEXT_WINDOW,
         )
 
     async def add_provider(
@@ -406,18 +411,26 @@ class LLMManager(Subsystem):
         )
         return RefreshModelsResult(models=model_ids)
 
-    async def set_default_model(
-        self, ctx: HandlerContext, params: SetDefaultModelParams
-    ) -> SetDefaultModelResult:
-        """Set the kernel-wide default model and persist."""
+    async def set_current_model(
+        self, ctx: HandlerContext, params: SetCurrentModelParams
+    ) -> SetCurrentModelResult:
+        """Set one ``current_used`` role and persist."""
+        if params.role not in CurrentUsedConfig.model_fields:
+            raise ValueError(f"Unknown model role: {params.role!r}")
+
         ref = params.model
         self._validate_ref(ref)
 
-        self._current_used = self._current_used.model_copy(update={"default": ref})
+        self._current_used = self._current_used.model_copy(update={params.role: ref})
         await self._persist()
 
-        logger.info("LLMManager: default set to [%s, %s]", ref.provider, ref.model)
-        return SetDefaultModelResult(default_model=ref.to_list())
+        logger.info(
+            "LLMManager: current_used.%s set to [%s, %s]",
+            params.role,
+            ref.provider,
+            ref.model,
+        )
+        return SetCurrentModelResult(role=params.role, model=ref.to_list())
 
     # ------------------------------------------------------------------
     # Internal
@@ -495,6 +508,15 @@ class LLMManager(Subsystem):
             for spec in pcfg.models or []:
                 keys.append(f"{prov_name}/{spec.id}")
         return sorted(keys)
+
+    def _current_used_refs(self) -> dict[str, list[str]]:
+        """Return non-empty current-used role assignments for API responses."""
+        refs: dict[str, list[str]] = {}
+        for role_name, ref in self._current_used.model_dump().items():
+            if ref is None:
+                continue
+            refs[role_name] = ModelRef.model_validate(ref).to_list()
+        return refs
 
     async def _persist(self) -> None:
         """Rebuild LLMConfig from current in-memory state and write to disk."""

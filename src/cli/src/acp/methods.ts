@@ -17,5 +17,6 @@ export const MustangMethod = {
   sessionArchive: "_mustang.agent/session/archive",
   sessionDelete: "_mustang.agent/session/delete",
   modelProfileList: "_mustang.agent/model/profile_list",
-  modelSetDefault: "_mustang.agent/model/set_default",
+  modelProviderList: "_mustang.agent/model/provider_list",
+  modelSetCurrent: "_mustang.agent/model/set_current",
 } as const;

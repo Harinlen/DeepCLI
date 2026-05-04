@@ -97,17 +97,17 @@ function completeSessionArguments(argumentPrefix: string, sessions: CliSessionIn
 
 function completeModelArguments(argumentPrefix: string, profiles: ModelProfile[]): AutocompleteItem[] | null {
   const [subcommand = "", value = ""] = argumentPrefix.split(/\s+/, 2);
-  if (argumentPrefix.includes(" ") && (subcommand === "switch" || subcommand === "set")) {
+  if (argumentPrefix.includes(" ") && subcommand === "use") {
     return filterCompletions(value, profiles.map((profile) => ({
       value: profile.name,
       label: profile.name,
-      description: `${profile.providerType}/${profile.modelId}${profile.isDefault ? " (default)" : ""}`,
+      description: `${profile.providerType}/${profile.modelId}${profile.isDefault ? " (@default)" : ""}`,
     })));
   }
   return filterCompletions(subcommand, [
-    { value: "list", label: "list", description: "List configured model profiles" },
-    { value: "switch", label: "switch", description: "Switch default model profile" },
-    { value: "set", label: "set", description: "Switch default model profile" },
+    { value: "list", label: "list", description: "Open model selector" },
+    { value: "current", label: "current", description: "Show current-used roles" },
+    { value: "use", label: "use", description: "Set current-used role" },
   ]);
 }
 

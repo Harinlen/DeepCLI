@@ -1,5 +1,5 @@
 """Tests for LLMManager provider CRUD -- add_provider, remove_provider,
-set_default_model, list_providers, refresh_models.
+set_current_model, list_providers, refresh_models.
 
 These methods mutate in-memory state and persist via _cfg_section.update().
 We test them by bypassing startup() and mocking _cfg_section + _provider_manager.
@@ -28,7 +28,7 @@ from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
 from kernel.protocol.interfaces.contracts.list_providers_params import ListProvidersParams
 from kernel.protocol.interfaces.contracts.refresh_models_params import RefreshModelsParams
 from kernel.protocol.interfaces.contracts.remove_provider_params import RemoveProviderParams
-from kernel.protocol.interfaces.contracts.set_default_model_params import SetDefaultModelParams
+from kernel.protocol.interfaces.contracts.set_current_model_params import SetCurrentModelParams
 
 
 # ---------------------------------------------------------------------------
@@ -110,11 +110,16 @@ class TestListProviders:
         assert len(result.providers) == 1
         assert result.providers[0].name == "anthropic"
         assert len(result.providers[0].models) == 2
+        assert result.providers[0].context_windows == {
+            "claude-opus-4-6": 128_000,
+            "claude-sonnet-4-6": 128_000,
+        }
+        assert result.default_context_window == 128_000
 
-    async def test_default_model_field(self) -> None:
+    async def test_current_used_field(self) -> None:
         mgr = _make_manager()
         result = await mgr.list_providers(_ctx(), ListProvidersParams())
-        assert result.default_model == ["anthropic", "claude-opus-4-6"]
+        assert result.current_used == {"default": ["anthropic", "claude-opus-4-6"]}
 
 
 # ---------------------------------------------------------------------------
@@ -250,26 +255,47 @@ class TestRefreshModels:
 
 
 # ---------------------------------------------------------------------------
-# set_default_model
+# set_current_model
 # ---------------------------------------------------------------------------
 
 
-class TestSetDefaultModel:
+class TestSetCurrentModel:
     async def test_set_valid_ref(self) -> None:
         mgr = _make_manager()
         ref = ModelRef(provider="anthropic", model="claude-sonnet-4-6")
-        result = await mgr.set_default_model(_ctx(), SetDefaultModelParams(model=ref))
-        assert result.default_model == ["anthropic", "claude-sonnet-4-6"]
+        result = await mgr.set_current_model(_ctx(), SetCurrentModelParams(model=ref))
+        assert result.role == "default"
+        assert result.model == ["anthropic", "claude-sonnet-4-6"]
         assert mgr._current_used.default == ref
+
+    async def test_set_valid_non_default_role(self) -> None:
+        mgr = _make_manager()
+        ref = ModelRef(provider="anthropic", model="claude-sonnet-4-6")
+        result = await mgr.set_current_model(
+            _ctx(),
+            SetCurrentModelParams(role="compact", model=ref),
+        )
+        assert result.role == "compact"
+        assert result.model == ["anthropic", "claude-sonnet-4-6"]
+        assert mgr._current_used.compact == ref
+
+    async def test_unknown_role_raises(self) -> None:
+        mgr = _make_manager()
+        ref = ModelRef(provider="anthropic", model="claude-sonnet-4-6")
+        with pytest.raises(ValueError, match="Unknown model role"):
+            await mgr.set_current_model(
+                _ctx(),
+                SetCurrentModelParams(role="ghost", model=ref),
+            )
 
     async def test_unknown_raises(self) -> None:
         mgr = _make_manager()
         ref = ModelRef(provider="ghost", model="x")
         with pytest.raises(ModelNotFoundError):
-            await mgr.set_default_model(_ctx(), SetDefaultModelParams(model=ref))
+            await mgr.set_current_model(_ctx(), SetCurrentModelParams(model=ref))
 
     async def test_persists(self) -> None:
         mgr = _make_manager()
         ref = ModelRef(provider="anthropic", model="claude-sonnet-4-6")
-        await mgr.set_default_model(_ctx(), SetDefaultModelParams(model=ref))
+        await mgr.set_current_model(_ctx(), SetCurrentModelParams(model=ref))
         mgr._cfg_section.update.assert_awaited_once()

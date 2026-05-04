@@ -51,11 +51,11 @@ from kernel.protocol.interfaces.contracts.remove_provider_params import (
 from kernel.protocol.interfaces.contracts.remove_provider_result import (
     RemoveProviderResult,
 )
-from kernel.protocol.interfaces.contracts.set_default_model_params import (
-    SetDefaultModelParams,
+from kernel.protocol.interfaces.contracts.set_current_model_params import (
+    SetCurrentModelParams,
 )
-from kernel.protocol.interfaces.contracts.set_default_model_result import (
-    SetDefaultModelResult,
+from kernel.protocol.interfaces.contracts.set_current_model_result import (
+    SetCurrentModelResult,
 )
 
 
@@ -105,12 +105,13 @@ class ModelHandler(Protocol):
         """
         ...
 
-    async def set_default_model(
-        self, ctx: HandlerContext, params: SetDefaultModelParams
-    ) -> SetDefaultModelResult:
-        """Set the kernel-wide default model and persist the change.
+    async def set_current_model(
+        self, ctx: HandlerContext, params: SetCurrentModelParams
+    ) -> SetCurrentModelResult:
+        """Set one ``llm.current_used`` role and persist the change.
 
         Raises ``ModelNotFoundError`` if the ref does not resolve to
         a known provider/model.
+        Raises ``ValueError`` if the role is unknown.
         """
         ...

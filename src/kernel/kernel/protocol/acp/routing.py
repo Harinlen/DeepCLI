@@ -44,8 +44,8 @@ from kernel.protocol.acp.schemas.model import (
     RefreshModelsResponse,
     RemoveProviderRequest,
     RemoveProviderResponse,
-    SetDefaultModelRequest,
-    SetDefaultModelResponse,
+    SetCurrentModelRequest,
+    SetCurrentModelResponse,
 )
 from kernel.protocol.acp.schemas.session import (
     AcpSessionInfo,
@@ -151,11 +151,11 @@ from kernel.protocol.interfaces.contracts.set_config_option_params import (
 from kernel.protocol.interfaces.contracts.set_config_option_result import (
     SetConfigOptionResult,
 )
-from kernel.protocol.interfaces.contracts.set_default_model_params import (
-    SetDefaultModelParams,
+from kernel.protocol.interfaces.contracts.set_current_model_params import (
+    SetCurrentModelParams,
 )
-from kernel.protocol.interfaces.contracts.set_default_model_result import (
-    SetDefaultModelResult,
+from kernel.protocol.interfaces.contracts.set_current_model_result import (
+    SetCurrentModelResult,
 )
 from kernel.protocol.interfaces.contracts.set_mode_params import SetModeParams
 from kernel.protocol.interfaces.contracts.set_mode_result import SetModeResult
@@ -483,11 +483,13 @@ async def _handle_provider_list(
                 name=info.name,
                 provider_type=info.provider_type,
                 models=info.models,
+                context_windows=info.context_windows,
                 roles=info.roles,
             )
             for info in result.providers
         ],
-        default_model=result.default_model,
+        current_used=result.current_used,
+        default_context_window=result.default_context_window,
     )
 
 
@@ -523,14 +525,17 @@ async def _handle_provider_refresh(
     return RefreshModelsResponse(models=result.models)
 
 
-async def _handle_set_default(
-    mh: ModelHandler, ctx: HandlerContext, p: SetDefaultModelRequest
+async def _handle_set_current(
+    mh: ModelHandler, ctx: HandlerContext, p: SetCurrentModelRequest
 ) -> BaseModel:
-    result = await mh.set_default_model(
+    result = await mh.set_current_model(
         ctx,
-        SetDefaultModelParams(model=ModelRef(provider=p.provider, model=p.model)),
+        SetCurrentModelParams(
+            role=p.role,
+            model=ModelRef(provider=p.provider, model=p.model),
+        ),
     )
-    return SetDefaultModelResponse(default_model=result.default_model)
+    return SetCurrentModelResponse(role=result.role, model=result.model)
 
 
 # ---------------------------------------------------------------------------
@@ -707,10 +712,10 @@ REQUEST_DISPATCH: dict[str, RequestSpec] = {
         result_type=RefreshModelsResult,
         target="model",
     ),
-    MustangMethod.MODEL_SET_DEFAULT: RequestSpec(
-        handler=_handle_set_default,
-        params_type=SetDefaultModelRequest,
-        result_type=SetDefaultModelResult,
+    MustangMethod.MODEL_SET_CURRENT: RequestSpec(
+        handler=_handle_set_current,
+        params_type=SetCurrentModelRequest,
+        result_type=SetCurrentModelResult,
         target="model",
     ),
     # secrets/* -- routed to SecretManager (bootstrap service)

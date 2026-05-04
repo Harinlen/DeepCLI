@@ -652,11 +652,17 @@ class ProbeClient:
         """Send Mustang ``model/provider_refresh`` and return the result dict."""
         return await self._request("_mustang.agent/model/provider_refresh", {"name": name})
 
-    async def set_default_model(self, provider: str, model: str) -> dict[str, Any]:
-        """Send Mustang ``model/set_default`` and return the result dict."""
+    async def set_current_model(
+        self,
+        provider: str,
+        model: str,
+        *,
+        role: str = "default",
+    ) -> dict[str, Any]:
+        """Send Mustang ``model/set_current`` and return the result dict."""
         return await self._request(
-            "_mustang.agent/model/set_default",
-            {"provider": provider, "model": model},
+            "_mustang.agent/model/set_current",
+            {"role": role, "provider": provider, "model": model},
         )
 
     # ------------------------------------------------------------------

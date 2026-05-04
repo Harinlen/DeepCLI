@@ -411,44 +411,16 @@ export class SelectorController {
 		this.showSelector(done => {
 			const selector = new ModelSelectorComponent(
 				this.ctx.ui,
-				this.ctx.session.model,
-				this.ctx.settings,
-				this.ctx.session.modelRegistry,
-				this.ctx.session.scopedModels,
-				async (model, role, thinkingLevel, selector) => {
+				() => this.ctx.session.listProviderModels(),
+				async model => {
 					try {
-						if (role === null) {
-							// Temporary: update agent state but don't persist to settings
-							await this.ctx.session.setModelTemporary(model);
-							this.ctx.statusLine.invalidate();
-							this.ctx.updateEditorBorderColor();
-							this.ctx.showStatus(`Temporary model: ${selector ?? model.id}`);
-							done();
-							this.ctx.ui.requestRender();
-						} else if (role === "default") {
-							// Default: update agent state and persist
-							await this.ctx.session.setModel(model, role, {
-								selector,
-								thinkingLevel,
-							});
-							if (thinkingLevel && thinkingLevel !== ThinkingLevel.Inherit) {
-								this.ctx.session.setThinkingLevel(thinkingLevel);
-							}
-							this.ctx.statusLine.invalidate();
-							this.ctx.updateEditorBorderColor();
-							this.ctx.showStatus(`Default model: ${selector ?? model.id}`);
-							// Don't call done() - selector stays open for role assignment
-						} else {
-							// Other roles (smol, slow): just update settings, not current model
-							this.ctx.settings.setModelRole(
-								role,
-								formatModelSelectorValue(selector ?? `${model.provider}/${model.id}`, thinkingLevel),
-							);
-							const roleInfo = getRoleInfo(role, settings);
-							const roleLabel = roleInfo?.name ?? role;
-							this.ctx.showStatus(`${roleLabel} model: ${selector ?? model.id}`);
-							// Don't call done() - selector stays open
-						}
+						await this.ctx.session.setCurrentModelFromItem(model, "default");
+						this.ctx.statusLine.invalidate();
+						this.ctx.updateEditorBorderColor();
+						this.ctx.updateEditorTopBorder();
+						this.ctx.showStatus(`current_used.default: ${model.providerName}/${model.modelId}`);
+						done();
+						this.ctx.ui.requestRender();
 					} catch (error) {
 						this.ctx.showError(error instanceof Error ? error.message : String(error));
 					}
@@ -457,7 +429,7 @@ export class SelectorController {
 					done();
 					this.ctx.ui.requestRender();
 				},
-				options,
+				undefined,
 			);
 			return { component: selector, focus: selector };
 		});

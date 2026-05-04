@@ -9,7 +9,7 @@ const token = "phase-b-pty-token";
 const methods = {
 	modelProfileList: "_mustang.agent/model/profile_list",
 	modelProviderList: "_mustang.agent/model/provider_list",
-	modelSetDefault: "_mustang.agent/model/set_default",
+	modelSetCurrent: "_mustang.agent/model/set_current",
 	sessionExecuteShell: "_mustang.agent/session/execute_shell",
 	sessionExecutePython: "_mustang.agent/session/execute_python",
 	sessionCancelExecution: "_mustang.agent/session/cancel_execution",
@@ -83,9 +83,9 @@ class FakeAcpKernel {
 			case methods.modelProfileList:
 				return this.#result(ws, id, { profiles: [], defaultModel: "" });
 			case methods.modelProviderList:
-				return this.#result(ws, id, { providers: [] });
-			case methods.modelSetDefault:
-				return this.#result(ws, id, { defaultModel: "fake/model" });
+				return this.#result(ws, id, { providers: [], currentUsed: {}, defaultContextWindow: 128_000 });
+			case methods.modelSetCurrent:
+				return this.#result(ws, id, { role: String(params.role ?? "default"), model: [String(params.provider ?? "fake"), String(params.model ?? "model")] });
 			case "session/prompt":
 				await this.#handlePrompt(ws, id, sessionId, promptText(params.prompt));
 				return;

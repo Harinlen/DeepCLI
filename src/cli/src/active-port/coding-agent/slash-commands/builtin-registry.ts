@@ -3,7 +3,9 @@ import {
 	getAvailableThemes,
 	getCurrentThemeName,
 	setTheme,
+	theme,
 } from "../modes/theme/theme";
+import { Text } from "@/tui/index.js";
 
 export interface ParsedBuiltinSlashCommand {
 	name: string;
@@ -157,25 +159,59 @@ async function resolveSessionTarget(ctx: any, rawTarget: string | undefined): Pr
 async function executeModelCommand(ctx: any, argsText: string): Promise<boolean> {
 	const args = splitArgs(argsText);
 	const subcommand = args[0] ?? "list";
-	if (subcommand === "switch" || subcommand === "set") {
-		const profile = args[1];
-		if (!profile) {
-			ctx.showWarning?.(`Usage: /model ${subcommand} <profile>`);
+	if (subcommand === "list") {
+		ctx.showModelSelector?.();
+		return true;
+	}
+	if (subcommand === "current") {
+		const state = await ctx.session.listProviderModels?.();
+		renderModelCurrent(ctx, state?.currentUsed ?? {});
+		return true;
+	}
+	if (subcommand === "use") {
+		const first = args[1];
+		const second = args[2];
+		if (!first) {
+			ctx.showWarning?.("Usage: /model use [role] <provider>/<model>");
 			return true;
 		}
-		await ctx.session.setDefaultModelProfile?.(profile);
+		const role = second ? first : "default";
+		const refText = second ?? first;
+		const ref = parseModelRef(refText);
+		if (!ref) {
+			ctx.showWarning?.("Model must be written as <provider>/<model>");
+			return true;
+		}
+		await ctx.session.setCurrentModelRole?.(role, ref.provider, ref.model);
 		ctx.statusLine?.invalidate?.();
 		ctx.updateEditorTopBorder?.();
-		ctx.showStatus?.(`Model set to ${profile}`);
+		ctx.showStatus?.(`current_used.${role}: ${ref.provider}/${ref.model}`);
 		return true;
 	}
-	if (subcommand === "list") {
-		await ctx.session.refreshModelProfiles?.();
-		ctx.showStatus?.(`Current model: ${ctx.session.model?.name ?? "no-model"}`);
-		return true;
-	}
-	ctx.showWarning?.("Usage: /model [list|switch|set]");
+	ctx.showWarning?.("Usage: /model [list|current|use]");
 	return true;
+}
+
+function parseModelRef(value: string | undefined): { provider: string; model: string } | undefined {
+	if (!value) return undefined;
+	const slash = value.indexOf("/");
+	if (slash <= 0 || slash === value.length - 1) return undefined;
+	return {
+		provider: value.slice(0, slash),
+		model: value.slice(slash + 1),
+	};
+}
+
+function renderModelCurrent(ctx: any, currentUsed: Record<string, [string, string]>): void {
+	const entries = Object.entries(currentUsed);
+	const lines = entries.length > 0
+		? entries.map(([role, ref]) => `${theme.fg("muted", role.padEnd(10))} ${ref[0]}/${ref[1]}`)
+		: [theme.fg("muted", "No current-used models configured.")];
+	ctx.chatContainer?.addChild?.(new Text(theme.fg("accent", "Current models"), 1, 0));
+	for (const line of lines) {
+		ctx.chatContainer?.addChild?.(new Text(line, 1, 0));
+	}
+	ctx.ui?.requestRender?.();
 }
 
 async function executeThemeCommand(ctx: any, argsText: string): Promise<boolean> {

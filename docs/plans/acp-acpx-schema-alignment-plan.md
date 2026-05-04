@@ -89,7 +89,7 @@ are now removed from kernel routing and replaced by `_mustang.agent/*`:
 | `model/provider_add` | Not in ACP schema | `_mustang.agent/model/provider_add` |
 | `model/provider_remove` | Not in ACP schema | `_mustang.agent/model/provider_remove` |
 | `model/provider_refresh` | Not in ACP schema | `_mustang.agent/model/provider_refresh` |
-| `model/set_default` | Not in ACP schema | `_mustang.agent/model/set_default` |
+| `model/set_current` | Not in ACP schema | `_mustang.agent/model/set_current` |
 | `secrets/auth` | Not in ACP schema | `_mustang.agent/secrets/auth` |
 
 DeepCLI also has non-standard fields or update variants on standard methods:
@@ -269,7 +269,7 @@ Deliverables:
 - Update `CommandManager` command definitions so non-standard command-backed
   ACP calls use `_mustang.agent/*` method names.
 - Update kernel and E2E tests that currently call `model/profile_list`,
-  `model/set_default`, `session/rename`, `session/archive`, `session/delete`,
+  `model/set_current`, `session/rename`, `session/archive`, `session/delete`,
   `session/execute_shell`, `session/execute_python`, or
   `session/cancel_execution` directly.
 - Update `src/cli/tests/probe_phase_b_pty.ts` so the fake kernel accepts the

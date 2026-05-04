@@ -24,7 +24,7 @@ Provider.stream(model_id="claude-opus-4-6", ...)
 - ✅ alias 解析（`"opus"` → `ModelRef("anthropic", "claude-opus-4-6")`）
 - ✅ 路由：ModelRef → Provider 实例 + model_id + 参数
 - ✅ 实现 `LLMProvider` Protocol（`stream` / `models` / `context_window` / `model_for`）
-- ✅ 实现 `ModelHandler` Protocol（`list_providers` / `add_provider` / `remove_provider` / `refresh_models` / `set_default_model`）
+- ✅ 实现 `ModelHandler` Protocol（`list_providers` / `add_provider` / `remove_provider` / `refresh_models` / `set_current_model`）
 - ✅ 暴露 `current_used` 角色映射（`model_for(role)`）给 Session / Orchestrator 层
 - ✅ 运行时 provider CRUD + 持久化（通过 `MutableSection.update()`）
 - ❌ 不持有 Provider 实例（交给 LLMProviderManager）
@@ -104,14 +104,15 @@ class ModelRef(BaseModel):
     model: str
 
 class CurrentUsedConfig(BaseModel):
-    default: ModelRef
+    default: ModelRef | None = None
     bash_judge: ModelRef | None = None
     memory: ModelRef | None = None
     embedding: ModelRef | None = None
+    compact: ModelRef | None = None
 
 class LLMConfig(BaseModel):
     providers: dict[str, ProviderConfig] = {}
-    current_used: CurrentUsedConfig
+    current_used: CurrentUsedConfig = CurrentUsedConfig()
     model_aliases: dict[str, ModelRef] = {}
 ```
 
@@ -158,7 +159,7 @@ class ModelHandler(Protocol):
     async def add_provider(...) -> AddProviderResult: ...
     async def remove_provider(...) -> RemoveProviderResult: ...
     async def refresh_models(...) -> RefreshModelsResult: ...
-    async def set_default_model(...) -> SetDefaultModelResult: ...
+    async def set_current_model(...) -> SetCurrentModelResult: ...
 ```
 
 | ACP 方法 | ModelHandler 方法 |
@@ -167,7 +168,13 @@ class ModelHandler(Protocol):
 | `model/provider_add` | `add_provider` |
 | `model/provider_remove` | `remove_provider` |
 | `model/provider_refresh` | `refresh_models` |
-| `model/set_default` | `set_default_model` |
+| `model/set_current` | `set_current_model` |
+
+`model/provider_list` returns provider entries with model ids,
+`context_windows`, `current_used`, and `default_context_window`; the
+wire response is camel-cased as `contextWindows`, `currentUsed`, and
+`defaultContextWindow`. Missing provider-specific context values are
+filled by the kernel fallback before the UI renders them.
 
 ---
 
@@ -178,7 +185,8 @@ class ModelHandler(Protocol):
 /provider add <name> <type> [--api-key ...] ...    添加 provider
 /provider remove <name>                            删除 provider
 /provider refresh <name>                           重新发现模型
-/model default <provider> <model_id>               设置默认模型
+/model current                                     显示 current_used 角色表
+/model use [role] <provider> <model_id>            设置 current_used role（默认 default）
 /model list                                        列出所有可用模型
 ```
 
@@ -272,16 +280,14 @@ Vision 工具都通过 `llm_manager.model_for(role)` 取自己需要的模型。
 1. 配置文件结构：`llm.current_used.default` 取代 `llm.default_model`
 2. 内部 API：`llm_manager.model_for("default")` 取代
    `llm_manager.default_model`
-3. ACP wire format：保持不变（一期不动客户端合约）
+3. ACP current-used 写入接口使用通用 `model/set_current`
 4. 测试 + 文档全部更新
 5. 无需兼容旧 config——直接破坏式迁移（rewrite 期无存量用户）
 
 ## 非目标
 
-- 不新增 `compact` / `vision` 等角色（留给后续 PR，等 Compactor
-  真需要更便宜 model 时再加）
-- 不改 ACP wire schema（`ListProfilesResponse.default_model` / `SetDefaultModelResponse.default_model` 保留）
-- 不引入 `set_role_model(role, name)` 通用方法（YAGNI；等第二个角色出现时再加）
+- 不新增 `vision` 等角色（`compact` 已加入 schema，用于摘要类任务）
+- `ListProfilesResponse.default_model` 暂时保留给旧 profile-list UI 读取
 
 ---
 
@@ -334,8 +340,9 @@ def model_for(self, role: str) -> str:
     return value
 ```
 
-保留 `set_default_model` ACP method —— 它就是 "set
-`current_used.default`" 的字面实现，方法名不改。
+`model/set_current` 是通用 current-used 写入接口：
+未传 `role` 时默认更新 `current_used.default`，传入 `compact` /
+`memory` / `bash_judge` 等角色时更新对应字段。
 
 ### 持久化
 
@@ -357,10 +364,10 @@ if self._current_used.default == params.name:
     self._current_used.default = next(iter(self._model_configs))
 ```
 
-`set_default_model`:
+`set_current_model`:
 
 ```python
-self._current_used.default = resolved
+self._current_used = self._current_used.model_copy(update={role: resolved})
 ```
 
 ---
@@ -372,7 +379,7 @@ self._current_used.default = resolved
 | 文件 | 变更 |
 |------|------|
 | `llm/config.py` | 新增 `CurrentUsedConfig`；`LLMConfig.default_model` → `LLMConfig.current_used` |
-| `llm/__init__.py` | `self._default_model` → `self._current_used`；`@property default_model` → `def model_for(role)`；startup 加 current_used 解析验证；`_persist` / `remove_profile` / `set_default_model` / `list_profiles` 跟改 |
+| `llm/__init__.py` | `self._default_model` → `self._current_used`；`@property default_model` → `def model_for(role)`；startup 加 current_used 解析验证；`_persist` / `remove_profile` / `set_current_model` / `list_profiles` 跟改 |
 | `orchestrator/orchestrator.py` | L101-104 `deps.provider.default_model` → `deps.provider.model_for("default")`；`hasattr` 检查改成 `callable(getattr(deps.provider, "model_for", None))`（测试用的 FakeProvider 需要知情） |
 | `session/__init__.py` | L1499 `llm_manager.default_model` → `llm_manager.model_for("default")` |
 | `gateways/base.py` | L324 `key == llm.default_model` → `key == llm.model_for("default")` |
@@ -381,11 +388,11 @@ self._current_used.default = resolved
 
 | 文件 | 变更 |
 |------|------|
-| `interfaces/model_handler.py` | `set_default_model` 签名不变；docstring 小幅调整（角色语义） |
+| `interfaces/model_handler.py` | `set_current_model` 接收 role + model ref |
 | `interfaces/contracts/list_profiles_result.py` | `default_model: str` 字段名保留（wire 稳定） |
-| `interfaces/contracts/set_default_model_result.py` | `default_model: str` 字段名保留 |
-| `acp/schemas/model.py` | `ListProfilesResponse.default_model` / `SetDefaultModelResponse.default_model` 保留 |
-| `acp/routing.py` | 无改动（仍然读 `result.default_model`，`list_profiles` 内部从 `current_used.default` 填这个字段） |
+| `interfaces/contracts/set_current_model_result.py` | 返回 `role` + `[provider, model]` |
+| `acp/schemas/model.py` | `model/set_current` request/response |
+| `acp/routing.py` | `model/set_current` → `ModelHandler.set_current_model` |
 
 ### 测试
 
@@ -403,7 +410,7 @@ self._current_used.default = resolved
 |------|------|
 | `docs/kernel/subsystems/llm.md` | ✅ 已在本次变更里更新 |
 | `docs/kernel/subsystems/orchestrator.md` | ✅ 已更新 `LLMProvider` Protocol 示意 |
-| `docs/kernel/interfaces/protocol.md` | 无需动（ACP wire 保持；`set_default_model` 方法名保留） |
+| `docs/kernel/interfaces/protocol.md` | 记录 `model/set_current` |
 | `docs/plans/progress.md` | 合并后加一行 summary |
 
 ### 配置迁移

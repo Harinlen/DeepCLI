@@ -40,7 +40,7 @@ const adapter = new MustangAgentSessionAdapter({
 	client: {} as never,
 	session: fakeSession as never,
 	sessionService: fakeSessionService as never,
-	modelProfiles: [{ name: "deepseek/deepseek-chat", providerType: "deepseek", modelId: "deepseek-chat", isDefault: true, contextWindow: 64_000 }],
+	modelProfiles: [{ name: "deepseek/deepseek-chat", providerName: "deepseek", providerType: "deepseek", modelId: "deepseek-chat", isDefault: true, contextWindow: 64_000 }],
 });
 
 const events: string[] = [];

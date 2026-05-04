@@ -2,7 +2,7 @@ import { settings } from "@/active-port/coding-agent/config/settings.js";
 import { setMustangSessionProvider, type SessionInfo } from "@/active-port/coding-agent/session/session-manager.js";
 import type { AgentSessionEvent } from "@/active-port/coding-agent/session/agent-session.js";
 import type { AcpClient, KernelConnectionState, SessionUpdateParams } from "@/acp/client.js";
-import { ModelService, type ModelProfile } from "@/models/service.js";
+import { ModelService, type ModelProfile, type ProviderModelItem, type ProviderModelState } from "@/models/service.js";
 import { MustangSession } from "@/session.js";
 import { SessionService } from "@/sessions/service.js";
 import type { CliSessionInfo } from "@/sessions/types.js";
@@ -78,7 +78,7 @@ export class MustangAgentSessionAdapter {
 		this.model = {
 			id: profile?.modelId ?? defaultModel,
 			name: profile?.name ?? defaultModel,
-			provider: profile?.providerType ?? "ACP",
+			provider: profile?.providerName ?? "ACP",
 			contextWindow: profile?.contextWindow ?? null,
 		};
 		this.agent = {
@@ -289,7 +289,7 @@ export class MustangAgentSessionAdapter {
 		this.model = {
 			id: profile?.modelId ?? state.defaultModel ?? "no-model",
 			name: profile?.name ?? state.defaultModel ?? "no-model",
-			provider: profile?.providerType ?? "ACP",
+			provider: profile?.providerName ?? "ACP",
 			contextWindow: profile?.contextWindow ?? null,
 		};
 		this.agent.model = this.model;
@@ -302,7 +302,21 @@ export class MustangAgentSessionAdapter {
 		if (!profile) return false;
 		const result = await this.modelService.setDefault(profile);
 		await this.refreshModelProfiles().catch(() => {});
-		return result === profileName || result === profile.modelId || result === `${profile.providerType}/${profile.modelId}`;
+		return result === profileName || result === profile.modelId || result === `${profile.providerName}/${profile.modelId}`;
+	}
+
+	async listProviderModels(): Promise<ProviderModelState> {
+		return this.modelService.listProviders();
+	}
+
+	async setCurrentModelRole(role: string, provider: string, model: string): Promise<boolean> {
+		const result = await this.modelService.setCurrent(role, provider, model);
+		await this.refreshModelProfiles().catch(() => {});
+		return result.role === role && result.provider === provider && result.model === model;
+	}
+
+	async setCurrentModelFromItem(item: ProviderModelItem, role = "default"): Promise<boolean> {
+		return this.setCurrentModelRole(role, item.providerName, item.modelId);
 	}
 
 	listSessions(limit = 20): Promise<CliSessionInfo[]> {

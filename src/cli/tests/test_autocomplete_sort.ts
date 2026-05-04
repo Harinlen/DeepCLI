@@ -44,8 +44,8 @@ assert(
 
 const mustangCommands = commandsToSlashCommands(sortCommandsByLabel(BUILTIN_COMMANDS), {
 	modelProfiles: [
-		{ name: "sonnet", providerType: "anthropic", modelId: "claude-sonnet", isDefault: true },
-		{ name: "gpt", providerType: "openai", modelId: "gpt-5.2", isDefault: false },
+		{ name: "anthropic/claude-sonnet", providerName: "anthropic", providerType: "anthropic", modelId: "claude-sonnet", isDefault: true },
+		{ name: "openai/gpt-5.2", providerName: "openai-main", providerType: "openai", modelId: "gpt-5.2", isDefault: false },
 	],
 	sessionList: [
 		{
@@ -77,11 +77,11 @@ const sessionSwitchArgs = await mustangProvider.getSuggestions(["/session switch
 assert(sessionSwitchArgs !== null, "expected /session switch target suggestions");
 assert(sessionSwitchArgs.items[0]?.value === "sess-1", "/session switch should complete recent session ids");
 
-const modelArgs = await mustangProvider.getSuggestions(["/model switch "], 0, 14);
-assert(modelArgs !== null, "expected /model switch profile suggestions");
+const modelArgs = await mustangProvider.getSuggestions(["/model use "], 0, 11);
+assert(modelArgs !== null, "expected /model use profile suggestions");
 assert(
-	modelArgs.items.map(item => item.value).join(",") === "sonnet,gpt",
-	"/model switch should complete live model profiles in kernel order",
+	modelArgs.items.map(item => item.value).join(",") === "anthropic/claude-sonnet,openai/gpt-5.2",
+	"/model use should complete live model profiles in kernel order",
 );
 
 const themeArgs = await mustangProvider.getSuggestions(["/theme set l"], 0, 12);

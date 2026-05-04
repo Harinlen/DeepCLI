@@ -5,7 +5,6 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
-
 class ProviderInfo(BaseModel):
     """Metadata for one registered provider."""
 
@@ -18,6 +17,9 @@ class ProviderInfo(BaseModel):
     models: list[str]
     """Model IDs available under this provider."""
 
+    context_windows: dict[str, int]
+    """Context windows by model id.  Values include kernel fallback defaults."""
+
     roles: dict[str, bool]
     """Role assignments: ``{"default": True, "bash_judge": False, ...}``."""
 
@@ -28,5 +30,8 @@ class ListProvidersResult(BaseModel):
     providers: list[ProviderInfo]
     """All registered providers."""
 
-    default_model: list[str]
-    """The current default model as ``[provider, model_id]``."""
+    current_used: dict[str, list[str]]
+    """Current-used role assignments as ``role -> [provider, model_id]``."""
+
+    default_context_window: int
+    """Kernel fallback context window used when a provider has no exact value."""

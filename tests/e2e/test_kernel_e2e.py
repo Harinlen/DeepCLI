@@ -14,6 +14,7 @@ test_session_load_replays      → SessionManager.load_session, history replay
 test_auth_bad_token_rejected   → ConnectionAuthenticator, transport auth guard
 test_before_initialize_error   → AcpSessionHandler pre-init guard
 test_model_profile_list        → LLMManager.list_profiles, ModelHandler
+test_model_provider_list       → LLMManager.list_providers, current_used schema
 test_prompt_basic              → Orchestrator, LLMProvider, full turn pipeline
 """
 
@@ -364,6 +365,29 @@ def test_model_profile_list(kernel: tuple[int, str]) -> None:
         assert "providerType" in profile
         assert "modelId" in profile
         assert "isDefault" in profile
+
+
+def test_model_provider_list(kernel: tuple[int, str]) -> None:
+    """Mustang model provider extension returns providers and current_used."""
+    port, token = kernel
+
+    async def _run_test() -> dict[str, Any]:
+        async with _client(port, token) as client:
+            await client.initialize()
+            result: dict[str, Any] = await client._request(
+                "_mustang.agent/model/provider_list",
+                {},
+            )
+        return result
+
+    result = _run(_run_test())
+
+    assert "providers" in result, f"Missing 'providers' in response: {result}"
+    assert "currentUsed" in result, f"Missing 'currentUsed' in response: {result}"
+    assert "defaultContextWindow" in result, f"Missing 'defaultContextWindow' in response: {result}"
+    assert isinstance(result["providers"], list)
+    assert isinstance(result["currentUsed"], dict)
+    assert result["defaultContextWindow"] == 128_000
 
 
 # ---------------------------------------------------------------------------

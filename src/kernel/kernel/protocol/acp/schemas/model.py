@@ -57,6 +57,7 @@ class AcpProviderEntry(AcpModel):
     name: str
     provider_type: str
     models: list[str]
+    context_windows: dict[str, int]
     roles: dict[str, bool]
 
 
@@ -64,7 +65,8 @@ class ListProvidersResponse(AcpModel):
     """``model/provider_list`` response."""
 
     providers: list[AcpProviderEntry]
-    default_model: list[str]
+    current_used: dict[str, list[str]]
+    default_context_window: int
 
 
 # ---------------------------------------------------------------------------
@@ -128,20 +130,22 @@ class RefreshModelsResponse(AcpModel):
 
 
 # ---------------------------------------------------------------------------
-# model/set_default
+# model/set_current
 # ---------------------------------------------------------------------------
 
 
-class SetDefaultModelRequest(AcpModel):
-    """``model/set_default`` request params."""
+class SetCurrentModelRequest(AcpModel):
+    """``model/set_current`` request params."""
 
     provider: str
     model: str
+    role: str = "default"
 
     meta: dict[str, Any] | None = None
 
 
-class SetDefaultModelResponse(AcpModel):
-    """``model/set_default`` response."""
+class SetCurrentModelResponse(AcpModel):
+    """``model/set_current`` response."""
 
-    default_model: list[str]
+    role: str
+    model: list[str]

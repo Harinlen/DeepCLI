@@ -46,6 +46,15 @@ export function getIndentation(_file?: string, _cwd?: string): number { return d
 
 export function formatNumber(value: number): string { return Number(value ?? 0).toLocaleString(); }
 export function formatCount(value: number): string { return formatNumber(value); }
+export function formatCompactNumber(value: number): string {
+	const number = Number(value ?? 0);
+	if (!Number.isFinite(number)) return "0";
+	const sign = number < 0 ? "-" : "";
+	const abs = Math.abs(number);
+	if (abs >= 1_000_000) return `${sign}${trimCompactNumber(abs / 1_000_000)}M`;
+	if (abs >= 1_000) return `${sign}${trimCompactNumber(abs / 1_000)}K`;
+	return `${sign}${Math.round(abs).toLocaleString()}`;
+}
 export function formatDuration(ms: number): string { return `${Math.round(ms / 1000)}s`; }
 export function formatAge(_date: Date | number | string): string { return ""; }
 export function formatBytes(bytes: number): string { return `${bytes} B`; }
@@ -62,6 +71,9 @@ export function pathIsWithin(parent: string, child: string): boolean {
 export function isEnoent(error: unknown): boolean { return (error as { code?: string })?.code === "ENOENT"; }
 export function hasFsCode(error: unknown, code: string): boolean { return (error as { code?: string })?.code === code; }
 export function toError(error: unknown): Error { return error instanceof Error ? error : new Error(String(error)); }
+function trimCompactNumber(value: number): string {
+	return value.toFixed(value >= 10 ? 0 : 1).replace(/\.0$/, "");
+}
 export function peekFile(file: string, bytes = 4096): string {
 	try {
 		return readFileSync(file, "utf8").slice(0, bytes);

@@ -329,6 +329,7 @@ export class StatusLineComponent implements Component {
 			planMode: this.#planModeStatus,
 			usageStats,
 			contextPercent,
+			contextTokens,
 			contextWindow,
 			autoCompactEnabled: this.#autoCompactEnabled,
 			subagentCount: this.#subagentCount,

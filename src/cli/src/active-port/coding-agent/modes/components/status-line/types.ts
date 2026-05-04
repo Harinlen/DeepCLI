@@ -36,6 +36,7 @@ export interface SegmentContext {
 		tokensPerSecond: number | null;
 	};
 	contextPercent: number;
+	contextTokens: number;
 	contextWindow: number;
 	autoCompactEnabled: boolean;
 	subagentCount: number;

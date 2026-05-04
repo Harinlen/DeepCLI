@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { ThinkingLevel } from "@/compat/agent-core.js";
 import { TERMINAL } from "@/tui/index.js";
-import { formatDuration, formatNumber, getProjectDir, relativePathWithinRoot } from "@/compat/utils.js";
+import { formatCompactNumber, formatDuration, formatNumber, getProjectDir, relativePathWithinRoot } from "@/compat/utils.js";
 import { theme } from "../../../modes/theme/theme";
 import { shortenPath } from "../../../tools/render-utils";
 import { getSessionAccentAnsi, getSessionAccentHex } from "../../../utils/session-color";
@@ -265,10 +265,11 @@ const contextPctSegment: StatusLineSegment = {
 	id: "context_pct",
 	render(ctx) {
 		const pct = ctx.contextPercent;
+		const tokens = ctx.contextTokens;
 		const window = ctx.contextWindow;
 
 		const autoIcon = ctx.autoCompactEnabled && theme.icon.auto ? ` ${theme.icon.auto}` : "";
-		const text = `${pct.toFixed(1)}%/${formatNumber(window)}${autoIcon}`;
+		const text = `${formatCompactNumber(tokens)} (${pct.toFixed(1)}%/${formatCompactNumber(window)})${autoIcon}`;
 
 		const color = getContextUsageThemeColor(getContextUsageLevel(pct, window));
 		const content = withIcon(theme.icon.context, theme.fg(color, text));
@@ -283,7 +284,7 @@ const contextTotalSegment: StatusLineSegment = {
 		const window = ctx.contextWindow;
 		if (!window) return { content: "", visible: false };
 		return {
-			content: theme.fg("statusLineContext", withIcon(theme.icon.context, formatNumber(window))),
+			content: theme.fg("statusLineContext", withIcon(theme.icon.context, formatCompactNumber(window))),
 			visible: true,
 		};
 	},

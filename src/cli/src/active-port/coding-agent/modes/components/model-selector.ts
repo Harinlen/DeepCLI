@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { Container, type Focusable, fuzzyFilter, getKeybindings, Input, Spacer, Text, type TUI } from "@/tui/index.js";
 import type { ProviderModelItem, ProviderModelState } from "@/models/service.js";
+import { formatCompactNumber } from "@/compat/utils.js";
 import { theme } from "../theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
@@ -176,9 +177,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 
 function formatContextWindow(value: number | null | undefined): string {
 	if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "";
-	if (value % 1_000_000 === 0) return `${value / 1_000_000}M tokens`;
-	if (value % 1_000 === 0) return `${value / 1_000}K tokens`;
-	return `${value.toLocaleString("en-US")} tokens`;
+	return `${formatCompactNumber(value)} tokens`;
 }
 
 function formatRoles(roles: string[]): string {

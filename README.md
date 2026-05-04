@@ -8,27 +8,14 @@
 </p>
 
 <p align="center">
-  <em>The agent that reinvents software.</em>
+  <em>Definitive DeepSeek coding CLI on any OS that grows with you 🐋</em>
 </p>
 
-DeepCLI is an open, modular agent harness for the **DeepSeek V4** era.  It
-wraps the model with the parts a real coding agent needs: tools, sessions,
-memory, skills, permissions, provider routing, and a clean protocol boundary
-between clients and runtime.  It borrows the inner loop instincts of Claude
-Code, the independent multi-agent shape of OpenClaw, and the practical Python
-runtime patterns of Hermes Agent, then rebuilds them as one small, hackable
-kernel.
+DeepCLI is an open, modular agent harness for the **DeepSeek V4** era with native support for Windows, macOS, and Linux.  Its harness architecture, tool system, and prompt engineering are heavily adapted from Claude Code's codebase, while the TUI is mainly a customized integration of Oh-my-pi; OpenClaw and Hermes Agent inform the multi-agent shape and Python runtime.  It gives coding agents the runtime pieces they need: sessions, tools, memory, skills, permissions, hooks, MCP, provider routing, persistence, and a clean ACP/JSON-RPC boundary between clients and runtime.  The repo is also the experiment: **DeepCLI is being built entirely by AI Coding Agents**.  Every kernel capability is a replaceable subsystem, so memory, skills, tools, LLM providers, permissions, hooks, gateways, storage, and even the agent loop can be swapped, extended, or rebuilt without coupling frontends to kernel internals.
 
-This repo is also the point of the experiment: **DeepCLI is being built
-entirely by AI Coding Agents**.  Humans steer the taste, product direction,
-and acceptance bar; agents write the code, run the tests, fix the bugs, and
-keep the system moving.  The codebase is deliberately easy to take apart:
-frontends talk to the kernel over ACP/JSON-RPC on WebSocket, the backend is
-split into replaceable subsystems, and anyone can swap a client, add a tool,
-change the agent loop, or route the same harness to another model provider.
-
-DeepCLI keeps **Mustang** as the kernel codename and compatibility namespace:
-`mustang-kernel`, `~/.mustang`, `MUSTANG_*`, and `_mustang.agent/*`.
+<p align="center">
+  <img src="docs/assets/snapshot.png" alt="DeepCLI terminal home screen" width="760">
+</p>
 
 ## Architecture
 
@@ -50,17 +37,14 @@ DeepCLI Kernel
 
 Active code lives under `src/`:
 
-- `src/kernel/` - the Mustang kernel, a FastAPI runtime for sessions,
-  orchestration, tools, providers, memory, and protocol handling.
+- `src/kernel/` - the Mustang kernel, a FastAPI runtime for sessions, orchestration, tools, providers, memory, and protocol handling.
 - `src/cli/` - a thin TypeScript/Bun ACP client.
 - `src/probe/` - an interactive and automated ACP test client.
 - `archive/` - old daemon-era reference code; not active development.
 
 ## Quick Start
 
-DeepCLI is still alpha software.  Linux is the first supported install target.
-From a local checkout, build and install the current repo into your user
-layout:
+DeepCLI is still alpha software.  Linux is the first supported install target. From a local checkout, build and install the current repo into your user layout:
 
 ```bash
 git clone <repo-url> deepcli
@@ -74,10 +58,7 @@ Then start DeepCLI:
 deepcli
 ```
 
-The `deepcli` launcher keeps the Kernel as a per-user singleton.  It checks for
-an existing ready Kernel, starts one in the background when needed, chooses
-`127.0.0.1:8200` by default, and falls back to a free port if the default is
-already occupied.
+The `deepcli` launcher keeps the Kernel as a per-user singleton.  It checks for an existing ready Kernel, starts one in the background when needed, chooses `127.0.0.1:8200` by default, and falls back to a free port if the default is already occupied.
 
 Useful launcher commands:
 
@@ -102,14 +83,11 @@ For source-only development without installing, use:
 scripts/run-cli.sh
 ```
 
-That script ensures a dev Kernel is ready and forwards CLI arguments, including
-`--resume`, `--port`, and `--kernel`.
+That script ensures a dev Kernel is ready and forwards CLI arguments, including `--resume`, `--port`, and `--kernel`.
 
 ## Development
 
-For first-time setup, read [`INIT.md`](INIT.md).  For project rules,
-architecture, workflow, and current progress, start with
-[`docs/README.md`](docs/README.md).
+For first-time setup, read [`INIT.md`](INIT.md).  For project rules, architecture, workflow, and current progress, start with [`docs/README.md`](docs/README.md).
 
 Useful commands:
 
@@ -122,12 +100,9 @@ uv run pytest tests/ -q
 
 ## Status
 
-DeepCLI is in alpha.  Kernel 1.0.0 is online with ACP transport,
-SQLite-backed sessions, tool authorization, LLM provider routing, skills,
-hooks, memory, MCP, gateways, and the Agent Control Plane groundwork.
+DeepCLI is in alpha.  Kernel 1.0.0 is online with ACP transport, SQLite-backed sessions, tool authorization, LLM provider routing, skills, hooks, memory, MCP, gateways, and the Agent Control Plane groundwork.
 
-The current source of truth for active work is
-[`docs/plans/progress.md`](docs/plans/progress.md).
+The current source of truth for active work is [`docs/plans/progress.md`](docs/plans/progress.md).
 
 ## License
 

@@ -738,48 +738,34 @@ Orchestrator 持有内存侧的 history 用于喂给 LLM。两者互不依赖。
 
 ## Sub-agent
 
-Sub-agent 通过 **AgentTool** 透明地融入工具执行流程：
+Sub-agent 通过 **AgentTool** 融入工具执行流程，但 child transcript
+不会作为父会话的顶层 assistant/tool 事件直接透传：
 
 1. LLM 输出 `AgentTool` 的 `tool_use`
 2. `ToolExecutor` 执行 `AgentTool.call()`
 3. `AgentTool` 内部构造一个新的 `StandardOrchestrator`（depth + 1），
    调用其 `query()`
-4. Sub-agent 产出的所有 `OrchestratorEvent` **直接透传**到父 generator，
-   不做任何包装
-5. `AgentTool` 在 sub-agent query 开始前 yield 一个 `SubAgentStart`，
-   结束后 yield 一个 `SubAgentEnd`，作为**标记事件**插入同一平坦流中
+4. Sub-agent 产出的 `TextDelta` 被收集为 Agent 工具的最终结果，
+   供父 LLM 在 `tool_result` 中读取
+5. Child `OrchestratorEvent` 不映射为父会话的顶层 `session/update`；
+   这与 Claude Code main 对齐，避免子 Agent 回复直接刷到主窗口
 
 ### 事件流结构
 
-事件流是**平坦的**——sub-agent 事件不嵌套在 SubAgentStart/SubAgentEnd
-"里面"，它们只是按时间顺序排列在同一个流里：
+父会话客户端看到的是 Agent 工具自己的生命周期。子 Agent 的正文不会
+以父 assistant message 的形式出现：
 
 ```
-父 Orchestrator 事件流（平坦序列）:
+父 Orchestrator 事件流:
   ...
   ToolCallStart(id="tc_1", kind=agent)
-  SubAgentStart(agent_id="ag_x", spawned_by_tool_id="tc_1")   ← 标记：sub-agent 开始
-  TextDelta(...)                ← sub-agent 产出，直接透传
-  ToolCallStart(id="tc_2", ...) ← sub-agent 产出，直接透传
-  ToolCallResult(id="tc_2", ...)← sub-agent 产出，直接透传
-  SubAgentEnd(agent_id="ag_x", stop_reason=end_turn)           ← 标记：sub-agent 结束
-  ToolCallResult(id="tc_1", content=[...])  ← AgentTool 工具调用本身的结果
+  ToolCallResult(id="tc_1", content=[...])  ← sub-agent 最终文本作为 Agent 结果
   ...
 ```
 
-### Session 和客户端如何区分归属
-
-Session 和客户端各自维护一个 **sub-agent stack**：
-
-```python
-agent_stack: list[str] = []   # 空 = 主 agent
-
-on SubAgentStart(agent_id):   → agent_stack.push(agent_id)
-on SubAgentEnd(agent_id):     → agent_stack.pop()
-其他事件:                      → 写入 agent_stack[-1] 的 JSONL（空时写主 JSONL）
-```
-
-这个机制对**嵌套 sub-agent**（depth > 1）同样成立，不需要特殊处理。
+`SubAgentStart` / `SubAgentEnd` 仍可用于内部 transcript / SDK progress
+场景，但前台 `AgentTool` 不再用 `passthrough_event` 把 child stream 投射
+到父客户端。
 
 ### 上下文隔离
 
@@ -788,10 +774,10 @@ Sub-agent 的 conversation history 独立于父 Orchestrator。`AgentTool.call()
 的历史变更不影响父。`AgentTool.call()` 返回后子 Orchestrator 随之释放，
 不需要显式 `close()`。
 
-> **参照**：Claude Code 的 `AgentTool` 在 `runAgent.ts` 里递归调用
-> `query()`，所有 sub-agent 事件直接透传（`yield* agentQuery`），
-> 没有任何包装。归属追踪靠 `agentId` 字段写 sidechain transcript，
-> 我们用 SubAgentStart/End 标记事件实现等价效果。
+> **参照**：Claude Code main 的 `AgentTool` 收集 child messages，通过
+> Agent 工具 progress/result 渲染；最终 `finalizeAgentTool(...)` 把
+> child 最后一条 assistant text 作为工具结果交还，不把 child assistant
+> text 当作父会话正文直接输出。
 
 ---
 

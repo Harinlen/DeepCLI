@@ -1,4 +1,5 @@
 import { settings } from "@/active-port/coding-agent/config/settings.js";
+import { theme } from "@/active-port/coding-agent/modes/theme/theme.js";
 import { setMustangSessionProvider, type SessionInfo } from "@/active-port/coding-agent/session/session-manager.js";
 import type { AgentSessionEvent } from "@/active-port/coding-agent/session/agent-session.js";
 import type { AcpClient, KernelConnectionState, SessionUpdateParams } from "@/acp/client.js";
@@ -6,6 +7,7 @@ import { ModelService, type ModelProfile, type ProviderModelItem, type ProviderM
 import { MustangSession } from "@/session.js";
 import { SessionService } from "@/sessions/service.js";
 import type { CliSessionInfo } from "@/sessions/types.js";
+import { Box, Text } from "@/tui/index.js";
 
 type Listener = (event: AgentSessionEvent) => void | Promise<void>;
 
@@ -67,6 +69,7 @@ export class MustangAgentSessionAdapter {
 	#activeAssistantSegment: AssistantMessage | undefined;
 	#toolNames = new Map<string, string>();
 	#eventTail: Promise<void> = Promise.resolve();
+	#subagentDepth = 0;
 
 	constructor(
 		private readonly options: MustangAgentSessionAdapterOptions,
@@ -256,7 +259,10 @@ export class MustangAgentSessionAdapter {
 	async sendPlanModeContext(): Promise<void> {}
 	async setActiveToolsByName(_names: string[]): Promise<void> {}
 	getActiveToolNames(): string[] { return []; }
-	getToolByName(name: string): Record<string, unknown> { return { name, label: name, status: "pending" }; }
+	getToolByName(name: string): Record<string, unknown> {
+		if (name === "Agent") return agentToolRenderer;
+		return { name, label: name, status: "pending" };
+	}
 	getTodoPhases(): unknown[] { return []; }
 	isFastModeEnabled(): boolean { return false; }
 	getAsyncJobSnapshot(): { running: unknown[]; recent: unknown[] } { return { running: [], recent: [] }; }
@@ -381,6 +387,8 @@ export class MustangAgentSessionAdapter {
 	}
 
 	#handleUpdate(update: SessionUpdateParams): void {
+		if (this.#handleSubagentBoundary(update)) return;
+		if (this.#subagentDepth > 0 && isSubagentPrivateUpdate(update)) return;
 		switch (update.sessionUpdate) {
 			case "agent_message_chunk":
 				this.#appendAssistant("text", extractText(update.content));
@@ -403,6 +411,20 @@ export class MustangAgentSessionAdapter {
 				this.#applyUsageUpdate(update);
 				break;
 		}
+	}
+
+	#handleSubagentBoundary(update: SessionUpdateParams): boolean {
+		if (update.sessionUpdate !== "tool_call_update") return false;
+		const meta = readUpdateMeta(update);
+		if (meta?.["mustang.agent/agentStart"]) {
+			this.#subagentDepth += 1;
+			return true;
+		}
+		if (meta?.["mustang.agent/agentEnd"]) {
+			this.#subagentDepth = Math.max(0, this.#subagentDepth - 1);
+			return true;
+		}
+		return false;
 	}
 
 	#applyUsageUpdate(update: SessionUpdateParams): void {
@@ -535,6 +557,62 @@ export class MustangSessionManagerAdapter {
 		this.#name = title;
 		this.titleSource = source;
 	}
+}
+
+const agentToolRenderer = {
+	name: "Agent",
+	label: "Agent",
+	status: "pending",
+	mergeCallAndResult: true,
+	renderCall(args: unknown, state: { isPartial?: boolean; expanded?: boolean }) {
+		const input = args && typeof args === "object" ? args as Record<string, unknown> : {};
+		const description = typeof input.description === "string" && input.description.trim()
+			? input.description.trim()
+			: typeof input.prompt === "string" && input.prompt.trim()
+				? input.prompt.trim()
+				: "sub-agent";
+		const box = new Box(0, 0);
+		if (state.isPartial) {
+			box.addChild(new Text(`${theme.fg("toolTitle", "pending Agent")}\n ${theme.fg("dim", theme.tree.last)} ${theme.fg("dim", `description="${truncatePlain(description, 48)}"`)}`, 0, 0));
+		} else {
+			box.addChild(new Text(theme.fg("toolTitle", `Agent(${truncatePlain(description, 48)})`), 0, 0));
+		}
+		return box;
+	},
+	renderResult(result: { content?: Array<{ type: string; text?: string }>; isError?: boolean }, state: { expanded?: boolean }) {
+		const text = (result.content ?? [])
+			.filter(block => block.type === "text")
+			.map(block => block.text ?? "")
+			.join("\n")
+			.trim();
+		const box = new Box(0, 0);
+		if (result.isError) {
+			box.addChild(new Text(theme.fg("error", text || "Agent failed"), 0, 0));
+			return box;
+		}
+		if (!state.expanded) {
+			box.addChild(new Text(` ${theme.fg("dim", theme.tree.last)} ${theme.fg("dim", "Done (ctrl+o to expand)")}`, 0, 0));
+			return box;
+		}
+		box.addChild(new Text(text || theme.fg("dim", "(no output)"), 0, 0));
+		return box;
+	},
+};
+
+function readUpdateMeta(update: SessionUpdateParams): Record<string, unknown> | undefined {
+	const meta = update._meta ?? update.meta;
+	return meta && typeof meta === "object" && !Array.isArray(meta) ? meta as Record<string, unknown> : undefined;
+}
+
+function isSubagentPrivateUpdate(update: SessionUpdateParams): boolean {
+	return update.sessionUpdate === "agent_message_chunk" ||
+		update.sessionUpdate === "agent_thought_chunk" ||
+		update.sessionUpdate === "tool_call" ||
+		update.sessionUpdate === "tool_call_update";
+}
+
+function truncatePlain(value: string, max: number): string {
+	return value.length <= max ? value : `${value.slice(0, Math.max(0, max - 1))}…`;
 }
 
 function extractText(content: unknown): string {

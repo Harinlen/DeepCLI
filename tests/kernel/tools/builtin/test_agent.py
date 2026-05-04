@@ -12,6 +12,7 @@ from kernel.tasks.types import TaskStatus
 from kernel.tools.builtin.agent import AgentTool, _run_agent_background
 from kernel.tools.context import ToolContext
 from kernel.tools.file_state import FileStateCache
+from kernel.tools.types import ToolCallProgress, ToolCallResult
 
 
 def _ctx(tmp_path: Path) -> ToolContext:
@@ -51,8 +52,11 @@ class TestAgentToolForeground:
         ):
             results.append(event)
 
-        # Should have progress events (passthrough) + final result
+        # Claude Code parity: foreground sub-agent output is returned as the
+        # Agent tool result, not streamed into the parent assistant transcript.
+        assert not any(isinstance(event, ToolCallProgress) for event in results)
         final = results[-1]
+        assert isinstance(final, ToolCallResult)
         assert final.data["result"] == "Hello world"
 
     @pytest.mark.asyncio

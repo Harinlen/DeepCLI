@@ -2,7 +2,7 @@
 
 Coverage map
 ------------
-test_agent_foreground     → AgentTool foreground, spawn_subagent, SubAgentStart/End, event passthrough
+test_agent_foreground     → AgentTool foreground, spawn_subagent, result handoff
 test_agent_spawn_unavail  → AgentTool error path when spawn_subagent fails
 
 Each test drives the live kernel through ProbeClient, triggering LLM

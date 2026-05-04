@@ -9,6 +9,7 @@ if (server.address() === null) {
 const port = (server.address() as { port: number }).port;
 const expectedTurnId = "11111111-1111-4111-8111-111111111111";
 let sawTurnId = false;
+let updateMeta: Record<string, unknown> | undefined;
 
 server.on("connection", (socket) => {
   socket.on("message", (raw) => {
@@ -27,6 +28,21 @@ server.on("connection", (socket) => {
       socket.send(
         JSON.stringify({
           jsonrpc: "2.0",
+          method: "session/update",
+          params: {
+            sessionId: "sess-1",
+            update: {
+              sessionUpdate: "tool_call_update",
+              toolCallId: "agent-1",
+              status: "in_progress",
+            },
+            _meta: { "mustang.agent/agentStart": { agent_id: "a1" } },
+          },
+        }),
+      );
+      socket.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
           id: msg.id,
           result: { stopReason: "end_turn" },
         }),
@@ -36,9 +52,13 @@ server.on("connection", (socket) => {
 });
 
 const client = await AcpClient.connect(`ws://127.0.0.1:${port}`, "dev");
+client.onUpdate((update) => {
+  updateMeta = (update._meta ?? update.meta) as Record<string, unknown> | undefined;
+});
 await client.promptRequest("sess-1", "hello", { clientTurnId: expectedTurnId });
 
 assert(sawTurnId, "session/prompt should send clientTurnId in ACP _meta");
+assert(Boolean(updateMeta?.["mustang.agent/agentStart"]), "session/update should preserve ACP _meta on flattened update");
 
 client.close();
 await new Promise<void>((resolve) => server.close(() => resolve()));

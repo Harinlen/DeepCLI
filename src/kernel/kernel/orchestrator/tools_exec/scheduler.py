@@ -121,6 +121,7 @@ class ToolSchedulerMixin:
             return
 
         tool_ctx = self._build_tool_context(tool_source)
+        tool_ctx.tool_use_id = tc.id
         auth_ctx = self._build_authorize_context(mode=mode)
         self._active_contexts[tc.id] = tool_ctx.cancel_event
 
@@ -185,6 +186,7 @@ class ToolSchedulerMixin:
                 )
             else:
                 tool_ctx = self._build_tool_context(tool_source)
+                tool_ctx.tool_use_id = tc.id
                 auth_ctx = self._build_authorize_context(mode=mode)
                 self._active_contexts[tc.id] = tool_ctx.cancel_event
                 task = asyncio.create_task(

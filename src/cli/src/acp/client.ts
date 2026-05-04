@@ -235,8 +235,10 @@ export class AcpClient {
       // JSON-RPC response to one of our requests
       this.routeResponse(msg);
     } else if (msg.method === "session/update") {
-      const params = msg.params as { sessionId: string; update: SessionUpdateParams };
-      for (const h of this.updateHandlers) h(params.update);
+      const params = msg.params as { sessionId: string; update: SessionUpdateParams; _meta?: Record<string, unknown>; meta?: Record<string, unknown> };
+      const meta = params._meta ?? params.meta;
+      const update = meta ? { ...params.update, _meta: meta, meta } : params.update;
+      for (const h of this.updateHandlers) h(update);
     } else if (msg.method === MustangMethod.sessionExecutionUpdate) {
       const params = msg.params as { sessionId?: string; execution?: Record<string, unknown> };
       const update = executionToSessionUpdate(params);

@@ -99,6 +99,46 @@ assert(assistant?.content.some((block: { type: string; thinking?: string }) => b
 assert(assistant?.content.some((block: { type: string; id?: string }) => block.type === "toolCall" && block.id === "tool-1"), "tool call should be appended to assistant message");
 assert(assistant?.usage?.input === 123 && assistant?.usage?.output === 45, "usage_update should attach usage to assistant message");
 
+const subagentUpdates = [
+	{ sessionUpdate: "tool_call", toolCallId: "agent-1", title: "Agent", rawInput: "{\"description\":\"Check weather\",\"prompt\":\"Look up weather\"}" },
+	{ sessionUpdate: "tool_call_update", toolCallId: "agent-1", status: "in_progress", meta: { "mustang.agent/agentStart": { agent_id: "a1" } } },
+	{ sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "child thought" } },
+	{ sessionUpdate: "tool_call", toolCallId: "child-web", title: "WebSearch", rawInput: "{\"query\":\"weather\"}" },
+	{ sessionUpdate: "tool_call_update", toolCallId: "child-web", status: "completed", content: "child search result" },
+	{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "child final" } },
+	{ sessionUpdate: "tool_call_update", toolCallId: "agent-1", status: "in_progress", meta: { "mustang.agent/agentEnd": { agent_id: "a1" } } },
+	{ sessionUpdate: "tool_call_update", toolCallId: "agent-1", status: "completed", content: "child final" },
+	{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "parent summary" } },
+];
+const subagentSession = {
+	...fakeSession,
+	async prompt(_text: string, onUpdate: (update: unknown) => void) {
+		for (const update of subagentUpdates) onUpdate(update);
+		return { stopReason: "stop" };
+	},
+};
+const subagentAdapter = new MustangAgentSessionAdapter({
+	client: {} as never,
+	session: subagentSession as never,
+	sessionService: fakeSessionService as never,
+	modelProfiles: [],
+});
+const subagentRenderOrder: string[] = [];
+subagentAdapter.subscribe(event => {
+	if (event.type === "tool_execution_start" || event.type === "tool_execution_end") {
+		subagentRenderOrder.push(`${event.type}:${event.toolCallId}:${event.toolName}`);
+	}
+});
+await subagentAdapter.prompt("use agent");
+const subagentAssistant = subagentAdapter.messages.find(message => message.role === "assistant");
+const subagentText = (subagentAssistant?.content ?? [])
+	.filter((block: { type: string }) => block.type === "text" || block.type === "thinking")
+	.map((block: { text?: string; thinking?: string }) => block.text ?? block.thinking ?? "")
+	.join("");
+assert(subagentRenderOrder.join("|") === "tool_execution_start:agent-1:Agent|tool_execution_end:agent-1:Agent", `sub-agent child tools should stay inside Agent UI, got: ${subagentRenderOrder.join("|")}`);
+assert(subagentText === "parent summary", `sub-agent private text should not render as parent assistant text, got: ${subagentText}`);
+assert(!subagentAssistant?.content.some((block: { type: string; id?: string }) => block.type === "toolCall" && block.id === "child-web"), "child tool calls should not be appended to parent assistant message");
+
 const delayedAdapter = new MustangAgentSessionAdapter({
 	client: {} as never,
 	session: fakeSession as never,

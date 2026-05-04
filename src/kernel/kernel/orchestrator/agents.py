@@ -46,6 +46,7 @@ def make_spawn_subagent(parent: SubAgentParentRuntime) -> Any:
         agent_id: str | None = None,
         on_permission: PermissionCallback | None = None,
         initial_history: list[Any] | None = None,
+        spawned_by_tool_id: str | None = None,
     ) -> AsyncGenerator[Any, None]:
         """Run a child StandardOrchestrator and bracket its event stream.
 
@@ -55,6 +56,8 @@ def make_spawn_subagent(parent: SubAgentParentRuntime) -> Any:
             agent_id: Optional caller-supplied child id.
             on_permission: Optional child permission callback.
             initial_history: Optional restored child conversation history.
+            spawned_by_tool_id: Optional parent Agent tool call id for
+                client-side progress correlation.
 
         Yields:
             ``SubAgentStart``, child events, and the matching ``SubAgentEnd``.
@@ -76,7 +79,7 @@ def make_spawn_subagent(parent: SubAgentParentRuntime) -> Any:
             agent_id=agent_id,
             description=prompt[:80],
             agent_type="general-purpose",
-            spawned_by_tool_id="",
+            spawned_by_tool_id=spawned_by_tool_id or "",
         )
         async for event in child.query(
             [TextContent(text=prompt)],

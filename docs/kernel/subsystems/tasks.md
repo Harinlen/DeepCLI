@@ -923,7 +923,7 @@ async def call(
         yield await self._spawn_background(input, ctx)
         return
 
-    # -- 前台同步：spawn 子 Orchestrator，透传事件 --
+    # -- 前台同步：spawn 子 Orchestrator，收集最终文本 --
 
     if ctx.spawn_subagent is None:
         yield ToolCallResult(
@@ -933,15 +933,10 @@ async def call(
         )
         return
 
-    # spawn_subagent 由 Orchestrator 提供，内部构建子 StandardOrchestrator
-    # 透传 SubAgentStart → sub-agent events → SubAgentEnd
+    # spawn_subagent 由 Orchestrator 提供，内部构建子 StandardOrchestrator。
+    # 子事件不透传到父客户端；只收集 TextDelta 作为 Agent 工具结果。
     result_text_parts: list[str] = []
     async for event in ctx.spawn_subagent(prompt, []):
-        # 透传所有 sub-agent 事件给父 Orchestrator
-        yield ToolCallProgress(
-            content=[],  # 事件由 ToolExecutor 直接 yield
-            passthrough_event=event,  # 特殊字段：直接透传
-        )
         # 收集 sub-agent 的 text 输出作为最终结果
         if isinstance(event, TextDelta):
             result_text_parts.append(event.content)
@@ -954,10 +949,9 @@ async def call(
     )
 ```
 
-> **注意**：`_passthrough_event` 是一个设计草案字段。实际实现时可能改为
-> `ToolCallProgress` 携带 `OrchestratorEvent` 的包装，由 `ToolExecutor`
-> 解包后直接 yield 给父 Orchestrator。具体机制在实装时确定——关键约束是
-> **sub-agent 事件必须平坦透传，不能包装成嵌套结构**。
+> **注意**：早期设计要求 `passthrough_event` 平坦透传 sub-agent 事件。
+> 这会让 child assistant text 直接渲染到主窗口，已改为 Claude Code
+> main 风格：前台 AgentTool 收集 child 输出并作为 Agent 工具结果返回。
 
 ### 3.4 call() — 后台异步模式
 
@@ -1121,12 +1115,14 @@ def _make_spawn_subagent(self) -> Callable:
 ### 3.6 事件透传机制
 
 现有 `ToolExecutor` 的 `_run_one()` 只 yield `ToolCallProgress` 和
-`ToolCallResult`。AgentTool 需要透传 `OrchestratorEvent`（TextDelta,
-SubAgentStart 等）。
+`ToolCallResult`。早期 AgentTool 设计曾要求透传 `OrchestratorEvent`
+（TextDelta, SubAgentStart 等）；当前前台 AgentTool 不再这么做，避免
+child transcript 成为父会话顶层输出。
 
-**方案**：`ToolCallProgress` 增加可选字段 `passthrough_event`。
+**保留机制**：`ToolCallProgress` 仍有可选字段 `passthrough_event`。
 ToolExecutor 在 yield ToolCallProgress 时检查此字段——若存在，直接
-yield `passthrough_event` 代替 ToolCallProgress 本身：
+yield `passthrough_event` 代替 ToolCallProgress 本身。它现在是通用
+escape hatch，不是 AgentTool 前台路径的必需机制：
 
 ```python
 # types.py — ToolCallProgress 扩展
@@ -1135,7 +1131,7 @@ yield `passthrough_event` 代替 ToolCallProgress 本身：
 class ToolCallProgress:
     content: list[ContentBlock]
     passthrough_event: OrchestratorEvent | None = None
-    """当 Tool 需要透传 OrchestratorEvent 时设置（AgentTool 专用）。
+    """当 Tool 需要透传 OrchestratorEvent 时设置。
     ToolExecutor 遇到此字段时直接 yield event，不包装为 Progress。"""
 ```
 
@@ -1152,7 +1148,8 @@ async for chunk in tool.call(parsed_input, ctx):
         ...
 ```
 
-这保持了**平坦事件流**的不变量（`orchestrator.md` 的核心设计）。
+前台 AgentTool 的当前不变量是：子 Agent 输出保持私有，只将最终文本
+作为 Agent 工具结果返回。
 
 ---
 
@@ -1531,12 +1528,12 @@ subprocess 的 file descriptor 写入文件（`stdout=fd, stderr=fd`），
 
 后台模式也通过同一个回调，只是在 `asyncio.create_task()` 里调用。
 
-### 7.6 事件透传的 passthrough_event 方案
+### 7.6 passthrough_event 方案的现状
 
-在 `ToolCallProgress` 上加 `passthrough_event` 字段是最小侵入方案。
-替代方案（ToolExecutor 特殊 case AgentTool、单独的事件通道）都更
-复杂。passthrough 保持了"所有事件从 `ToolExecutor.results()` 出来"的
-不变量。
+`ToolCallProgress.passthrough_event` 仍作为通用 escape hatch 保留，但
+前台 `AgentTool` 不再使用它。子 Agent transcript 保持私有，最终文本
+通过 `ToolCallResult.llm_content` 回到父 LLM，避免 child 输出成为主会话
+顶层正文。
 
 ### 7.7 StandardOrchestrator 新增 `agent_id` 构造参数
 

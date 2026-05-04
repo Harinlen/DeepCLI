@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
 
     from kernel.orchestrator.events import OrchestratorEvent
-    from kernel.protocol.interfaces.contracts.content_block import ContentBlock
     from kernel.tasks.registry import TaskRegistry
     from kernel.tools.file_state import FileStateCache
 
@@ -63,6 +62,13 @@ class ToolContext:
     file_state: FileStateCache
     """Tools subsystem shared state — FileRead records, FileEdit verifies."""
 
+    tool_use_id: str | None = None
+    """Current LLM tool_use id for this tool call, when available.
+
+    AgentTool uses this to correlate child-agent progress metadata back to
+    the parent Agent tool card.
+    """
+
     blobs: Any = None
     """Session ``BlobStore`` — spillover for large tool_results.  ``None``
     in Phase 1 (BlobStore not yet implemented)."""
@@ -95,9 +101,7 @@ class ToolContext:
     Used by background task notifications (stall watchdog, etc.).
     Wired by ToolExecutor from ``OrchestratorDeps.queue_reminders``."""
 
-    spawn_subagent: (
-        Callable[[str, list[ContentBlock]], AsyncGenerator[OrchestratorEvent, None]] | None
-    ) = None
+    spawn_subagent: Callable[..., AsyncGenerator[OrchestratorEvent, None]] | None = None
     """Orchestrator-provided closure that spawns a sub-agent as a nested
     query.  ``None`` when sub-agent spawning is not available (e.g. inside
     a depth-limited sub-agent itself, or before AgentTool is implemented).

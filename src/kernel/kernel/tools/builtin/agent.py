@@ -4,8 +4,10 @@ Design reference: ``docs/plans/task-manager.md`` § 3.
 Claude Code equivalent: ``src/tools/AgentTool/AgentTool.tsx``.
 
 Two modes:
-- **Foreground** (default): blocks until the sub-agent completes,
-  transparently forwarding its events via ``passthrough_event``.
+- **Foreground** (default): blocks until the sub-agent completes and
+  returns the child's final text as the Agent tool result.  Child events
+  are kept out of the parent stream so sub-agent output does not render
+  as top-level assistant text.
 - **Background** (``run_in_background=True``): registers an
   ``AgentTaskState``, returns ``task_id`` immediately.
 """
@@ -97,11 +99,11 @@ class AgentTool(Tool[dict[str, Any], str]):
             return
 
         result_text_parts: list[str] = []
-        async for event in ctx.spawn_subagent(prompt, []):
-            yield ToolCallProgress(
-                content=[],
-                passthrough_event=event,
-            )
+        async for event in ctx.spawn_subagent(
+            prompt,
+            [],
+            spawned_by_tool_id=ctx.tool_use_id,
+        ):
             if isinstance(event, TextDelta):
                 result_text_parts.append(event.content)
 
@@ -204,6 +206,7 @@ async def _run_agent_background(
             [],
             agent_id=task_id,
             initial_history=initial_history,
+            spawned_by_tool_id=task_id,
         ):
             if isinstance(event, TextDelta):
                 result_parts.append(event.content)

@@ -89,8 +89,10 @@ class ToolCallProgress:
 
     passthrough_event: Any = None
     """When set, ToolExecutor yields this event directly instead of
-    wrapping in an orchestrator ``ToolCallProgress``.  Used by AgentTool
-    to transparently forward sub-agent ``OrchestratorEvent`` instances.
+    wrapping in an orchestrator ``ToolCallProgress``.  This is an escape
+    hatch for tools that intentionally project native orchestrator events.
+    AgentTool foreground execution does not use it; child-agent transcript
+    events stay private and are returned through the Agent tool result.
     Typed as ``Any`` to avoid importing ``OrchestratorEvent`` into the
     tools layer."""
 

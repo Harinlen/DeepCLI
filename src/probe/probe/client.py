@@ -57,6 +57,7 @@ class ToolCallUpdate:
 
     tool_call_id: str
     status: str
+    meta: dict[str, Any] | None = None
 
 
 @dataclass
@@ -740,6 +741,7 @@ def _parse_update(msg: dict[str, Any]) -> Event | None:
         return ToolCallUpdate(
             tool_call_id=update["toolCallId"],
             status=update.get("status", ""),
+            meta=update.get("_meta") or update.get("meta"),
         )
 
     return None  # unknown / unhandled update type

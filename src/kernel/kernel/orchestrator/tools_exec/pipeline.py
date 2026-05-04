@@ -252,6 +252,10 @@ class ToolPipelineMixin:
 
         coerced = apply_result_budget(coerced, tool.max_result_size_chars)
         yield (
-            ToolCallResultEvent(id=tc.id, content=list(final_result.llm_content)),
+            ToolCallResultEvent(
+                id=tc.id,
+                content=list(final_result.llm_content),
+                meta=final_result.meta,
+            ),
             ToolResultContent(tool_use_id=tc.id, content=coerced, is_error=False),
         )

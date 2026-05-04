@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from kernel.orchestrator.events import TextDelta
+from kernel.orchestrator.events import SubAgentEnd, TextDelta
+from kernel.orchestrator.types import StopReason
 from kernel.tasks.registry import TaskRegistry
 from kernel.tasks.types import TaskStatus
 from kernel.tools.builtin.agent import AgentTool, _run_agent_background
@@ -31,6 +32,19 @@ async def _fake_spawn(prompt, attachments, **kwargs):
     """Mock spawn_subagent that yields a few TextDelta events."""
     yield TextDelta(content="Hello ")
     yield TextDelta(content="world")
+
+
+async def _fake_spawn_with_stats(prompt, attachments, **kwargs):
+    """Mock spawn_subagent that finishes with child usage stats."""
+    yield TextDelta(content="stats")
+    yield SubAgentEnd(
+        agent_id="a_stats",
+        stop_reason=StopReason.end_turn,
+        input_tokens=1200,
+        output_tokens=345,
+        tool_use_count=2,
+        duration_ms=13000,
+    )
 
 
 async def _failing_spawn(prompt, attachments, **kwargs):
@@ -58,6 +72,30 @@ class TestAgentToolForeground:
         final = results[-1]
         assert isinstance(final, ToolCallResult)
         assert final.data["result"] == "Hello world"
+
+    @pytest.mark.asyncio
+    async def test_foreground_returns_agent_stats_meta(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        ctx.spawn_subagent = _fake_spawn_with_stats
+
+        tool = AgentTool()
+        results = []
+        async for event in tool.call(
+            {"description": "test", "prompt": "do stuff"}, ctx
+        ):
+            results.append(event)
+
+        final = results[-1]
+        assert isinstance(final, ToolCallResult)
+        stats = final.data["agent"]
+        assert stats == {
+            "toolUseCount": 2,
+            "inputTokens": 1200,
+            "outputTokens": 345,
+            "totalTokens": 1545,
+            "durationMs": 13000,
+        }
+        assert final.meta == {"mustang.agent/agentStats": stats}
 
     @pytest.mark.asyncio
     async def test_foreground_no_spawn(self, tmp_path: Path) -> None:

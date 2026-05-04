@@ -19,7 +19,7 @@ import logging
 from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
-from kernel.orchestrator.events import TextDelta
+from kernel.orchestrator.events import SubAgentEnd, TextDelta
 from kernel.orchestrator.types import ToolKind
 from kernel.protocol.interfaces.contracts.text_block import TextBlock
 from kernel.tasks.id import generate_task_id
@@ -99,6 +99,7 @@ class AgentTool(Tool[dict[str, Any], str]):
             return
 
         result_text_parts: list[str] = []
+        stats = _empty_agent_stats()
         async for event in ctx.spawn_subagent(
             prompt,
             [],
@@ -106,12 +107,15 @@ class AgentTool(Tool[dict[str, Any], str]):
         ):
             if isinstance(event, TextDelta):
                 result_text_parts.append(event.content)
+            if isinstance(event, SubAgentEnd):
+                stats = _agent_stats(event)
 
         final_text = "".join(result_text_parts) or "(agent produced no output)"
         yield ToolCallResult(
-            data={"result": final_text},
+            data={"result": final_text, "agent": stats},
             llm_content=[TextBlock(type="text", text=final_text)],
             display=TextDisplay(text=final_text),
+            meta={"mustang.agent/agentStats": stats},
         )
 
     async def _spawn_background(
@@ -237,6 +241,28 @@ def _error(msg: str) -> ToolCallResult:
         llm_content=[TextBlock(type="text", text=f"Error: {msg}")],
         display=TextDisplay(text=f"Error: {msg}"),
     )
+
+
+def _empty_agent_stats() -> dict[str, int]:
+    return {
+        "toolUseCount": 0,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "durationMs": 0,
+    }
+
+
+def _agent_stats(event: SubAgentEnd) -> dict[str, int]:
+    input_tokens = max(0, int(event.input_tokens))
+    output_tokens = max(0, int(event.output_tokens))
+    return {
+        "toolUseCount": max(0, int(event.tool_use_count)),
+        "inputTokens": input_tokens,
+        "outputTokens": output_tokens,
+        "totalTokens": input_tokens + output_tokens,
+        "durationMs": max(0, int(event.duration_ms)),
+    }
 
 
 __all__ = ["AgentTool"]

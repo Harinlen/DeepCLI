@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from kernel.llm.types import TextContent
 from kernel.orchestrator.constants import SUBAGENT_DEFAULT_MAX_TURNS
-from kernel.orchestrator.events import SubAgentEnd, SubAgentStart
+from kernel.orchestrator.events import SubAgentEnd, SubAgentStart, ToolCallStart
 from kernel.orchestrator.runtime import SubAgentParentRuntime
 from kernel.orchestrator.types import PermissionCallback, PermissionResponse, StopReason
 from kernel.tasks.id import generate_task_id
@@ -81,17 +82,26 @@ def make_spawn_subagent(parent: SubAgentParentRuntime) -> Any:
             agent_type="general-purpose",
             spawned_by_tool_id=spawned_by_tool_id or "",
         )
+        started_at = time.monotonic()
+        tool_use_count = 0
         async for event in child.query(
             [TextContent(text=prompt)],
             on_permission=on_permission or _auto_allow,
             max_turns=SUBAGENT_DEFAULT_MAX_TURNS,
         ):
+            if isinstance(event, ToolCallStart):
+                tool_use_count += 1
             yield event
         transcript = list(child._history.messages) if child._history.messages else None
+        input_tokens, output_tokens = child.last_turn_usage
         yield SubAgentEnd(
             agent_id=agent_id,
             stop_reason=child.stop_reason or StopReason.end_turn,
             transcript=transcript,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            tool_use_count=tool_use_count,
+            duration_ms=int((time.monotonic() - started_at) * 1000),
         )
         drain_orphan_notifications(parent, agent_id)
 

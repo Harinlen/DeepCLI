@@ -81,6 +81,7 @@ class SessionEventMapperMixin(_SessionMixinBase):
         content: list[dict[str, Any]] | None = None,
         persisted_content: list[dict[str, Any]] | None = None,
         locations: list[ToolCallLocation] | None = None,
+        meta: dict[str, Any] | None = None,
     ) -> None:
         """Persist + broadcast one tool-call status change.
 
@@ -109,6 +110,7 @@ class SessionEventMapperMixin(_SessionMixinBase):
                 status=status,
                 content=content,
                 locations=locations,
+                meta=meta,
             ),
         )
 
@@ -126,6 +128,7 @@ class SessionEventMapperMixin(_SessionMixinBase):
             status="completed",
             content=content_raw,
             persisted_content=self._maybe_spill(session, event.id, content_raw),
+            meta=event.meta,
         )
 
     async def _handle_tool_locations(self, session: Session, event: ToolCallLocations) -> None:

@@ -110,6 +110,7 @@ class ToolCallResult:
     llm_content: list[ContentBlock]
     display: ToolDisplayPayload
     context_modifier: ContextModifier | None = None
+    meta: dict[str, Any] | None = None
 
 
 # ``ContextModifier`` is a pure function ``ToolContext -> ToolContext``

@@ -466,7 +466,9 @@ export class MustangAgentSessionAdapter {
 		if (!toolCallId) return;
 		const toolName = this.#toolNames.get(toolCallId) ?? String(update.title ?? "tool");
 		const status = String(update.status ?? "");
-		const result = { content: normalizeToolContent(update.content, status), details: update.locations ? { locations: update.locations } : undefined };
+		const meta = readUpdateMeta(update);
+		const details = buildToolDetails(update, meta);
+		const result = { content: normalizeToolContent(update.content, status), details };
 		if (final || status === "completed" || status === "failed" || status === "error") {
 			this.#emit({ type: "tool_execution_end", toolCallId, toolName, result, isError: status === "failed" || status === "error" });
 		} else {
@@ -573,13 +575,13 @@ const agentToolRenderer = {
 				: "sub-agent";
 		const box = new Box(0, 0);
 		if (state.isPartial) {
-			box.addChild(new Text(`${theme.fg("toolTitle", "pending Agent")}\n ${theme.fg("dim", theme.tree.last)} ${theme.fg("dim", `description="${truncatePlain(description, 48)}"`)}`, 0, 0));
+			box.addChild(new Text(`${theme.fg("toolTitle", "running Agent")}\n ${theme.fg("dim", theme.tree.last)} ${theme.fg("dim", `description="${truncatePlain(description, 48)}"`)}`, 0, 0));
 		} else {
 			box.addChild(new Text(theme.fg("toolTitle", `Agent(${truncatePlain(description, 48)})`), 0, 0));
 		}
 		return box;
 	},
-	renderResult(result: { content?: Array<{ type: string; text?: string }>; isError?: boolean }, state: { expanded?: boolean }) {
+	renderResult(result: { content?: Array<{ type: string; text?: string }>; details?: Record<string, unknown>; isError?: boolean }, state: { expanded?: boolean }) {
 		const text = (result.content ?? [])
 			.filter(block => block.type === "text")
 			.map(block => block.text ?? "")
@@ -591,7 +593,8 @@ const agentToolRenderer = {
 			return box;
 		}
 		if (!state.expanded) {
-			box.addChild(new Text(` ${theme.fg("dim", theme.tree.last)} ${theme.fg("dim", "Done (ctrl+o to expand)")}`, 0, 0));
+			const summary = formatAgentDoneSummary(readAgentStatsFromDetails(result.details));
+			box.addChild(new Text(` ${theme.fg("dim", theme.tree.last)} ${theme.fg("dim", `${summary} (ctrl+o to expand)`)}`, 0, 0));
 			return box;
 		}
 		box.addChild(new Text(text || theme.fg("dim", "(no output)"), 0, 0));
@@ -602,6 +605,66 @@ const agentToolRenderer = {
 function readUpdateMeta(update: SessionUpdateParams): Record<string, unknown> | undefined {
 	const meta = update._meta ?? update.meta;
 	return meta && typeof meta === "object" && !Array.isArray(meta) ? meta as Record<string, unknown> : undefined;
+}
+
+function buildToolDetails(update: SessionUpdateParams, meta: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+	const details: Record<string, unknown> = {};
+	if (update.locations) details.locations = update.locations;
+	if (meta) {
+		details.meta = meta;
+		const agent = readAgentStats(meta);
+		if (agent) details.agent = agent;
+	}
+	return Object.keys(details).length > 0 ? details : undefined;
+}
+
+type AgentStats = {
+	toolUseCount: number;
+	inputTokens: number;
+	outputTokens: number;
+	totalTokens: number;
+	durationMs: number;
+};
+
+function readAgentStats(meta: Record<string, unknown> | undefined): AgentStats | undefined {
+	const raw = meta?.["mustang.agent/agentStats"];
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+	const source = raw as Record<string, unknown>;
+	const inputTokens = numberFromUpdate(source.inputTokens ?? source.input_tokens);
+	const outputTokens = numberFromUpdate(source.outputTokens ?? source.output_tokens);
+	const totalTokens = numberFromUpdate(source.totalTokens ?? source.total_tokens) || inputTokens + outputTokens;
+	return {
+		toolUseCount: numberFromUpdate(source.toolUseCount ?? source.tool_use_count),
+		inputTokens,
+		outputTokens,
+		totalTokens,
+		durationMs: numberFromUpdate(source.durationMs ?? source.duration_ms),
+	};
+}
+
+function readAgentStatsFromDetails(details: Record<string, unknown> | undefined): AgentStats | undefined {
+	const raw = details?.agent;
+	return raw && typeof raw === "object" && !Array.isArray(raw) ? raw as AgentStats : undefined;
+}
+
+function formatAgentDoneSummary(stats: AgentStats | undefined): string {
+	if (!stats) return "Done";
+	return `Done (${stats.toolUseCount} ${stats.toolUseCount === 1 ? "tool use" : "tool uses"} · ${formatTokenCount(stats.totalTokens)} tokens · ${formatDuration(stats.durationMs)})`;
+}
+
+function formatTokenCount(value: number): string {
+	if (value >= 1_000_000) return `${trimFixed(value / 1_000_000, 1)}m`;
+	if (value >= 1_000) return `${trimFixed(value / 1_000, 1)}k`;
+	return `${Math.max(0, Math.round(value))}`;
+}
+
+function formatDuration(ms: number): string {
+	if (ms >= 1000) return `${Math.max(1, Math.round(ms / 1000))}s`;
+	return `${Math.max(0, Math.round(ms))}ms`;
+}
+
+function trimFixed(value: number, digits: number): string {
+	return value.toFixed(digits).replace(/\.0$/, "");
 }
 
 function isSubagentPrivateUpdate(update: SessionUpdateParams): boolean {

@@ -107,7 +107,21 @@ const subagentUpdates = [
 	{ sessionUpdate: "tool_call_update", toolCallId: "child-web", status: "completed", content: "child search result" },
 	{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "child final" } },
 	{ sessionUpdate: "tool_call_update", toolCallId: "agent-1", status: "in_progress", meta: { "mustang.agent/agentEnd": { agent_id: "a1" } } },
-	{ sessionUpdate: "tool_call_update", toolCallId: "agent-1", status: "completed", content: "child final" },
+	{
+		sessionUpdate: "tool_call_update",
+		toolCallId: "agent-1",
+		status: "completed",
+		content: "child final",
+		_meta: {
+			"mustang.agent/agentStats": {
+				toolUseCount: 2,
+				inputTokens: 1000,
+				outputTokens: 500,
+				totalTokens: 1500,
+				durationMs: 13000,
+			},
+		},
+	},
 	{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "parent summary" } },
 ];
 const subagentSession = {
@@ -124,9 +138,14 @@ const subagentAdapter = new MustangAgentSessionAdapter({
 	modelProfiles: [],
 });
 const subagentRenderOrder: string[] = [];
+let subagentAgentStats: Record<string, unknown> | undefined;
 subagentAdapter.subscribe(event => {
 	if (event.type === "tool_execution_start" || event.type === "tool_execution_end") {
 		subagentRenderOrder.push(`${event.type}:${event.toolCallId}:${event.toolName}`);
+	}
+	if (event.type === "tool_execution_end" && event.toolCallId === "agent-1") {
+		const result = event.result as { details?: { agent?: Record<string, unknown> } } | undefined;
+		subagentAgentStats = result?.details?.agent;
 	}
 });
 await subagentAdapter.prompt("use agent");
@@ -136,6 +155,9 @@ const subagentText = (subagentAssistant?.content ?? [])
 	.map((block: { text?: string; thinking?: string }) => block.text ?? block.thinking ?? "")
 	.join("");
 assert(subagentRenderOrder.join("|") === "tool_execution_start:agent-1:Agent|tool_execution_end:agent-1:Agent", `sub-agent child tools should stay inside Agent UI, got: ${subagentRenderOrder.join("|")}`);
+assert(subagentAgentStats?.totalTokens === 1500, "Agent tool completion should expose sub-agent token stats");
+assert(subagentAgentStats?.toolUseCount === 2, "Agent tool completion should expose sub-agent tool use count");
+assert(subagentAgentStats?.durationMs === 13000, "Agent tool completion should expose sub-agent duration");
 assert(subagentText === "parent summary", `sub-agent private text should not render as parent assistant text, got: ${subagentText}`);
 assert(!subagentAssistant?.content.some((block: { type: string; id?: string }) => block.type === "toolCall" && block.id === "child-web"), "child tool calls should not be appended to parent assistant message");
 

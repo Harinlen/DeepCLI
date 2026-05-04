@@ -98,7 +98,7 @@ def test_agent_foreground(kernel: tuple[int, str]) -> None:
             await client.initialize()
             sid = await client.new_session()
 
-            text, stop, tools, _ = await _collect_turn(
+            text, stop, tools, tool_updates = await _collect_turn(
                 client, sid,
                 "Use a sub-agent to answer: What is 2+2? "
                 "You must use the Agent tool for this.",
@@ -110,6 +110,21 @@ def test_agent_foreground(kernel: tuple[int, str]) -> None:
             assert len(agent_calls) > 0, (
                 f"Expected Agent tool call, got: {[t.title for t in tools]}"
             )
+            agent_tool_ids = {call.tool_call_id for call in agent_calls}
+            agent_result_updates = [
+                update for update in tool_updates
+                if update.tool_call_id in agent_tool_ids
+                and update.status == "completed"
+                and update.meta
+                and "mustang.agent/agentStats" in update.meta
+            ]
+            assert agent_result_updates, (
+                "Expected completed Agent tool update to carry "
+                "mustang.agent/agentStats metadata"
+            )
+            stats = agent_result_updates[-1].meta["mustang.agent/agentStats"]
+            assert stats["totalTokens"] > 0
+            assert stats["durationMs"] > 0
 
             # The response should contain an answer
             assert len(text) > 0, "Expected non-empty response from sub-agent"

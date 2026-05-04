@@ -52,6 +52,7 @@ class ToolCallResult:
 
     id: str
     content: list[ContentBlock]
+    meta: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

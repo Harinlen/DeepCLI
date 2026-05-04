@@ -591,6 +591,10 @@ class SubAgentStart:
 class SubAgentEnd:
     agent_id: str
     stop_reason: StopReason
+    input_tokens: int = 0
+    output_tokens: int = 0
+    tool_use_count: int = 0
+    duration_ms: int = 0
 
 @dataclass(frozen=True)
 class CompactionEvent:
@@ -747,7 +751,9 @@ Sub-agent 通过 **AgentTool** 融入工具执行流程，但 child transcript
    调用其 `query()`
 4. Sub-agent 产出的 `TextDelta` 被收集为 Agent 工具的最终结果，
    供父 LLM 在 `tool_result` 中读取
-5. Child `OrchestratorEvent` 不映射为父会话的顶层 `session/update`；
+5. `SubAgentEnd` 汇总 child tool use / token / duration 统计，最终挂到
+   Agent 工具结果的 `mustang.agent/agentStats`
+6. Child `OrchestratorEvent` 不映射为父会话的顶层 `session/update`；
    这与 Claude Code main 对齐，避免子 Agent 回复直接刷到主窗口
 
 ### 事件流结构
@@ -759,7 +765,7 @@ Sub-agent 通过 **AgentTool** 融入工具执行流程，但 child transcript
 父 Orchestrator 事件流:
   ...
   ToolCallStart(id="tc_1", kind=agent)
-  ToolCallResult(id="tc_1", content=[...])  ← sub-agent 最终文本作为 Agent 结果
+  ToolCallResult(id="tc_1", content=[...], meta={"mustang.agent/agentStats": ...})
   ...
 ```
 

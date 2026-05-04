@@ -188,6 +188,49 @@ async def test_tool_result_spills_persisted_content_but_broadcasts_inline_conten
 
 
 @pytest.mark.anyio
+async def test_tool_result_broadcasts_meta_without_persisting_it() -> None:
+    mapper = _Mapper()
+    session = _session()
+
+    await mapper._handle_orchestrator_event(
+        session,
+        ToolCallResult(
+            id="agent-1",
+            content=[TextBlock(text="agent result")],
+            meta={
+                "mustang.agent/agentStats": {
+                    "toolUseCount": 2,
+                    "totalTokens": 1500,
+                    "durationMs": 13000,
+                }
+            },
+        ),
+        [],
+        [],
+    )
+
+    assert mapper.writes == [
+        (
+            ToolCallUpdateEvent,
+            {
+                "tool_call_id": "agent-1",
+                "status": "completed",
+                "content": [{"type": "text", "text": "spilled:agent-1"}],
+            },
+        )
+    ]
+    update = mapper.broadcasts[0]
+    assert isinstance(update, ToolCallUpdateNotification)
+    assert update.meta == {
+        "mustang.agent/agentStats": {
+            "toolUseCount": 2,
+            "totalTokens": 1500,
+            "durationMs": 13000,
+        }
+    }
+
+
+@pytest.mark.anyio
 async def test_tool_locations_are_broadcast_without_persisting_an_event() -> None:
     mapper = _Mapper()
     session = _session()

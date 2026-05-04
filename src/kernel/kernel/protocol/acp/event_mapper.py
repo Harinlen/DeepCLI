@@ -230,6 +230,7 @@ class AcpEventMapper:
                     tool_call_id=event.id,
                     status="completed",
                     content=_content_blocks_to_dicts(event.content),
+                    meta=event.meta,
                 ),
             )
 
@@ -353,6 +354,11 @@ class AcpEventMapper:
                     "mustang.agent/agentEnd": {
                         "agent_id": event.agent_id,
                         "stop_reason": event.stop_reason.value,
+                        "toolUseCount": event.tool_use_count,
+                        "inputTokens": event.input_tokens,
+                        "outputTokens": event.output_tokens,
+                        "totalTokens": event.input_tokens + event.output_tokens,
+                        "durationMs": event.duration_ms,
                     },
                 },
             )

@@ -934,24 +934,38 @@ async def call(
         return
 
     # spawn_subagent 由 Orchestrator 提供，内部构建子 StandardOrchestrator。
-    # 子事件不透传到父客户端；只收集 TextDelta 作为 Agent 工具结果。
+    # 子事件不透传到父客户端；只收集 TextDelta 作为 Agent 工具结果，
+    # 并从 SubAgentEnd 汇总 tool use / token / duration 统计。
     result_text_parts: list[str] = []
+    agent_stats: dict[str, int] = {}
     async for event in ctx.spawn_subagent(prompt, []):
         # 收集 sub-agent 的 text 输出作为最终结果
         if isinstance(event, TextDelta):
             result_text_parts.append(event.content)
+        if isinstance(event, SubAgentEnd):
+            agent_stats = {
+                "toolUseCount": event.tool_use_count,
+                "inputTokens": event.input_tokens,
+                "outputTokens": event.output_tokens,
+                "totalTokens": event.input_tokens + event.output_tokens,
+                "durationMs": event.duration_ms,
+            }
 
     final_text = "".join(result_text_parts) or "(agent produced no output)"
     yield ToolCallResult(
-        data={"result": final_text},
+        data={"result": final_text, "agent": agent_stats},
         llm_content=[TextBlock(type="text", text=final_text)],
         display=TextDisplay(text=final_text),
+        meta={"mustang.agent/agentStats": agent_stats},
     )
 ```
 
 > **注意**：早期设计要求 `passthrough_event` 平坦透传 sub-agent 事件。
 > 这会让 child assistant text 直接渲染到主窗口，已改为 Claude Code
 > main 风格：前台 AgentTool 收集 child 输出并作为 Agent 工具结果返回。
+> 当前实用版还会把子 Agent 的 tool use / token / duration 统计挂在
+> `mustang.agent/agentStats`，供 CLI 的 Agent 工具卡片渲染完成摘要；
+> 完整 CC 进度 UI 见 `docs/plans/agent-tool-claude-code-parity-plan.md`。
 
 ### 3.4 call() — 后台异步模式
 

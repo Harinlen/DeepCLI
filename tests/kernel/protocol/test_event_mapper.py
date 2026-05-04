@@ -189,12 +189,14 @@ class TestToolCallLifecycle:
         event = ToolCallResult(
             id="tc-1",
             content=[_TextBlock(text="done")],
+            meta={"mustang.agent/agentStats": {"totalTokens": 42}},
         )
         await mapper.map(event, sender, SESSION_ID)
         notif = _get_update(sender)
         update = notif.update
         assert update.status == "completed"
         assert update.content == [{"type": "text", "text": "done"}]
+        assert update.meta == {"mustang.agent/agentStats": {"totalTokens": 42}}
 
     @pytest.mark.asyncio
     async def test_tool_call_error(self, mapper: AcpEventMapper, sender: AsyncMock) -> None:
@@ -357,12 +359,19 @@ class TestSubAgent:
         end = SubAgentEnd(
             agent_id="agent-123",
             stop_reason=StopReason.end_turn,
+            input_tokens=1000,
+            output_tokens=500,
+            tool_use_count=3,
+            duration_ms=12000,
         )
         await mapper.map(end, sender, SESSION_ID)
         notif = _get_update(sender)
         assert notif.update.tool_call_id == "tc-agent-1"
         assert notif.meta["mustang.agent/agentEnd"]["agent_id"] == "agent-123"
         assert notif.meta["mustang.agent/agentEnd"]["stop_reason"] == "end_turn"
+        assert notif.meta["mustang.agent/agentEnd"]["toolUseCount"] == 3
+        assert notif.meta["mustang.agent/agentEnd"]["totalTokens"] == 1500
+        assert notif.meta["mustang.agent/agentEnd"]["durationMs"] == 12000
 
     @pytest.mark.asyncio
     async def test_sub_agent_end_fallback_to_agent_id(

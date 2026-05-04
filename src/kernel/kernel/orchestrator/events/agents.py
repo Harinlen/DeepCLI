@@ -45,3 +45,7 @@ class SubAgentEnd:
     agent_id: str
     stop_reason: StopReason
     transcript: list[Any] | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    tool_use_count: int = 0
+    duration_ms: int = 0

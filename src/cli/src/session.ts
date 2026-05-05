@@ -18,6 +18,37 @@ type MustangSessionClient = Pick<
 
 export type PermissionMode = "default" | "accept_edits" | "plan" | "auto" | "dont_ask" | "bypass";
 
+export interface CostUsageReport {
+  sessionId: string;
+  title?: string | null;
+  cwd: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  model?: string | null;
+  kernelVersion: string;
+  tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
+  context: {
+    totalTokens: number;
+    contextWindow?: number | null;
+    percent: number;
+    sections: Array<{ id: string; label: string; tokens: number; percent: number }>;
+  };
+  history: {
+    messages: number;
+    turns: number;
+    toolCalls: number;
+    compactions: number;
+    queuedTurns: number;
+    inFlight: boolean;
+    lastRunAt?: string | null;
+    lastDurationMs?: number | null;
+  };
+  memory: { loaded: number; writableScopes: number };
+  environment: { lspServers: string[]; mcpServers: string[] };
+  costUsd?: number | null;
+  costNote?: string | null;
+}
+
 const RESUME_RETRY_ATTEMPTS = 24;
 const RESUME_RETRY_DELAY_MS = 250;
 
@@ -110,6 +141,15 @@ export class MustangSession {
     await this.client.request(AcpMethod.sessionSetMode, {
       sessionId: this.sessionId,
       modeId: mode,
+    });
+  }
+
+  async getUsage(): Promise<CostUsageReport> {
+    // Send both spellings for compatibility with already-running dev kernels
+    // that may have loaded the new method before the ACP camelCase base model.
+    return await this.client.request<CostUsageReport>(MustangMethod.sessionGetUsage, {
+      sessionId: this.sessionId,
+      session_id: this.sessionId,
     });
   }
 

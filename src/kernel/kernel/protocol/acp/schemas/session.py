@@ -248,3 +248,72 @@ class DeleteSessionRequest(AcpModel):
 class DeleteSessionResponse(AcpModel):
     deleted: bool
     meta: dict[str, Any] | None = None
+
+
+# _mustang.agent/session/get_usage
+
+
+class GetUsageRequest(AcpModel):
+    session_id: str
+    meta: dict[str, Any] | None = None
+
+
+class TokenUsageSummary(AcpModel):
+    input: int = 0
+    output: int = 0
+    cache_read: int = 0
+    cache_write: int = 0
+    total: int = 0
+
+
+class ContextUsageSection(AcpModel):
+    id: str
+    label: str
+    tokens: int
+    percent: float
+
+
+class ContextUsageSummary(AcpModel):
+    total_tokens: int = 0
+    context_window: int | None = None
+    percent: float = 0.0
+    sections: list[ContextUsageSection] = []
+
+
+class HistoryUsageSummary(AcpModel):
+    messages: int = 0
+    turns: int = 0
+    tool_calls: int = 0
+    compactions: int = 0
+    queued_turns: int = 0
+    in_flight: bool = False
+    last_run_at: str | None = None
+    last_duration_ms: int | None = None
+
+
+class MemoryUsageSummary(AcpModel):
+    loaded: int = 0
+    writable_scopes: int = 0
+
+
+class EnvironmentUsageSummary(AcpModel):
+    lsp_servers: list[str] = []
+    mcp_servers: list[str] = []
+
+
+class GetUsageResponse(AcpModel):
+    session_id: str
+    title: str | None = None
+    cwd: str
+    created_at: str | None = None
+    updated_at: str | None = None
+    model: str | None = None
+    kernel_version: str
+    tokens: TokenUsageSummary
+    context: ContextUsageSummary
+    history: HistoryUsageSummary
+    memory: MemoryUsageSummary
+    environment: EnvironmentUsageSummary
+    cost_usd: float | None = None
+    cost_note: str | None = None
+    meta: dict[str, Any] | None = None

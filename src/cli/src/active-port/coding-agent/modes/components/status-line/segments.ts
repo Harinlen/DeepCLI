@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { ThinkingLevel } from "@/compat/agent-core.js";
 import { TERMINAL } from "@/tui/index.js";
-import { formatCompactNumber, formatDuration, formatNumber, getProjectDir, relativePathWithinRoot } from "@/compat/utils.js";
+import { formatCompactNumber, formatDuration, getProjectDir, relativePathWithinRoot } from "@/compat/utils.js";
 import { theme } from "../../../modes/theme/theme";
 import { shortenPath } from "../../../tools/render-utils";
 import { getSessionAccentAnsi, getSessionAccentHex } from "../../../utils/session-color";
@@ -36,10 +36,6 @@ function stripDisplayRoot(pwd: string): string {
 		if (relative) return relative;
 	}
 	return pwd;
-}
-
-function normalizePremiumRequests(value: number): number {
-	return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -213,69 +209,14 @@ const subagentsSegment: StatusLineSegment = {
 	},
 };
 
-const tokenInSegment: StatusLineSegment = {
-	id: "token_in",
+const turnDurationSegment: StatusLineSegment = {
+	id: "turn_duration",
 	render(ctx) {
-		const { input } = ctx.usageStats;
-		if (!input) return { content: "", visible: false };
+		const { turnDurationMs } = ctx.usageStats;
+		if (!turnDurationMs) return { content: "", visible: false };
 
-		const content = withIcon(theme.icon.input, formatNumber(input));
-		return { content: theme.fg("statusLineSpend", content), visible: true };
-	},
-};
-
-const tokenOutSegment: StatusLineSegment = {
-	id: "token_out",
-	render(ctx) {
-		const { output } = ctx.usageStats;
-		if (!output) return { content: "", visible: false };
-
-		const content = withIcon(theme.icon.output, formatNumber(output));
+		const content = withIcon(theme.icon.time, formatDuration(turnDurationMs));
 		return { content: theme.fg("statusLineOutput", content), visible: true };
-	},
-};
-
-const tokenTotalSegment: StatusLineSegment = {
-	id: "token_total",
-	render(ctx) {
-		const { input, output, cacheRead, cacheWrite } = ctx.usageStats;
-		const total = input + output + cacheRead + cacheWrite;
-		if (!total) return { content: "", visible: false };
-
-		const content = withIcon(theme.icon.tokens, formatNumber(total));
-		return { content: theme.fg("statusLineSpend", content), visible: true };
-	},
-};
-
-const tokenRateSegment: StatusLineSegment = {
-	id: "token_rate",
-	render(ctx) {
-		const { tokensPerSecond } = ctx.usageStats;
-		if (!tokensPerSecond) return { content: "", visible: false };
-
-		const content = withIcon(theme.icon.output, `${tokensPerSecond.toFixed(1)}/s`);
-		return { content: theme.fg("statusLineOutput", content), visible: true };
-	},
-};
-
-const costSegment: StatusLineSegment = {
-	id: "cost",
-	render(ctx) {
-		const { cost, premiumRequests } = ctx.usageStats;
-		const normalizedPremiumRequests = normalizePremiumRequests(premiumRequests);
-		const state = ctx.session.state;
-		const usingSubscription = state.model ? ctx.session.modelRegistry.isUsingOAuth(state.model) : false;
-
-		if (!cost && !usingSubscription && !normalizedPremiumRequests) {
-			return { content: "", visible: false };
-		}
-
-		const billingParts: string[] = [];
-		if (cost) billingParts.push(`$${cost.toFixed(2)}`);
-		if (normalizedPremiumRequests) billingParts.push(`★ ${formatNumber(normalizedPremiumRequests)}`);
-		if (usingSubscription) billingParts.push("(sub)");
-
-		return { content: theme.fg("statusLineCost", billingParts.join(" ")), visible: true };
 	},
 };
 
@@ -361,30 +302,6 @@ const hostnameSegment: StatusLineSegment = {
 	},
 };
 
-const cacheReadSegment: StatusLineSegment = {
-	id: "cache_read",
-	render(ctx) {
-		const { cacheRead } = ctx.usageStats;
-		if (!cacheRead) return { content: "", visible: false };
-
-		const parts = [theme.icon.cache, theme.icon.input, formatNumber(cacheRead)].filter(Boolean);
-		const content = parts.join(" ");
-		return { content: theme.fg("statusLineSpend", content), visible: true };
-	},
-};
-
-const cacheWriteSegment: StatusLineSegment = {
-	id: "cache_write",
-	render(ctx) {
-		const { cacheWrite } = ctx.usageStats;
-		if (!cacheWrite) return { content: "", visible: false };
-
-		const parts = [theme.icon.cache, theme.icon.output, formatNumber(cacheWrite)].filter(Boolean);
-		const content = parts.join(" ");
-		return { content: theme.fg("statusLineOutput", content), visible: true };
-	},
-};
-
 const sessionNameSegment: StatusLineSegment = {
 	id: "session_name",
 	render(ctx) {
@@ -410,19 +327,13 @@ export const SEGMENTS: Record<StatusLineSegmentId, StatusLineSegment> = {
 	git: gitSegment,
 	pr: prSegment,
 	subagents: subagentsSegment,
-	token_in: tokenInSegment,
-	token_out: tokenOutSegment,
-	token_total: tokenTotalSegment,
-	token_rate: tokenRateSegment,
-	cost: costSegment,
+	turn_duration: turnDurationSegment,
 	context_pct: contextPctSegment,
 	context_total: contextTotalSegment,
 	time_spent: timeSpentSegment,
 	time: timeSegment,
 	session: sessionSegment,
 	hostname: hostnameSegment,
-	cache_read: cacheReadSegment,
-	cache_write: cacheWriteSegment,
 	session_name: sessionNameSegment,
 };
 

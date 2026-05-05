@@ -26,6 +26,7 @@ from kernel.protocol.interfaces.contracts.add_provider_params import (
 from kernel.protocol.interfaces.contracts.add_provider_result import (
     AddProviderResult,
 )
+from kernel.protocol.interfaces.contracts.add_model_params import AddModelParams
 from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
 from kernel.protocol.interfaces.contracts.list_profiles_params import (
     ListProfilesParams,
@@ -115,6 +116,16 @@ class ModelHandler(Protocol):
         Raises ``ModelNotFoundError`` if the ref does not resolve to
         a known provider/model.
         Raises ``ValueError`` if the role is unknown.
+        """
+        ...
+
+    async def add_model(
+        self, ctx: HandlerContext, params: AddModelParams
+    ) -> UpdateModelResult:
+        """Add a model to an existing provider or create a provider with one model.
+
+        Raises ``ValueError`` if the provider is new and ``provider_type`` is
+        missing, if the model already exists, or if a requested role is unknown.
         """
         ...
 

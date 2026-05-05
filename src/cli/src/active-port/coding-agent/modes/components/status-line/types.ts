@@ -27,13 +27,7 @@ export interface SegmentContext {
 	} | null;
 	// Cached values for performance (computed once per render)
 	usageStats: {
-		input: number;
-		output: number;
-		cacheRead: number;
-		cacheWrite: number;
-		premiumRequests: number;
-		cost: number;
-		tokensPerSecond: number | null;
+		turnDurationMs: number | null;
 	};
 	contextPercent: number;
 	contextTokens: number;

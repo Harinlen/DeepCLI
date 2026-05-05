@@ -7,7 +7,7 @@ import { assert } from "./helpers.js";
 
 const commands: SlashCommand[] = [
 	{ name: "help", description: "Show available commands" },
-	{ name: "model", description: "Show or switch model" },
+	{ name: "model", description: "Manage models" },
 	{ name: "plan", description: "Enter, exit, or inspect plan mode" },
 	{ name: "compact", description: "Compact conversation context" },
 	{ name: "session", description: "List, resume, or delete sessions" },

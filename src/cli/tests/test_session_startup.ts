@@ -22,7 +22,10 @@ const service = {
   clientForSession: () => client,
   list: async (options: any) => {
     await client.request("session/list", options);
-    return [{ sessionId: "recent", path: "recent", title: "Recent", cwd: "/old", updatedAt: null, createdAt: null, archivedAt: null, titleSource: null, totalInputTokens: null, totalOutputTokens: null, raw: { sessionId: "recent" } }];
+    return [
+      { sessionId: "recent", path: "recent", title: "Recent", cwd: "/old", updatedAt: null, createdAt: null, archivedAt: null, titleSource: null, totalInputTokens: null, totalOutputTokens: null, raw: { sessionId: "recent" } },
+      { sessionId: "explicit", path: "explicit", title: "Explicit", cwd: "/repo", updatedAt: null, createdAt: null, archivedAt: null, titleSource: null, totalInputTokens: 14443, totalOutputTokens: 125, raw: { sessionId: "explicit" } },
+    ];
   },
   load: async (sessionId: string, cwd: string) => client.request("session/load", { sessionId, cwd }),
   create: async (cwd: string) => client.request("session/new", { cwd, mcpServers: [] }),
@@ -31,6 +34,7 @@ const service = {
 const config: CliConfig = { ...DEFAULT_CONFIG, kernel: { ...DEFAULT_CONFIG.kernel }, session: { ...DEFAULT_CONFIG.session }, ui: { ...DEFAULT_CONFIG.ui } };
 let result = await resolveStartupSession(service, { newSession: false, print: false, help: false, sessionId: "explicit" }, config, { isInteractive: true, cwd: "/repo" });
 assert(result.session?.sessionId === "explicit", "--session should load explicit session");
+assert(result.session?.summary?.totalInputTokens === 14443, "--session should retain listed summary tokens for resumed status-line context");
 
 requests.length = 0;
 result = await resolveStartupSession(service, { newSession: false, print: false, help: false }, config, { isInteractive: true, cwd: "/repo" });

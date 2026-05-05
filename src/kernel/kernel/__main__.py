@@ -20,6 +20,7 @@ def main() -> None:
     import os
 
     import uvicorn
+    from kernel.uvicorn_runtime import uvicorn_loop
 
     if args.dev:
         os.environ["_MUSTANG_DEV"] = "1"
@@ -30,6 +31,7 @@ def main() -> None:
         host="127.0.0.1",
         port=args.port,
         log_level="info" if args.dev else "warning",
+        loop=uvicorn_loop(),
         reload=False,
         # Heartbeat is delegated to uvicorn's native WebSocket
         # ping/pong — see docs/subsystems/transport.md §Heartbeat.

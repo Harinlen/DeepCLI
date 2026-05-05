@@ -34,6 +34,8 @@ from kernel.protocol.acp.namespaces import AcpMethod, MustangMethod
 from kernel.protocol.acp.schemas.model import (
     AcpProfileEntry,
     AcpProviderEntry,
+    AcpProviderTypeEntry,
+    AddModelRequest,
     AddProviderRequest,
     AddProviderResponse,
     ListProfilesRequest,
@@ -60,6 +62,8 @@ from kernel.protocol.acp.schemas.session import (
     CloseSessionResponse,
     DeleteSessionRequest,
     DeleteSessionResponse,
+    GetUsageRequest,
+    GetUsageResponse,
     ExecutePythonRequest,
     ExecutePythonResponse,
     ExecuteShellRequest,
@@ -96,11 +100,13 @@ from kernel.protocol.interfaces.contracts.add_provider_params import (
 from kernel.protocol.interfaces.contracts.add_provider_result import (
     AddProviderResult,
 )
+from kernel.protocol.interfaces.contracts.add_model_params import AddModelParams
 from kernel.protocol.interfaces.contracts.cancel_params import CancelParams
 from kernel.protocol.interfaces.contracts.execute_python_params import (
     ExecutePythonParams,
 )
 from kernel.protocol.interfaces.contracts.execute_shell_params import ExecuteShellParams
+from kernel.protocol.interfaces.contracts.get_usage_params import GetUsageParams
 from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
 from kernel.protocol.interfaces.contracts.list_profiles_params import (
     ListProfilesParams,
@@ -449,6 +455,13 @@ async def _handle_delete_session(
     return DeleteSessionResponse(deleted=result.deleted)
 
 
+async def _handle_get_usage(
+    sh: SessionHandler, ctx: HandlerContext, p: GetUsageRequest
+) -> BaseModel:
+    result = await sh.get_usage(ctx, GetUsageParams(session_id=p.session_id))
+    return GetUsageResponse.model_validate(_dump_contract(result))
+
+
 async def _handle_cancel(sh: SessionHandler, ctx: HandlerContext, p: CancelNotification) -> None:
     await sh.cancel(ctx, CancelParams(session_id=p.session_id))
 
@@ -486,12 +499,28 @@ async def _handle_provider_list(
             AcpProviderEntry(
                 name=info.name,
                 provider_type=info.provider_type,
+                base_url=info.base_url,
+                effective_base_url=info.effective_base_url,
+                aws_region=info.aws_region,
+                has_api_key=info.has_api_key,
+                api_key_display=info.api_key_display,
+                has_aws_secret_key=info.has_aws_secret_key,
+                aws_secret_key_display=info.aws_secret_key_display,
+                setting_fields=info.setting_fields,
                 models=info.models,
                 context_windows=info.context_windows,
                 display_names=info.display_names,
                 roles=info.roles,
             )
             for info in result.providers
+        ],
+        provider_type_options=[
+            AcpProviderTypeEntry(
+                provider_type=info.provider_type,
+                setting_fields=info.setting_fields,
+                effective_base_url=info.effective_base_url,
+            )
+            for info in result.provider_type_options
         ],
         current_used=result.current_used,
         default_context_window=result.default_context_window,
@@ -543,6 +572,27 @@ async def _handle_set_current(
     return SetCurrentModelResponse(role=result.role, model=result.model)
 
 
+async def _handle_model_add(
+    mh: ModelHandler, ctx: HandlerContext, p: AddModelRequest
+) -> BaseModel:
+    result = await mh.add_model(
+        ctx,
+        AddModelParams(
+            provider_name=p.provider_name,
+            provider_type=p.provider_type,
+            api_key=p.api_key,
+            base_url=p.base_url,
+            aws_secret_key=p.aws_secret_key,
+            aws_region=p.aws_region,
+            model_id=p.model_id,
+            display_name=p.display_name,
+            context_window=p.context_window,
+            roles=p.roles,
+        ),
+    )
+    return _model_update_response(result)
+
+
 async def _handle_model_update(
     mh: ModelHandler, ctx: HandlerContext, p: UpdateModelRequest
 ) -> BaseModel:
@@ -550,13 +600,33 @@ async def _handle_model_update(
         ctx,
         UpdateModelParams(
             model=ModelRef(provider=p.provider, model=p.model),
+            provider_name=p.provider_name,
+            provider_type=p.provider_type,
+            api_key=p.api_key,
+            base_url=p.base_url,
+            aws_secret_key=p.aws_secret_key,
+            aws_region=p.aws_region,
+            model_id=p.model_id,
             display_name=p.display_name,
             context_window=p.context_window,
             roles=p.roles,
         ),
     )
+    return _model_update_response(result)
+
+
+def _model_update_response(result: UpdateModelResult) -> UpdateModelResponse:
     return UpdateModelResponse(
         model=result.model,
+        provider_type=result.provider_type,
+        base_url=result.base_url,
+        effective_base_url=result.effective_base_url,
+        aws_region=result.aws_region,
+        has_api_key=result.has_api_key,
+        api_key_display=result.api_key_display,
+        has_aws_secret_key=result.has_aws_secret_key,
+        aws_secret_key_display=result.aws_secret_key_display,
+        setting_fields=result.setting_fields,
         display_name=result.display_name,
         context_window=result.context_window,
         roles=result.roles,
@@ -706,6 +776,12 @@ REQUEST_DISPATCH: dict[str, RequestSpec] = {
         result_type=DeleteSessionResult,
         target="session",
     ),
+    MustangMethod.SESSION_GET_USAGE: RequestSpec(
+        handler=_handle_get_usage,
+        params_type=GetUsageRequest,
+        result_type=GetUsageResponse,
+        target="session",
+    ),
     # model/* -- routed to ModelHandler (LLMManager)
     MustangMethod.MODEL_PROFILE_LIST: RequestSpec(
         handler=_handle_profile_list,
@@ -741,6 +817,12 @@ REQUEST_DISPATCH: dict[str, RequestSpec] = {
         handler=_handle_set_current,
         params_type=SetCurrentModelRequest,
         result_type=SetCurrentModelResult,
+        target="model",
+    ),
+    MustangMethod.MODEL_ADD: RequestSpec(
+        handler=_handle_model_add,
+        params_type=AddModelRequest,
+        result_type=UpdateModelResult,
         target="model",
     ),
     MustangMethod.MODEL_UPDATE: RequestSpec(

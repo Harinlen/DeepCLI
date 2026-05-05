@@ -21,7 +21,6 @@ import {
 import { getPreset } from "./status-line/presets";
 import { renderSegment, type SegmentContext } from "./status-line/segments";
 import { getSeparator } from "./status-line/separators";
-import { calculateTokensPerSecond } from "./status-line/token-rate";
 
 export interface StatusLineSegmentOptions {
 	model?: { showThinkingLevel?: boolean };
@@ -69,8 +68,6 @@ export class StatusLineComponent implements Component {
 	#cachedPrContext: PrCacheContext | undefined = undefined;
 	#prLookupInFlight = false;
 	#defaultBranch?: string;
-	#lastTokensPerSecond: number | null = null;
-	#lastTokensPerSecondTimestamp: number | null = null;
 
 	constructor(private readonly session: AgentSession) {
 		this.#settings = {
@@ -265,51 +262,28 @@ export class StatusLineComponent implements Component {
 		return stalePr ?? null;
 	}
 
-	#getTokensPerSecond(): number | null {
-		let lastAssistantTimestamp: number | null = null;
+	#getLastTurnDurationMs(): number | null {
 		for (let i = this.session.state.messages.length - 1; i >= 0; i--) {
 			const message = this.session.state.messages[i];
-			if (message?.role === "assistant") {
-				lastAssistantTimestamp = message.timestamp;
-				break;
+			if (message?.role !== "assistant") continue;
+			const duration = message.duration;
+			if (typeof duration === "number" && Number.isFinite(duration) && duration > 0) {
+				return duration;
 			}
-		}
-
-		if (lastAssistantTimestamp === null) {
-			this.#lastTokensPerSecond = null;
-			this.#lastTokensPerSecondTimestamp = null;
+			if (this.session.isStreaming && typeof message.timestamp === "number") {
+				const elapsed = Date.now() - message.timestamp;
+				return elapsed > 0 ? elapsed : null;
+			}
 			return null;
 		}
-
-		const rate = calculateTokensPerSecond(this.session.state.messages, this.session.isStreaming);
-		if (rate !== null) {
-			this.#lastTokensPerSecond = rate;
-			this.#lastTokensPerSecondTimestamp = lastAssistantTimestamp;
-			return rate;
-		}
-
-		if (this.#lastTokensPerSecondTimestamp === lastAssistantTimestamp) {
-			return this.#lastTokensPerSecond;
-		}
-
 		return null;
 	}
 
 	#buildSegmentContext(width: number): SegmentContext {
 		const state = this.session.state;
 
-		// Get usage statistics
-		const aggregateUsageStats = this.session.sessionManager?.getUsageStatistics() ?? {
-			input: 0,
-			output: 0,
-			cacheRead: 0,
-			cacheWrite: 0,
-			premiumRequests: 0,
-			cost: 0,
-		};
 		const usageStats = {
-			...aggregateUsageStats,
-			tokensPerSecond: this.#getTokensPerSecond(),
+			turnDurationMs: this.#getLastTurnDurationMs(),
 		};
 
 		// Get context percentage
@@ -318,7 +292,9 @@ export class StatusLineComponent implements Component {
 			.reverse()
 			.find(m => m.role === "assistant" && m.stopReason !== "aborted") as AssistantMessage | undefined;
 
-		const contextTokens = lastAssistantMessage ? calculatePromptTokens(lastAssistantMessage.usage) : 0;
+		const contextTokens = lastAssistantMessage
+			? calculatePromptTokens(lastAssistantMessage.usage)
+			: calculateFallbackContextTokens(this.session.sessionManager?.getUsageStatistics?.());
 		const contextWindow = state.model?.contextWindow || 0;
 		const contextPercent = contextWindow > 0 ? (contextTokens / contextWindow) * 100 : 0;
 
@@ -504,4 +480,14 @@ export class StatusLineComponent implements Component {
 		const hookLine = sortedStatuses.join(" ");
 		return [truncateToWidth(hookLine, width)];
 	}
+}
+
+function calculateFallbackContextTokens(usage: unknown): number {
+	if (!usage || typeof usage !== "object") return 0;
+	const stats = usage as { input?: unknown; output?: unknown; cacheRead?: unknown; cacheWrite?: unknown };
+	return numberToken(stats.input) + numberToken(stats.output) + numberToken(stats.cacheRead) + numberToken(stats.cacheWrite);
+}
+
+function numberToken(value: unknown): number {
+	return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 }

@@ -312,7 +312,10 @@ export class EventController {
 				}
 			}
 			this.#lastAssistantComponent = this.ctx.streamingComponent;
-			this.#lastAssistantComponent.setUsageInfo(event.message.usage);
+			const cumulativeUsage = event.message.usage
+				? (this.ctx.session.sessionManager?.getUsageStatistics?.() ?? event.message.usage)
+				: undefined;
+			this.#lastAssistantComponent.setUsageInfo(cumulativeUsage, event.message.duration);
 			this.ctx.streamingComponent = undefined;
 			this.ctx.streamingMessage = undefined;
 			this.#streamingComponentMounted = false;

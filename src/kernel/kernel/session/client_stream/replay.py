@@ -9,6 +9,7 @@ the client only needs the transcript.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -29,6 +30,7 @@ from kernel.protocol.acp.schemas.updates import (
     ToolCallLocation,
     ToolCallStart as AcpToolCallStart,
     ToolCallUpdateNotification,
+    UsageUpdate,
     UserMessageChunk,
 )
 from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
@@ -38,12 +40,14 @@ from kernel.session.events import (
     AgentThoughtEvent,
     AvailableCommandsChangedEvent,
     ConfigOptionChangedEvent,
+    ConversationMessageEvent,
     ModeChangedEvent,
     PlanEvent,
     SessionEvent,
     SessionInfoChangedEvent,
     ToolCallEvent,
     ToolCallUpdateEvent,
+    TurnCompletedEvent,
     UserMessageEvent,
 )
 from kernel.session.runtime.helpers import config_list as _config_list
@@ -54,6 +58,51 @@ logger = logging.getLogger("kernel.session")
 
 class SessionReplayMixin(_SessionMixinBase):
     """Re-emits a session's persisted events to a freshly attached client."""
+
+    def _explicit_replay_keys(
+        self, events: list[SessionEvent]
+    ) -> tuple[set[str], set[str], set[str], set[str]]:
+        """Collect explicit UI replay content so conversation fallback can de-dupe.
+
+        Some historical logs contain partial UI rows plus complete
+        ``ConversationMessageEvent`` rows.  A single global "has UI event" flag
+        is too coarse: it hides assistant text whenever an unrelated or empty UI
+        event exists.  Exact content keys let us prefer explicit UI chunks when
+        they exist while still recovering missing transcript pieces.
+        """
+        user_texts: set[str] = set()
+        agent_texts: set[str] = set()
+        thought_texts: set[str] = set()
+        tool_ids: set[str] = set()
+        for event in events:
+            if isinstance(event, UserMessageEvent):
+                user_texts.update(_text_blocks(event.content))
+            elif isinstance(event, AgentMessageEvent):
+                agent_texts.update(_text_blocks(event.content))
+            elif isinstance(event, AgentThoughtEvent):
+                thought_texts.update(_text_blocks(event.content))
+            elif isinstance(event, (ToolCallEvent, ToolCallUpdateEvent)):
+                tool_ids.add(event.tool_call_id)
+        return user_texts, agent_texts, thought_texts, tool_ids
+
+    async def _replay_events(
+        self, ctx: HandlerContext, session: Session, events: list[SessionEvent]
+    ) -> None:
+        user_texts, agent_texts, thought_texts, tool_ids = self._explicit_replay_keys(events)
+        skip_conversation_users = bool(user_texts)
+        skip_conversation_tools = bool(tool_ids)
+        for event in events:
+            await self._replay_event(
+                ctx,
+                session,
+                event,
+                skip_conversation_users=skip_conversation_users,
+                skip_conversation_tools=skip_conversation_tools,
+                skip_conversation_user_texts=user_texts,
+                skip_conversation_agent_texts=agent_texts,
+                skip_conversation_thought_texts=thought_texts,
+                skip_conversation_tool_ids=tool_ids,
+            )
 
     async def _replay_text_blocks(
         self,
@@ -109,7 +158,17 @@ class SessionReplayMixin(_SessionMixinBase):
         return restored
 
     async def _replay_event(
-        self, ctx: HandlerContext, session: Session, event: SessionEvent
+        self,
+        ctx: HandlerContext,
+        session: Session,
+        event: SessionEvent,
+        *,
+        skip_conversation_users: bool = False,
+        skip_conversation_tools: bool = False,
+        skip_conversation_user_texts: set[str] | None = None,
+        skip_conversation_agent_texts: set[str] | None = None,
+        skip_conversation_thought_texts: set[str] | None = None,
+        skip_conversation_tool_ids: set[str] | None = None,
     ) -> None:
         """Send one stored event to ``ctx.sender`` as a ``session/update``.
 
@@ -188,5 +247,82 @@ class SessionReplayMixin(_SessionMixinBase):
         elif isinstance(event, AvailableCommandsChangedEvent):
             await _notify(AvailableCommandsUpdate(available_commands=event.commands))
 
+        elif isinstance(event, ConversationMessageEvent):
+            await self._replay_conversation_message(
+                _notify,
+                event.message,
+                skip_users=skip_conversation_users,
+                skip_tools=skip_conversation_tools,
+                skip_user_texts=skip_conversation_user_texts or set(),
+                skip_agent_texts=skip_conversation_agent_texts or set(),
+                skip_thought_texts=skip_conversation_thought_texts or set(),
+                skip_tool_ids=skip_conversation_tool_ids or set(),
+            )
+
+        elif isinstance(event, TurnCompletedEvent):
+            await _notify(
+                UsageUpdate(
+                    input_tokens=event.input_tokens,
+                    output_tokens=event.output_tokens,
+                    duration_ms=event.duration_ms,
+                )
+            )
+
         # session_created, session_loaded, turn_*, permission_*, sub_agent_*
         # are not replayed: the client only needs the user-visible transcript.
+
+    async def _replay_conversation_message(
+        self,
+        notify: Callable[[Any], Awaitable[None]],
+        message: dict[str, Any],
+        *,
+        skip_users: bool,
+        skip_tools: bool,
+        skip_user_texts: set[str],
+        skip_agent_texts: set[str],
+        skip_thought_texts: set[str],
+        skip_tool_ids: set[str],
+    ) -> None:
+        role = message.get("role")
+        content = message.get("content")
+        if not isinstance(content, list):
+            return
+        if role == "user":
+            if skip_users:
+                return
+            for block in content:
+                text = block.get("text")
+                if block.get("type") == "text" and isinstance(text, str) and text not in skip_user_texts:
+                    await notify(UserMessageChunk(content=AcpTextBlock(type="text", text=text)))
+        elif role == "assistant":
+            for block in content:
+                kind = block.get("type")
+                if kind == "text":
+                    text = block.get("text")
+                    if isinstance(text, str) and text not in skip_agent_texts:
+                        await notify(AgentMessageChunk(content=AcpTextBlock(type="text", text=text)))
+                elif kind == "thinking":
+                    thinking = block.get("thinking", "")
+                    if isinstance(thinking, str) and thinking not in skip_thought_texts:
+                        await notify(AgentThoughtChunk(content=AcpTextBlock(type="text", text=thinking)))
+                elif (
+                    kind == "tool_use"
+                    and not skip_tools
+                    and str(block.get("id", "")) not in skip_tool_ids
+                ):
+                    await notify(
+                        AcpToolCallStart(
+                            tool_call_id=str(block.get("id", "")),
+                            title=str(block.get("name", "tool")),
+                            kind="other",
+                            raw_input=json.dumps(block.get("input", {}), ensure_ascii=False),
+                        )
+                    )
+
+
+def _text_blocks(content: list[dict[str, Any]]) -> set[str]:
+    return {
+        block["text"]
+        for block in content
+        if block.get("type") == "text" and isinstance(block.get("text"), str)
+    }

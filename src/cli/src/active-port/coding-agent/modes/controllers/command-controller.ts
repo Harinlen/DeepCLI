@@ -463,6 +463,21 @@ export class CommandController {
 	}
 
 	async handleUsageCommand(reports?: UsageReport[] | null): Promise<void> {
+		const costProvider = this.ctx.session as { fetchCostReport?: () => Promise<any> };
+		if (!reports && costProvider.fetchCostReport) {
+			try {
+				const report = await costProvider.fetchCostReport();
+				const output = renderCostUsageReport(report, theme, Date.now());
+				this.ctx.chatContainer.addChild(new Spacer(1));
+				this.ctx.chatContainer.addChild(new Text(output, 1, 0));
+				this.ctx.ui.requestRender();
+				return;
+			} catch (error) {
+				this.ctx.showError(`Failed to fetch usage data: ${error instanceof Error ? error.message : String(error)}`);
+				return;
+			}
+		}
+
 		let usageReports = reports ?? null;
 		if (!usageReports) {
 			const provider = this.ctx.session as { fetchUsageReports?: () => Promise<UsageReport[] | null> };
@@ -892,6 +907,128 @@ function formatProviderName(provider: string): string {
 
 function formatNumber(value: number, maxFractionDigits = 1): string {
 	return new Intl.NumberFormat("en-US", { maximumFractionDigits: maxFractionDigits }).format(value);
+}
+
+function renderCostUsageReport(report: any, uiTheme: typeof theme, nowMs: number): string {
+	const lines: string[] = [];
+	const title = report.title || "Untitled session";
+	lines.push(uiTheme.bold(uiTheme.fg("accent", title)));
+	lines.push(uiTheme.fg("dim", report.sessionId ?? ""));
+	lines.push("");
+	lines.push(`${uiTheme.bold("Magic Context")} ${uiTheme.fg("dim", report.kernelVersion ? `v${report.kernelVersion}` : "")}`.trimEnd());
+	if (report.model) lines.push(uiTheme.fg("dim", report.model));
+	const context = report.context ?? {};
+	const contextTotal = context.totalTokens ?? 0;
+	const contextWindow = context.contextWindow;
+	lines.push(renderContextBar(context.sections ?? [], contextTotal, uiTheme));
+	for (const section of normalizeContextSections(context.sections ?? [])) {
+		lines.push(contextSectionLine(section, uiTheme));
+	}
+	lines.push(metricLine("Context", formatContextTotal(contextTotal, contextWindow, context.percent), uiTheme));
+	lines.push("");
+	lines.push(uiTheme.bold("Session"));
+	lines.push(metricLine("Messages", formatCompact(report.history?.messages ?? 0), uiTheme));
+	lines.push(metricLine("Turns", formatCompact(report.history?.turns ?? 0), uiTheme));
+	lines.push(metricLine("Tool Calls", formatCompact(report.history?.toolCalls ?? 0), uiTheme));
+	lines.push(metricLine("Compactions", formatCompact(report.history?.compactions ?? 0), uiTheme));
+	lines.push(metricLine("State", report.history?.inFlight ? uiTheme.fg("warning", "running") : "idle", uiTheme));
+	if (report.history?.lastRunAt) {
+		const age = Math.max(0, nowMs - Date.parse(report.history.lastRunAt));
+		lines.push(metricLine("Last Run", `${formatDuration(age)} ago`, uiTheme));
+	}
+	lines.push("");
+	lines.push(uiTheme.bold("Tokens"));
+	lines.push(metricLine("Input", formatCompact(report.tokens?.input ?? 0), uiTheme));
+	lines.push(metricLine("Output", formatCompact(report.tokens?.output ?? 0), uiTheme));
+	if ((report.tokens?.cacheRead ?? 0) > 0) lines.push(metricLine("Cache Read", formatCompact(report.tokens.cacheRead), uiTheme));
+	if ((report.tokens?.cacheWrite ?? 0) > 0) lines.push(metricLine("Cache Write", formatCompact(report.tokens.cacheWrite), uiTheme));
+	lines.push(metricLine("Total", formatCompact(report.tokens?.total ?? 0), uiTheme));
+	lines.push("");
+	lines.push(uiTheme.bold("Memory"));
+	lines.push(metricLine("Loaded", formatCompact(report.memory?.loaded ?? 0), uiTheme));
+	lines.push(metricLine("Writable", formatCompact(report.memory?.writableScopes ?? 0), uiTheme));
+	lines.push("");
+	lines.push(uiTheme.bold("Environment"));
+	const lsp = report.environment?.lspServers ?? [];
+	const mcp = report.environment?.mcpServers ?? [];
+	lines.push(metricLine("LSP", formatNameList(lsp, uiTheme), uiTheme));
+	lines.push(metricLine("MCP", formatNameList(mcp, uiTheme), uiTheme));
+	lines.push("");
+	lines.push(uiTheme.bold("Billing"));
+	lines.push(metricLine("Estimated Cost", report.costUsd == null ? "unavailable" : formatUsd(report.costUsd), uiTheme));
+	if (report.costNote) {
+		lines.push(uiTheme.fg("dim", report.costNote));
+	}
+	return lines.join("\n");
+}
+
+function renderContextBar(sections: any[], totalTokens: number, uiTheme: typeof theme): string {
+	const width = 26;
+	if (!totalTokens) return `  ${uiTheme.fg("dim", `[${"░".repeat(width)}]`)}`;
+	const colors = ["accent", "warning", "success", "muted"];
+	let used = 0;
+	const parts = sections.map((section, index) => {
+		const size = Math.max(0, Math.min(width - used, Math.round((section.tokens / totalTokens) * width)));
+		used += size;
+		return uiTheme.fg(colors[index % colors.length], "█".repeat(size));
+	});
+	if (used < width) parts.push(uiTheme.fg("dim", "░".repeat(width - used)));
+	return `  ${uiTheme.fg("dim", "[")}${parts.join("")}${uiTheme.fg("dim", "]")}`;
+}
+
+function normalizeContextSections(sections: any[]): any[] {
+	const byId = new Map(sections.map(section => [section.id, section]));
+	return ["system_prompt", "memory", "conversation", "tools"].map(id => {
+		const section = byId.get(id) ?? { id, tokens: 0, percent: 0 };
+		return { ...section, label: contextSectionLabel(section) };
+	});
+}
+
+function contextSectionLabel(section: any): string {
+	if (section.id === "system_prompt") return "System Prompt";
+	if (section.id === "memory") return "Memory";
+	if (section.id === "conversation") return "Conversation";
+	if (section.id === "tools") return "Tool Calls";
+	return section.label || section.id || "Other";
+}
+
+function contextSectionLine(section: any, uiTheme: typeof theme): string {
+	const label = padVisible(contextSectionLabel(section), 15);
+	const tokens = padVisible(formatCompact(section.tokens ?? 0), 8, "left");
+	const percent = padVisible(`${formatNumber(section.percent ?? 0, 0)}%`, 5, "left");
+	return `${uiTheme.fg("accent", label)} ${tokens} ${uiTheme.fg("dim", percent)}`;
+}
+
+function metricLine(label: string, value: string, uiTheme: typeof theme): string {
+	return `  ${uiTheme.fg("muted", padVisible(label, 15))}${value}`;
+}
+
+function formatContextTotal(total: number, window: number | null | undefined, percent: number | null | undefined): string {
+	if (window && window > 0) return `${formatCompact(total)} / ${formatCompact(window)} (${formatNumber(percent ?? 0)}%)`;
+	return formatCompact(total);
+}
+
+function formatNameList(names: string[], uiTheme: typeof theme): string {
+	if (names.length === 0) return uiTheme.fg("dim", "none");
+	return names.join(", ");
+}
+
+function formatUsd(value: number): string {
+	return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 4 }).format(value);
+}
+
+function padVisible(value: string, width: number, align: "left" | "right" = "right"): string {
+	const paddingWidth = Math.max(0, width - visibleWidth(value));
+	const paddingText = " ".repeat(paddingWidth);
+	return align === "left" ? `${paddingText}${value}` : `${value}${paddingText}`;
+}
+
+function formatCompact(value: number): string {
+	if (!Number.isFinite(value)) return "0";
+	const abs = Math.abs(value);
+	if (abs >= 1_000_000) return `${formatNumber(value / 1_000_000)}M`;
+	if (abs >= 1_000) return `${formatNumber(value / 1_000)}K`;
+	return formatNumber(value, 0);
 }
 
 function formatUsedAccounts(value: number): string {

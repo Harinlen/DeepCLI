@@ -23,6 +23,7 @@ from kernel.llm.config import (
 from kernel.llm.errors import ModelNotFoundError
 from kernel.llm.types import LLMChunk, ModelInfo
 from kernel.llm_provider.base import Provider
+from kernel.protocol.interfaces.contracts.add_model_params import AddModelParams
 from kernel.protocol.interfaces.contracts.add_provider_params import AddProviderParams
 from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
 from kernel.protocol.interfaces.contracts.list_providers_params import ListProvidersParams
@@ -110,6 +111,7 @@ class TestListProviders:
         result = await mgr.list_providers(_ctx(), ListProvidersParams())
         assert len(result.providers) == 1
         assert result.providers[0].name == "anthropic"
+        assert result.providers[0].setting_fields == ["api_key", "base_url"]
         assert len(result.providers[0].models) == 2
         assert result.providers[0].context_windows == {
             "claude-opus-4-6": 128_000,
@@ -324,6 +326,63 @@ class TestSetCurrentModel:
 
 
 # ---------------------------------------------------------------------------
+# add_model
+# ---------------------------------------------------------------------------
+
+
+class TestAddModel:
+    async def test_adds_model_to_existing_provider(self) -> None:
+        mgr = _make_manager()
+        result = await mgr.add_model(
+            _ctx(),
+            AddModelParams(
+                provider_name="anthropic",
+                model_id="claude-haiku-4-5",
+                display_name="Haiku",
+                context_window=200_000,
+                roles=["compact"],
+            ),
+        )
+        assert result.model == ["anthropic", "claude-haiku-4-5"]
+        assert result.display_name == "Haiku"
+        assert result.roles == ["compact"]
+        assert mgr._providers["anthropic"].models[-1].id == "claude-haiku-4-5"
+        assert mgr._current_used.compact == ModelRef(
+            provider="anthropic",
+            model="claude-haiku-4-5",
+        )
+        mgr._cfg_section.update.assert_awaited_once()
+
+    async def test_creates_new_provider_with_one_model(self) -> None:
+        mgr = _make_manager()
+        result = await mgr.add_model(
+            _ctx(),
+            AddModelParams(
+                provider_name="nvidia",
+                provider_type="nvidia",
+                api_key="nv-key",
+                model_id="minimaxai/minimax-m2.7",
+            ),
+        )
+        assert result.model == ["nvidia", "minimaxai/minimax-m2.7"]
+        assert result.provider_type == "nvidia"
+        assert result.effective_base_url == "https://integrate.api.nvidia.com/v1"
+        assert mgr._providers["nvidia"].api_key == "nv-key"
+        assert mgr._providers["nvidia"].models[0].id == "minimaxai/minimax-m2.7"
+
+    async def test_duplicate_model_raises(self) -> None:
+        mgr = _make_manager()
+        with pytest.raises(ValueError, match="already exists"):
+            await mgr.add_model(
+                _ctx(),
+                AddModelParams(
+                    provider_name="anthropic",
+                    model_id="claude-opus-4-6",
+                ),
+            )
+
+
+# ---------------------------------------------------------------------------
 # update_model
 # ---------------------------------------------------------------------------
 
@@ -342,6 +401,7 @@ class TestUpdateModel:
             ),
         )
         assert result.model == ["anthropic", "claude-sonnet-4-6"]
+        assert result.provider_type == "anthropic"
         assert result.display_name == "Sonnet"
         assert result.context_window == 200_000
         assert result.roles == ["compact", "default"]
@@ -350,6 +410,30 @@ class TestUpdateModel:
         assert mgr._providers["anthropic"].models[1].display_name == "Sonnet"
         assert mgr._providers["anthropic"].models[1].context_window == 200_000
         mgr._cfg_section.update.assert_awaited_once()
+
+    async def test_renames_provider_and_model_id(self) -> None:
+        ref = ModelRef(provider="anthropic", model="claude-opus-4-6")
+        mgr = _make_manager(aliases={"opus": ref}, default=ref)
+        result = await mgr.update_model(
+            _ctx(),
+            UpdateModelParams(
+                model=ref,
+                provider_name="anthropic-prod",
+                provider_type="openai_compatible",
+                base_url="https://example.test/v1",
+                model_id="opus-renamed",
+                roles=["default"],
+            ),
+        )
+        new_ref = ModelRef(provider="anthropic-prod", model="opus-renamed")
+        assert result.model == ["anthropic-prod", "opus-renamed"]
+        assert result.provider_type == "openai_compatible"
+        assert result.setting_fields == ["api_key", "base_url"]
+        assert result.base_url == "https://example.test/v1"
+        assert "anthropic" not in mgr._providers
+        assert mgr._providers["anthropic-prod"].models[0].id == "opus-renamed"
+        assert mgr._current_used.default == new_ref
+        assert mgr._aliases["opus"] == new_ref
 
     async def test_removes_existing_role_when_not_requested(self) -> None:
         ref = ModelRef(provider="anthropic", model="claude-opus-4-6")

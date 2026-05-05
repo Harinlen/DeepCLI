@@ -25,6 +25,7 @@ from kernel.protocol.acp.schemas.session import (
     CloseSessionRequest,
     ExecutePythonRequest,
     ExecuteShellRequest,
+    GetUsageRequest,
     ListSessionsRequest,
     LoadSessionRequest,
     NewSessionRequest,
@@ -215,6 +216,11 @@ async def _dispatch_runtime_contract(
     if frame.contract == "agent.set_mode":
         result = await session_service.set_mode(
             SetSessionModeRequest.model_validate(frame.payload["params"])
+        )
+        return {"ok": True, **result}
+    if frame.contract == "agent.get_usage":
+        result = await session_service.get_usage(
+            GetUsageRequest.model_validate(frame.payload["params"])
         )
         return {"ok": True, **result}
     if frame.contract == "agent.close":

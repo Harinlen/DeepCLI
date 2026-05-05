@@ -41,6 +41,7 @@ const client = {
     if (method === methods.sessionRename) return { sessionId: params.sessionId, title: params.title };
     if (method === methods.sessionArchive) return { sessionId: params.sessionId, title: "Archived", archivedAt: params.archived ? "now" : null };
     if (method === methods.sessionDelete) return { deleted: true };
+    if (method === "session/load") return { configOptions: [], modes: [] };
     throw new Error(`unexpected ${method}`);
   },
 };
@@ -58,5 +59,7 @@ assert(archived.archivedAt === "now", "archive should map returned archived summ
 const deleted = await service.delete("one", { force: true });
 assert(deleted === true, "delete should return deleted flag");
 assert(calls.at(-1)?.params.force === true, "delete should pass force");
+const loaded = await service.load("one", "/tmp/project");
+assert(loaded.sessionId === "one", "load should preserve the requested session id when response omits it");
 
 console.log("PASS: session mapper and ACP service wrapper");

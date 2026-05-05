@@ -10,12 +10,14 @@ const methods = {
 	modelProfileList: "_mustang.agent/model/profile_list",
 	modelProviderList: "_mustang.agent/model/provider_list",
 	modelSetCurrent: "_mustang.agent/model/set_current",
+	modelAdd: "_mustang.agent/model/add",
 	modelUpdate: "_mustang.agent/model/update",
 	sessionExecuteShell: "_mustang.agent/session/execute_shell",
 	sessionExecutePython: "_mustang.agent/session/execute_python",
 	sessionCancelExecution: "_mustang.agent/session/cancel_execution",
 	sessionExecutionUpdate: "_mustang.agent/session/execution_update",
 	sessionDelete: "_mustang.agent/session/delete",
+	sessionGetUsage: "_mustang.agent/session/get_usage",
 	sessionRename: "_mustang.agent/session/rename",
 	sessionArchive: "_mustang.agent/session/archive",
 } as const;
@@ -25,6 +27,9 @@ class FakeAcpKernel {
 	#sessionCounter = 0;
 	#permissionRequestId = 10_000;
 	#pendingServerRequests = new Map<number, (result: unknown) => void>();
+	#providerName = "fake";
+	#providerType = "openai_compatible";
+	#modelId = "fake-model";
 	#modelDisplayName: string | null = null;
 	#modelContextWindow = 128_000;
 	calls: string[] = [];
@@ -82,31 +87,101 @@ class FakeAcpKernel {
 					nextCursor: null,
 				});
 			case "session/load":
-				return this.#result(ws, id, { sessionId, session: { sessionId, title: sessionId, cwd: process.cwd() } });
+				this.#notify(ws, sessionId, { sessionUpdate: "user_message_chunk", content: { type: "text", text: "loaded question" } });
+				this.#notify(ws, sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "loaded answer" } });
+				this.#notify(ws, sessionId, { sessionUpdate: "usage_update", inputTokens: 14_443, outputTokens: 125, durationMs: 3000 });
+				return this.#result(ws, id, { session: { sessionId, title: sessionId, cwd: process.cwd() } });
+			case methods.sessionGetUsage:
+				if (!params.sessionId && !params.session_id) {
+					return this.#error(ws, id, -32602, "Invalid params");
+				}
+				return this.#result(ws, id, {
+					sessionId: String(params.sessionId ?? params.session_id),
+					title: "Loaded session",
+					cwd: process.cwd(),
+					kernelVersion: "1.0.0",
+					model: "fake/fake-model-v2",
+					tokens: { input: 14_443, output: 125, cacheRead: 0, cacheWrite: 0, total: 14_568 },
+					context: {
+						totalTokens: 14_568,
+						contextWindow: 1_000_000,
+						percent: 1.5,
+						sections: [
+							{ id: "system_prompt", label: "System Prompt", tokens: 10_000, percent: 69 },
+							{ id: "memory", label: "Memory", tokens: 0, percent: 0 },
+							{ id: "conversation", label: "Conversation", tokens: 4_568, percent: 31 },
+							{ id: "tools", label: "Tool Calls", tokens: 0, percent: 0 },
+						],
+					},
+					history: { messages: 2, turns: 1, toolCalls: 0, compactions: 0, queuedTurns: 0, inFlight: false, lastRunAt: new Date().toISOString(), lastDurationMs: 3000 },
+					memory: { loaded: 0, writableScopes: 0 },
+					environment: { lspServers: [], mcpServers: [] },
+					costUsd: null,
+					costNote: "Pricing is not estimated until provider/model pricing tables are trusted.",
+				});
 			case methods.modelProfileList:
 				return this.#result(ws, id, { profiles: [], defaultModel: "" });
 			case methods.modelProviderList:
 				return this.#result(ws, id, {
 					defaultContextWindow: 128_000,
-					currentUsed: { default: ["fake", "fake-model"] },
+					providerTypeOptions: [
+						{ providerType: "openai_compatible", settingFields: ["api_key", "base_url"], effectiveBaseUrl: "https://fake.example/v1" },
+						{ providerType: "nvidia", settingFields: ["api_key", "base_url"], effectiveBaseUrl: "https://integrate.api.nvidia.com/v1" },
+					],
+					currentUsed: { default: [this.#providerName, this.#modelId] },
 					providers: [
 						{
-							name: "fake",
-							providerType: "openai_compatible",
-							models: ["fake-model"],
-							contextWindows: { "fake-model": this.#modelContextWindow },
-							displayNames: this.#modelDisplayName ? { "fake-model": this.#modelDisplayName } : {},
+							name: this.#providerName,
+							providerType: this.#providerType,
+							hasApiKey: true,
+							apiKeyDisplay: "fake-api-token",
+							effectiveBaseUrl: "https://fake.example/v1",
+							settingFields: ["api_key", "base_url"],
+							models: [this.#modelId],
+							contextWindows: { [this.#modelId]: this.#modelContextWindow },
+							displayNames: this.#modelDisplayName ? { [this.#modelId]: this.#modelDisplayName } : {},
 							roles: { default: true },
 						},
 					],
 				});
 			case methods.modelSetCurrent:
 				return this.#result(ws, id, { role: String(params.role ?? "default"), model: [String(params.provider ?? "fake"), String(params.model ?? "model")] });
-			case methods.modelUpdate:
+			case methods.modelAdd:
+				this.#providerName = String(params.providerName ?? this.#providerName);
+				this.#providerType = String(params.providerType ?? this.#providerType);
+				this.#modelId = String(params.modelId ?? this.#modelId);
 				this.#modelDisplayName = typeof params.displayName === "string" && params.displayName ? params.displayName : null;
 				this.#modelContextWindow = typeof params.contextWindow === "number" ? params.contextWindow : this.#modelContextWindow;
 				return this.#result(ws, id, {
-					model: [String(params.provider ?? "fake"), String(params.model ?? "model")],
+					model: [this.#providerName, this.#modelId],
+					providerType: this.#providerType,
+					baseUrl: null,
+					effectiveBaseUrl: "https://fake.example/v1",
+					awsRegion: null,
+					hasApiKey: true,
+					apiKeyDisplay: "fake-api-token",
+					hasAwsSecretKey: false,
+					settingFields: ["api_key", "base_url"],
+					displayName: this.#modelDisplayName,
+					contextWindow: this.#modelContextWindow,
+					roles: params.roles ?? [],
+				});
+			case methods.modelUpdate:
+				this.#providerName = String(params.providerName ?? params.provider ?? this.#providerName);
+				this.#providerType = String(params.providerType ?? this.#providerType);
+				this.#modelId = String(params.modelId ?? params.model ?? this.#modelId);
+				this.#modelDisplayName = typeof params.displayName === "string" && params.displayName ? params.displayName : null;
+				this.#modelContextWindow = typeof params.contextWindow === "number" ? params.contextWindow : this.#modelContextWindow;
+				return this.#result(ws, id, {
+					model: [this.#providerName, this.#modelId],
+					providerType: this.#providerType,
+					baseUrl: null,
+					effectiveBaseUrl: "https://fake.example/v1",
+					awsRegion: null,
+					hasApiKey: true,
+					apiKeyDisplay: "fake-api-token",
+					hasAwsSecretKey: false,
+					settingFields: ["api_key", "base_url"],
 					displayName: this.#modelDisplayName,
 					contextWindow: this.#modelContextWindow,
 					roles: params.roles ?? [],
@@ -239,6 +314,10 @@ class FakeAcpKernel {
 	#result(ws: WebSocket, id: number, result: unknown): void {
 		ws.send(JSON.stringify({ jsonrpc: "2.0", id, result }));
 	}
+
+	#error(ws: WebSocket, id: number, code: number, message: string): void {
+		ws.send(JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } }));
+	}
 }
 
 await main();
@@ -260,13 +339,15 @@ async function main(): Promise<void> {
 		assert(result.status === 0, `PTY probe failed with exit ${result.status}\n${result.output}`);
 		for (const expected of [
 			"Welcome back!",
-			"Warning: No models available",
 			"session",
 			"List, resume, or delete sessions",
 			"PTY_SHELL",
 			"PTY_PY",
 			"Resume Session",
 			"Second session",
+			"Magic Context",
+			"14.4K",
+			"14.6K",
 			"success grep",
 			"tool-result-line-12",
 			"Run /session delete confirm",
@@ -285,6 +366,7 @@ async function main(): Promise<void> {
 			methods.modelProfileList,
 			methods.modelProviderList,
 			methods.modelUpdate,
+			methods.sessionGetUsage,
 			methods.sessionExecuteShell,
 			methods.sessionExecutePython,
 			methods.sessionDelete,
@@ -404,7 +486,7 @@ def cleanup(code):
     print(clean(), flush=True)
     sys.exit(code)
 
-expect("first viewport", ["Welcome back!", "Warning: No models available", "no-model"])
+expect("first viewport", ["Welcome back!", "fake-model", "0 (0.0%/128K)"])
 send("/s")
 expect("slash autocomplete", ["session", "List, resume, or delete sessions"])
 send("\x1b")
@@ -417,15 +499,31 @@ send("/model list\r")
 expect("model list opens editor flow", ["fake-model", "[fake]", "@default"])
 send("\r")
 expect("model editor opens", ["Provider Settings", "Provider: fake", "Model Settings", "Context"])
+send("\x1b[B\x1b[B\x1b[B\x1b[B")
 send("Fake Model")
+send("\x1b[B")
+send("-v2")
 send("\r")
-expect("model editor saves", ["Updated model: fake/fake-model"])
-expect("model list refreshes after save", ["Fake Model", "Context: 128K tokens"])
+expect("model editor saves", ["Updated model: fake/fake-model-v2"])
+expect("model list refreshes after save", ["fake-model-v2", "Fake Model", "Context: 128K tokens"])
+send("\x1b")
+send("/model add\r")
+expect("model add mode selector", ["Add model", "Existing provider", "New provider"])
+send("\r")
+expect("model add provider selector", ["Provider", "fake", "openai_compatible"])
+send("\r")
+expect("model add existing provider editor", ["Provider Settings", "Name:           fake", "Model ID:"])
+send("added-model")
+send("\r")
+expect("model add saves and returns to list", ["Added model: fake/added-model", "added-model"])
 send("\x1b")
 send("/session list\r")
 expect("session list renders via OMP selector", ["Resume Session", "Second session", "Enter to select"])
 send("\r")
-expect("session selector enter resumes session", ["Resumed session"])
+expect("session selector enter resumes session", ["loaded question", "loaded answer", "Resumed session", "15K (11.4%/128K)"])
+send("/cost\r")
+expect("cost after loaded session succeeds", ["Magic Context", "System Prompt", "Conversation", "Tokens", "14.4K", "14.6K"])
+expect_not_after("cost does not fail invalid params", "Magic Context", "Invalid params")
 send("\x1b")
 read_for(0.2)
 send("show tool\r")
@@ -443,10 +541,8 @@ expect("slow stream tool renders before turn ends", ["success slowbash", "slow-o
 expect("slow stream final text renders", ["slow after"], 3)
 send("\x0f")
 expect("ctrl-o expands tool output", ["success grep", "tool-result-line-12"])
-send("\x14")
-expect("ctrl-t hides thinking", ["Thinking blocks: hidden"])
 send("show thinking interleaved\r")
-expect("hidden thinking interleaved renders placeholders", ["Thinking...", "success scan", "thinking-interleaved-result", "thinking interleaved done"])
+expect("thinking interleaved defaults to placeholders", ["Thinking...", "success scan", "thinking-interleaved-result", "thinking interleaved done"])
 send("\x14")
 expect("ctrl-t reveals all interleaved thinking after tool boundaries", ["first hidden thought", "second hidden thought", "thinking interleaved done"])
 send("/session delete")

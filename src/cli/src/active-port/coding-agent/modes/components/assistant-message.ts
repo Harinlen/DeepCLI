@@ -1,7 +1,7 @@
 // @ts-nocheck
 import type { AssistantMessage, ImageContent, Usage } from "@/compat/ai.js";
 import { Container, Image, ImageProtocol, Markdown, Spacer, TERMINAL, Text } from "@/tui/index.js";
-import { formatNumber } from "@/compat/utils.js";
+import { formatDuration, formatNumber } from "@/compat/utils.js";
 import { settings } from "../../config/settings";
 import { getMarkdownTheme, theme } from "../../modes/theme/theme";
 import { resolveImageOptions } from "../../tools/render-utils";
@@ -14,10 +14,11 @@ export class AssistantMessageComponent extends Container {
 	#lastMessage?: AssistantMessage;
 	#toolImagesByCallId = new Map<string, ImageContent[]>();
 	#usageInfo?: Usage;
+	#durationMs?: number;
 
 	constructor(
 		message?: AssistantMessage,
-		private hideThinkingBlock = false,
+		private hideThinkingBlock = true,
 	) {
 		super();
 
@@ -54,8 +55,9 @@ export class AssistantMessageComponent extends Container {
 		}
 	}
 
-	setUsageInfo(usage: Usage): void {
+	setUsageInfo(usage: Usage | undefined, durationMs?: number): void {
 		this.#usageInfo = usage;
+		this.#durationMs = durationMs;
 		if (this.#lastMessage) {
 			this.updateContent(this.#lastMessage);
 		}
@@ -161,12 +163,23 @@ export class AssistantMessageComponent extends Container {
 		// Token usage metadata
 		if (settings.get("display.showTokenUsage") && this.#usageInfo) {
 			const usage = this.#usageInfo;
-			const totalInput = usage.input + usage.cacheWrite;
+			const input = usage.input ?? 0;
+			const output = usage.output ?? 0;
+			const cacheRead = usage.cacheRead ?? 0;
+			const cacheWrite = usage.cacheWrite ?? 0;
+			const totalInput = input + cacheWrite;
+			const hasTokenUsage = totalInput > 0 || output > 0 || cacheRead > 0;
+			const hasDuration = Boolean(this.#durationMs && this.#durationMs > 0);
+			if (!hasTokenUsage && !hasDuration) return;
+
 			const parts: string[] = [];
 			parts.push(`${theme.icon.input} ${formatNumber(totalInput)}`);
-			parts.push(`${theme.icon.output} ${formatNumber(usage.output)}`);
-			if (usage.cacheRead > 0) {
-				parts.push(`cache: ${formatNumber(usage.cacheRead)}`);
+			parts.push(`${theme.icon.output} ${formatNumber(output)}`);
+			if (cacheRead > 0) {
+				parts.push(`cache: ${formatNumber(cacheRead)}`);
+			}
+			if (this.#durationMs && this.#durationMs > 0) {
+				parts.push(`${theme.icon.time} ${formatDuration(this.#durationMs)}`);
 			}
 			this.#contentContainer.addChild(new Spacer(1));
 			this.#contentContainer.addChild(new Text(theme.fg("dim", parts.join("  ")), 1, 0));

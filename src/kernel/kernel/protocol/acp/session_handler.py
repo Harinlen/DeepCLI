@@ -68,6 +68,8 @@ from kernel.protocol.acp.schemas.session import (
     ExecutePythonResponse,
     ExecuteShellRequest,
     ExecuteShellResponse,
+    GetUsageRequest,
+    GetUsageResponse,
     ListSessionsRequest,
     ListSessionsResponse,
     LoadSessionRequest,
@@ -285,7 +287,13 @@ class AcpSessionHandler:
 
         self._incoming_tasks.pop(req_id, None)
 
-        # Handler finished — emit the response.
+        # Handler finished. Drain any notifications pushed between the last
+        # queue.get timeout and handler completion before emitting the response;
+        # session/load relies on replay updates arriving before its result.
+        while not sender._queue.empty():
+            yield sender._queue.get_nowait()
+
+        # Emit the response after all currently queued handler notifications.
         if handler_result and isinstance(handler_result[0], BaseException):
             error = handler_result[0]
             if isinstance(error, Exception):
@@ -300,8 +308,8 @@ class AcpSessionHandler:
         else:
             yield self._make_error_response(req_id, InternalError("handler produced no result"))
 
-        # Final drain — catch any items pushed between the last
-        # queue.get timeout and handler completion.
+        # Defensive final drain for any message enqueued while the response was
+        # being constructed.
         while not sender._queue.empty():
             yield sender._queue.get_nowait()
 
@@ -346,6 +354,7 @@ class AcpSessionHandler:
             MustangMethod.SESSION_EXECUTE_SHELL,
             MustangMethod.SESSION_EXECUTE_PYTHON,
             MustangMethod.SESSION_CANCEL_EXECUTION,
+            MustangMethod.SESSION_GET_USAGE,
         }:
             if method == "session/new":
                 try:
@@ -416,6 +425,12 @@ class AcpSessionHandler:
                     cancel_execution_params,
                     conn,
                 )
+            if method == MustangMethod.SESSION_GET_USAGE:
+                try:
+                    usage_params = GetUsageRequest.model_validate(msg.params)
+                except pydantic.ValidationError as exc:
+                    raise _make_invalid_params(exc)
+                return await self._route_get_usage_through_hub(usage_params, conn)
             try:
                 prompt_params = PromptRequest.model_validate(msg.params)
             except pydantic.ValidationError as exc:
@@ -578,6 +593,19 @@ class AcpSessionHandler:
             conn=conn,
         )
         return CancelExecutionResponse()
+
+    async def _route_get_usage_through_hub(
+        self,
+        params: GetUsageRequest,
+        conn: ConnectionContext,
+    ) -> GetUsageResponse:
+        payload = await self._route_agent_contract_through_hub(
+            contract="agent.get_usage",
+            params=params.model_dump(by_alias=True),
+            session_id=params.session_id,
+            conn=conn,
+        )
+        return GetUsageResponse.model_validate(payload)
 
     async def _emit_execution_updates(
         self,

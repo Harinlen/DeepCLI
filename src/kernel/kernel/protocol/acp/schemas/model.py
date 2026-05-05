@@ -56,16 +56,33 @@ class AcpProviderEntry(AcpModel):
 
     name: str
     provider_type: str
+    base_url: str | None = None
+    effective_base_url: str | None = None
+    aws_region: str | None = None
+    has_api_key: bool = False
+    api_key_display: str | None = None
+    has_aws_secret_key: bool = False
+    aws_secret_key_display: str | None = None
+    setting_fields: list[str]
     models: list[str]
     context_windows: dict[str, int]
     display_names: dict[str, str]
     roles: dict[str, bool]
 
 
+class AcpProviderTypeEntry(AcpModel):
+    """Wire representation of one supported provider backend type."""
+
+    provider_type: str
+    setting_fields: list[str]
+    effective_base_url: str | None = None
+
+
 class ListProvidersResponse(AcpModel):
     """``model/provider_list`` response."""
 
     providers: list[AcpProviderEntry]
+    provider_type_options: list[AcpProviderTypeEntry]
     current_used: dict[str, list[str]]
     default_context_window: int
 
@@ -157,11 +174,35 @@ class SetCurrentModelResponse(AcpModel):
 # ---------------------------------------------------------------------------
 
 
+class AddModelRequest(AcpModel):
+    """``model/add`` request params."""
+
+    provider_name: str
+    provider_type: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+    aws_secret_key: str | None = None
+    aws_region: str | None = None
+    model_id: str
+    display_name: str | None = None
+    context_window: int | None = None
+    roles: list[str] | None = None
+
+    meta: dict[str, Any] | None = None
+
+
 class UpdateModelRequest(AcpModel):
     """``model/update`` request params."""
 
     provider: str
     model: str
+    provider_name: str | None = None
+    provider_type: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+    aws_secret_key: str | None = None
+    aws_region: str | None = None
+    model_id: str | None = None
     display_name: str | None = None
     context_window: int | None = None
     roles: list[str] | None = None
@@ -173,6 +214,15 @@ class UpdateModelResponse(AcpModel):
     """``model/update`` response."""
 
     model: list[str]
+    provider_type: str
+    base_url: str | None
+    effective_base_url: str | None
+    aws_region: str | None
+    has_api_key: bool
+    api_key_display: str | None
+    has_aws_secret_key: bool
+    aws_secret_key_display: str | None
+    setting_fields: list[str]
     display_name: str | None
     context_window: int | None
     roles: list[str]

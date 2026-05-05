@@ -54,11 +54,15 @@ export class SessionService {
   }
 
   async load(sessionId: string, workingDir = processCwd()): Promise<SessionLoadResponse> {
-    return this.client.request<SessionLoadResponse>(AcpMethod.sessionLoad, {
+    const response = await this.client.request<SessionLoadResponse>(AcpMethod.sessionLoad, {
       sessionId,
       cwd: workingDir,
       mcpServers: [],
     });
+    return {
+      ...response,
+      sessionId: response.sessionId ?? response.session?.sessionId ?? response.session?.id ?? sessionId,
+    };
   }
 
   async rename(sessionId: string, title: string): Promise<CliSessionInfo> {

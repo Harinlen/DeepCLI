@@ -28,6 +28,7 @@ from kernel.protocol.acp.routing import (
     _handle_delete_session,
     _handle_execute_python,
     _handle_execute_shell,
+    _handle_get_usage,
     _handle_new,
     _handle_load,
     _handle_list,
@@ -43,9 +44,11 @@ from kernel.protocol.acp.routing import (
     _handle_provider_remove,
     _handle_provider_refresh,
     _handle_set_current,
+    _handle_model_add,
     _handle_model_update,
 )
 from kernel.protocol.acp.schemas.model import (
+    AddModelRequest,
     AddProviderRequest,
     ListProfilesRequest,
     ListProvidersRequest,
@@ -62,6 +65,7 @@ from kernel.protocol.acp.schemas.session import (
     DeleteSessionRequest,
     ExecutePythonRequest,
     ExecuteShellRequest,
+    GetUsageRequest,
     ListSessionsRequest,
     LoadSessionRequest,
     NewSessionRequest,
@@ -74,11 +78,20 @@ from kernel.protocol.acp.schemas.session import (
 from kernel.protocol.interfaces.contracts.archive_session_result import ArchiveSessionResult
 from kernel.protocol.interfaces.contracts.close_session_result import CloseSessionResult
 from kernel.protocol.interfaces.contracts.delete_session_result import DeleteSessionResult
+from kernel.protocol.interfaces.contracts.get_usage_result import (
+    ContextUsageSummary,
+    EnvironmentUsageSummary,
+    GetUsageResult,
+    HistoryUsageSummary,
+    MemoryUsageSummary,
+    TokenUsageSummary,
+)
 from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
 from kernel.protocol.interfaces.contracts.execution_result import ExecutionResult
 from kernel.protocol.interfaces.contracts.list_providers_result import (
     ListProvidersResult,
     ProviderInfo,
+    ProviderTypeInfo,
 )
 from kernel.protocol.interfaces.contracts.list_profiles_result import (
     ListProfilesResult,
@@ -133,6 +146,7 @@ class TestDispatchTables:
             MustangMethod.SESSION_RENAME,
             MustangMethod.SESSION_ARCHIVE,
             MustangMethod.SESSION_DELETE,
+            MustangMethod.SESSION_GET_USAGE,
         ]:
             assert method in REQUEST_DISPATCH
 
@@ -144,6 +158,7 @@ class TestDispatchTables:
             MustangMethod.MODEL_PROVIDER_REMOVE,
             MustangMethod.MODEL_PROVIDER_REFRESH,
             MustangMethod.MODEL_SET_CURRENT,
+            MustangMethod.MODEL_ADD,
             MustangMethod.MODEL_UPDATE,
         ]:
             assert method in REQUEST_DISPATCH
@@ -452,6 +467,24 @@ class TestHandleLifecycleActions:
         )
         assert result.deleted is True
 
+    async def test_get_usage_delegates(self) -> None:
+        sh = MagicMock()
+        sh.get_usage = AsyncMock(
+            return_value=GetUsageResult(
+                session_id="s1",
+                cwd="/tmp",
+                kernel_version="1.0.0",
+                tokens=TokenUsageSummary(input=10, output=5, total=15),
+                context=ContextUsageSummary(total_tokens=15, percent=1.5),
+                history=HistoryUsageSummary(turns=1),
+                memory=MemoryUsageSummary(),
+                environment=EnvironmentUsageSummary(),
+            )
+        )
+        result = await _handle_get_usage(sh, _ctx(), GetUsageRequest(session_id="s1"))
+        assert result.session_id == "s1"
+        assert result.tokens.total == 15
+
 
 class TestHandleCancel:
     async def test_delegates(self) -> None:
@@ -533,11 +566,18 @@ class TestHandleProviderList:
                     ProviderInfo(
                         name="anthropic",
                         provider_type="anthropic",
+                        setting_fields=["api_key", "base_url"],
                         models=["claude-opus-4-6"],
                         context_windows={"claude-opus-4-6": 200_000},
                         display_names={"claude-opus-4-6": "Opus"},
                         roles={"default": True},
                     ),
+                ],
+                provider_type_options=[
+                    ProviderTypeInfo(
+                        provider_type="anthropic",
+                        setting_fields=["api_key", "base_url"],
+                    )
                 ],
                 current_used={"default": ["anthropic", "claude-opus-4-6"]},
                 default_context_window=128_000,
@@ -546,8 +586,10 @@ class TestHandleProviderList:
         result = await _handle_provider_list(mh, _ctx(), ListProvidersRequest())
         assert len(result.providers) == 1
         assert result.providers[0].name == "anthropic"
+        assert result.providers[0].setting_fields == ["api_key", "base_url"]
         assert result.providers[0].context_windows == {"claude-opus-4-6": 200_000}
         assert result.providers[0].display_names == {"claude-opus-4-6": "Opus"}
+        assert result.provider_type_options[0].provider_type == "anthropic"
         assert result.current_used == {"default": ["anthropic", "claude-opus-4-6"]}
         assert result.default_context_window == 128_000
 
@@ -600,12 +642,55 @@ class TestHandleSetCurrent:
         assert result.model == ["anthropic", "sonnet"]
 
 
+class TestHandleModelAdd:
+    async def test_delegates(self) -> None:
+        mh = MagicMock()
+        mh.add_model = AsyncMock(
+            return_value=UpdateModelResult(
+                model=["anthropic", "sonnet"],
+                provider_type="anthropic",
+                base_url=None,
+                effective_base_url=None,
+                aws_region=None,
+                has_api_key=True,
+                api_key_display="sk-anthropic-1234",
+                has_aws_secret_key=False,
+                aws_secret_key_display=None,
+                setting_fields=["api_key", "base_url"],
+                display_name="Sonnet",
+                context_window=200_000,
+                roles=["default"],
+            ),
+        )
+        params = AddModelRequest(
+            providerName="anthropic",
+            providerType="anthropic",
+            modelId="sonnet",
+            displayName="Sonnet",
+            contextWindow=200_000,
+            roles=["default"],
+        )
+        result = await _handle_model_add(mh, _ctx(), params)
+        assert result.model == ["anthropic", "sonnet"]
+        assert result.display_name == "Sonnet"
+        assert result.roles == ["default"]
+
+
 class TestHandleModelUpdate:
     async def test_delegates(self) -> None:
         mh = MagicMock()
         mh.update_model = AsyncMock(
             return_value=UpdateModelResult(
                 model=["anthropic", "sonnet"],
+                provider_type="anthropic",
+                base_url=None,
+                effective_base_url=None,
+                aws_region=None,
+                has_api_key=True,
+                api_key_display="sk-anthropic-1234",
+                has_aws_secret_key=False,
+                aws_secret_key_display=None,
+                setting_fields=["api_key", "base_url"],
                 display_name="Sonnet",
                 context_window=200_000,
                 roles=["default"],
@@ -620,6 +705,10 @@ class TestHandleModelUpdate:
         )
         result = await _handle_model_update(mh, _ctx(), params)
         assert result.model == ["anthropic", "sonnet"]
+        assert result.provider_type == "anthropic"
+        assert result.has_api_key is True
+        assert result.api_key_display == "sk-anthropic-1234"
+        assert result.setting_fields == ["api_key", "base_url"]
         assert result.display_name == "Sonnet"
         assert result.context_window == 200_000
         assert result.roles == ["default"]

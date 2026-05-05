@@ -29,6 +29,7 @@ from kernel.protocol.acp.schemas.session import (
     CloseSessionRequest,
     ExecutePythonRequest,
     ExecuteShellRequest,
+    GetUsageRequest,
     ListSessionsRequest,
     LoadSessionRequest,
     NewSessionRequest,
@@ -319,6 +320,15 @@ class AgentSessionRuntimeService:
             ],
         }
 
+    async def get_usage(self, params: GetUsageRequest) -> dict[str, Any]:
+        manager = self._manager()
+        conn, sender = self._connection_for(params.session_id)
+        result = await manager.get_usage(
+            HandlerContext(conn=conn, sender=sender, request_id=None),
+            _to_contract_get_usage(params),
+        )
+        return result.model_dump(by_alias=True)
+
     async def close_session(self, params: CloseSessionRequest) -> dict[str, Any]:
         manager = self._manager()
         conn, sender = self._connection_for(params.session_id)
@@ -430,6 +440,12 @@ def _to_contract_set_mode(params: SetSessionModeRequest) -> Any:
     from kernel.protocol.interfaces.contracts.set_mode_params import SetModeParams
 
     return SetModeParams.model_validate(params.model_dump())
+
+
+def _to_contract_get_usage(params: GetUsageRequest) -> Any:
+    from kernel.protocol.interfaces.contracts.get_usage_params import GetUsageParams
+
+    return GetUsageParams.model_validate(params.model_dump())
 
 
 def _to_contract_close(params: CloseSessionRequest) -> Any:

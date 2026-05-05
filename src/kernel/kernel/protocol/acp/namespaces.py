@@ -53,12 +53,14 @@ class MustangMethod:
     SESSION_RENAME = "_mustang.agent/session/rename"
     SESSION_ARCHIVE = "_mustang.agent/session/archive"
     SESSION_DELETE = "_mustang.agent/session/delete"
+    SESSION_GET_USAGE = "_mustang.agent/session/get_usage"
     MODEL_PROFILE_LIST = "_mustang.agent/model/profile_list"
     MODEL_PROVIDER_LIST = "_mustang.agent/model/provider_list"
     MODEL_PROVIDER_ADD = "_mustang.agent/model/provider_add"
     MODEL_PROVIDER_REMOVE = "_mustang.agent/model/provider_remove"
     MODEL_PROVIDER_REFRESH = "_mustang.agent/model/provider_refresh"
     MODEL_SET_CURRENT = "_mustang.agent/model/set_current"
+    MODEL_ADD = "_mustang.agent/model/add"
     MODEL_UPDATE = "_mustang.agent/model/update"
     SECRETS_AUTH = "_mustang.agent/secrets/auth"
 
@@ -72,12 +74,14 @@ MUSTANG_EXTENSION_METHODS = frozenset(
         MustangMethod.SESSION_RENAME,
         MustangMethod.SESSION_ARCHIVE,
         MustangMethod.SESSION_DELETE,
+        MustangMethod.SESSION_GET_USAGE,
         MustangMethod.MODEL_PROFILE_LIST,
         MustangMethod.MODEL_PROVIDER_LIST,
         MustangMethod.MODEL_PROVIDER_ADD,
         MustangMethod.MODEL_PROVIDER_REMOVE,
         MustangMethod.MODEL_PROVIDER_REFRESH,
         MustangMethod.MODEL_SET_CURRENT,
+        MustangMethod.MODEL_ADD,
         MustangMethod.MODEL_UPDATE,
         MustangMethod.SECRETS_AUTH,
     }

@@ -163,6 +163,10 @@ async function executeModelCommand(ctx: any, argsText: string): Promise<boolean>
 		ctx.showModelSelector?.();
 		return true;
 	}
+	if (subcommand === "add") {
+		ctx.showModelAdd?.();
+		return true;
+	}
 	if (subcommand === "current") {
 		const state = await ctx.session.listProviderModels?.();
 		renderModelCurrent(ctx, state?.currentUsed ?? {});
@@ -188,7 +192,7 @@ async function executeModelCommand(ctx: any, argsText: string): Promise<boolean>
 		ctx.showStatus?.(`current_used.${role}: ${ref.provider}/${ref.model}`);
 		return true;
 	}
-	ctx.showWarning?.("Usage: /model [list|current|use]");
+	ctx.showWarning?.("Usage: /model [list|add|current|use]");
 	return true;
 }
 

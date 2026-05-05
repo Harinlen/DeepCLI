@@ -3,8 +3,8 @@ import { theme } from "@/active-port/coding-agent/modes/theme/theme.js";
 import { setMustangSessionProvider, type SessionInfo } from "@/active-port/coding-agent/session/session-manager.js";
 import type { AgentSessionEvent } from "@/active-port/coding-agent/session/agent-session.js";
 import type { AcpClient, KernelConnectionState, SessionUpdateParams } from "@/acp/client.js";
-import { ModelService, type ModelProfile, type ModelUpdateInput, type ProviderModelItem, type ProviderModelState } from "@/models/service.js";
-import { MustangSession, type PermissionMode } from "@/session.js";
+import { ModelService, type ModelAddInput, type ModelProfile, type ModelUpdateInput, type ProviderModelItem, type ProviderModelState } from "@/models/service.js";
+import { MustangSession, type CostUsageReport, type PermissionMode } from "@/session.js";
 import { SessionService } from "@/sessions/service.js";
 import type { CliSessionInfo } from "@/sessions/types.js";
 import { Box, Text } from "@/tui/index.js";
@@ -206,6 +206,11 @@ export class MustangAgentSessionAdapter {
 		};
 	}
 
+	async fetchCostReport(): Promise<CostUsageReport> {
+		const session = this.#requireSession("Run a chat prompt or /session new before using /cost.");
+		return session.getUsage();
+	}
+
 	async executeBash(command: string, onChunk: (chunk: string) => void, options: { excludeFromContext?: boolean } = {}): Promise<{ exitCode: number; cancelled: boolean; output: string }> {
 		const session = this.#requireSession("Run a chat prompt or /session new before using shell execution.");
 		this.isBashRunning = true;
@@ -295,15 +300,23 @@ export class MustangAgentSessionAdapter {
 	async refreshModelProfiles(): Promise<void> {
 		const state = await this.modelService.listProfiles();
 		const profile = state.profiles.find(item => item.isDefault || item.name === state.defaultModel);
+		let providerModel: ProviderModelItem | undefined;
+		if (!profile || !profile.contextWindow) {
+			const providerState = await this.modelService.listProviders().catch(() => undefined);
+			const currentDefault = providerState?.currentUsed?.default;
+			providerModel = currentDefault
+				? providerState?.models.find(item => item.providerName === currentDefault[0] && item.modelId === currentDefault[1])
+				: providerState?.models.find(item => item.roles.includes("default")) ?? providerState?.models[0];
+		}
 		this.configWarnings.length = 0;
-		if (state.profiles.length === 0) {
+		if (state.profiles.length === 0 && !providerModel) {
 			this.configWarnings.push("No models available. Use /login or set an API key environment variable, then use /model to select a model.");
 		}
 		this.model = {
-			id: profile?.modelId ?? state.defaultModel ?? "no-model",
-			name: profile?.name ?? state.defaultModel ?? "no-model",
-			provider: profile?.providerName ?? "ACP",
-			contextWindow: profile?.contextWindow ?? null,
+			id: profile?.modelId ?? providerModel?.modelId ?? state.defaultModel ?? "no-model",
+			name: profile?.name ?? providerModel?.displayName ?? state.defaultModel ?? "no-model",
+			provider: profile?.providerName ?? providerModel?.providerName ?? "ACP",
+			contextWindow: profile?.contextWindow ?? providerModel?.contextWindow ?? null,
 		};
 		this.agent.model = this.model;
 		this.state.model = this.model;
@@ -334,6 +347,12 @@ export class MustangAgentSessionAdapter {
 
 	async updateProviderModel(input: ModelUpdateInput): Promise<ProviderModelItem> {
 		const result = await this.modelService.updateModel(input);
+		await this.refreshModelProfiles().catch(() => {});
+		return result;
+	}
+
+	async addProviderModel(input: ModelAddInput): Promise<ProviderModelItem> {
+		const result = await this.modelService.addModel(input);
 		await this.refreshModelProfiles().catch(() => {});
 		return result;
 	}
@@ -374,12 +393,33 @@ export class MustangAgentSessionAdapter {
 	}
 
 	async loadSession(sessionId: string): Promise<string> {
-		const result = await this.options.sessionService.load(sessionId, this.sessionManager.getCwd());
+		this.#beginReplay();
+		let replayUpdateCount = 0;
+		let lastReplayUpdateAt = Date.now();
+		const unsubscribe = this.options.client.onUpdate(update => {
+			replayUpdateCount += 1;
+			lastReplayUpdateAt = Date.now();
+			this.#handleReplayUpdate(update);
+		});
+		let result: any;
+		try {
+			result = await this.options.sessionService.load(sessionId, this.sessionManager.getCwd());
+			await waitForReplayQuiet(() => ({ count: replayUpdateCount, updatedAt: lastReplayUpdateAt }));
+			this.#finishReplayAssistant("stop");
+			await this.#flushEvents();
+		} catch (error) {
+			this.#finishReplayAssistant("error");
+			await this.#flushEvents();
+			throw error;
+		} finally {
+			unsubscribe();
+		}
+		const loadedSessionId = result.sessionId ?? result.session?.sessionId ?? result.session?.id ?? sessionId;
 		const summary = "session" in result ? result.session as any : undefined;
-		this.options.session = new MustangSession(this.options.sessionService.clientForSession(), result.sessionId, summary);
+		this.options.session = new MustangSession(this.options.sessionService.clientForSession(), loadedSessionId, summary);
 		this.sessionManager.replaceSession(this.options.session);
 		this.#applySessionSetupMode(result);
-		return result.sessionId;
+		return loadedSessionId;
 	}
 
 	async switchSession(sessionPath: string): Promise<boolean> {
@@ -431,6 +471,80 @@ export class MustangAgentSessionAdapter {
 	#handleAmbientUpdate(update: SessionUpdateParams): void {
 		if (this.options.session && update.sessionId !== this.options.session.sessionId) return;
 		if (update.sessionUpdate !== "current_mode_update") return;
+		const mode = parsePermissionMode(update.modeId ?? update.mode_id);
+		if (mode) this.currentPermissionMode = mode;
+	}
+
+	#beginReplay(): void {
+		this.messages.length = 0;
+		this.#activeAssistant = undefined;
+		this.#activeAssistantSegment = undefined;
+		this.#toolNames.clear();
+		this.#subagentDepth = 0;
+	}
+
+	#handleReplayUpdate(update: SessionUpdateParams): void {
+		if (this.#handleSubagentBoundary(update)) return;
+		if (this.#subagentDepth > 0 && isSubagentPrivateUpdate(update)) return;
+		switch (update.sessionUpdate) {
+			case "user_message_chunk":
+				this.#finishReplayAssistant("stop");
+				this.#appendReplayedUser(extractText(update.content));
+				break;
+			case "agent_message_chunk":
+				this.#ensureReplayAssistant();
+				this.#appendAssistant("text", extractText(update.content));
+				break;
+			case "agent_thought_chunk":
+				this.#ensureReplayAssistant();
+				this.#appendAssistant("thinking", extractText(update.content));
+				break;
+			case "tool_call":
+				this.#ensureReplayAssistant();
+				this.#startTool(update);
+				break;
+			case "tool_call_update":
+				this.#updateTool(update, false);
+				break;
+			case "current_mode_update":
+				this.#handleReplayMode(update);
+				break;
+			case "session_info_update":
+				if (typeof update.title === "string") this.sessionManager.setSessionNameLocal(update.title, "auto");
+				break;
+			case "usage_update":
+				this.#applyUsageUpdate(update);
+				break;
+		}
+	}
+
+	#appendReplayedUser(text: string): void {
+		if (!text) return;
+		const userMessage = {
+			role: "user",
+			content: [{ type: "text", text }],
+			attribution: "user",
+			timestamp: Date.now(),
+		};
+		this.messages.push(userMessage);
+		this.#emit({ type: "message_start", message: userMessage });
+		this.#emit({ type: "message_end", message: userMessage });
+	}
+
+	#ensureReplayAssistant(): void {
+		if (this.#activeAssistant) return;
+		this.#activeAssistant = { role: "assistant", content: [], timestamp: Date.now() };
+		this.messages.push(this.#activeAssistant);
+	}
+
+	#finishReplayAssistant(stopReason: string): void {
+		if (!this.#activeAssistant) return;
+		this.#activeAssistant.stopReason = stopReason;
+		this.#endAssistantSegment(stopReason);
+		this.#activeAssistant = undefined;
+	}
+
+	#handleReplayMode(update: SessionUpdateParams): void {
 		const mode = parsePermissionMode(update.modeId ?? update.mode_id);
 		if (mode) this.currentPermissionMode = mode;
 	}
@@ -488,6 +602,7 @@ export class MustangAgentSessionAdapter {
 		if (duration > 0) {
 			this.#activeAssistant.duration = duration;
 		}
+		this.sessionManager.recordUsage(input, output);
 	}
 
 	#appendAssistant(kind: "text" | "thinking", text: string): void {
@@ -554,15 +669,36 @@ export class MustangAgentSessionAdapter {
 		if (!segment) return;
 		segment.stopReason = stopReason;
 		segment.usage = this.#activeAssistant?.usage;
+		segment.duration = this.#activeAssistant?.duration;
 		this.#emit({ type: "message_end", message: segment });
 		this.#activeAssistantSegment = undefined;
 	}
+}
+
+async function waitForReplayQuiet(
+	snapshot: () => { count: number; updatedAt: number },
+	options: { quietMs?: number; timeoutMs?: number } = {},
+): Promise<void> {
+	const quietMs = options.quietMs ?? 200;
+	const timeoutMs = options.timeoutMs ?? 3000;
+	const startedAt = Date.now();
+	while (Date.now() - startedAt < timeoutMs) {
+		const current = snapshot();
+		if (current.count > 0 && Date.now() - current.updatedAt >= quietMs) return;
+		await sleep(25);
+	}
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export class MustangSessionManagerAdapter {
 	titleSource: "auto" | "user" | undefined;
 	#session: MustangSession | undefined;
 	#name: string | undefined;
+	#liveInputTokens = 0;
+	#liveOutputTokens = 0;
 
 	constructor(private readonly options: MustangAgentSessionAdapterOptions) {
 		this.#session = options.session;
@@ -574,6 +710,8 @@ export class MustangSessionManagerAdapter {
 		this.#session = session;
 		this.#name = session.summary?.title;
 		this.titleSource = normalizeTitleSource(session.summary?.titleSource);
+		this.#liveInputTokens = 0;
+		this.#liveOutputTokens = 0;
 	}
 
 	getSessionId(): string { return this.#session?.sessionId ?? "pending"; }
@@ -585,7 +723,22 @@ export class MustangSessionManagerAdapter {
 	getLeafId(): string { return this.getSessionId(); }
 	getTree(): unknown { return { id: this.getSessionId(), children: [] }; }
 	getEntries(): unknown[] { return []; }
-	getUsageStatistics(): { premiumRequests: number } { return { premiumRequests: 0 }; }
+	recordUsage(input: number, output: number): void {
+		this.#liveInputTokens += input;
+		this.#liveOutputTokens += output;
+	}
+	getUsageStatistics(): { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number; premiumRequests: number } {
+		const input = (this.#session?.summary?.totalInputTokens ?? 0) + this.#liveInputTokens;
+		const output = (this.#session?.summary?.totalOutputTokens ?? 0) + this.#liveOutputTokens;
+		return {
+			input,
+			output,
+			cacheRead: 0,
+			cacheWrite: 0,
+			cost: 0,
+			premiumRequests: 0,
+		};
+	}
 	buildSessionContext(): Record<string, unknown> { return { cwd: this.getCwd(), sessionId: this.getSessionId(), title: this.#name }; }
 	async flush(): Promise<void> {}
 	async moveTo(_path: string): Promise<void> {}

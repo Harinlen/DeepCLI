@@ -25,7 +25,8 @@ export async function resolveStartupSession(
   if (args.sessionId) {
     await service.load(args.sessionId, cwd);
     const recentSessions = await safeList(service, config, listCwd);
-    return { session: new MustangSession(service.clientForSession(), args.sessionId), recentSessions };
+    const summary = recentSessions.find(session => session.sessionId === args.sessionId);
+    return { session: new MustangSession(service.clientForSession(), args.sessionId, summary), recentSessions };
   }
 
   const mustAvoidPicker = args.print || Boolean(args.prompt) || !isInteractive;

@@ -10,7 +10,7 @@ import { InteractiveMode as ActivePortInteractiveMode } from "./active-port-load
 
 export const BUILTIN_COMMANDS: AutocompleteItem[] = [
   { value: "help", label: "/help", description: "Show available commands" },
-  { value: "model", label: "/model", description: "Show or switch model" },
+  { value: "model", label: "/model", description: "Manage models" },
   { value: "plan", label: "/plan", description: "Enter, exit, or inspect plan mode" },
   { value: "compact", label: "/compact", description: "Compact conversation context" },
   { value: "session", label: "/session", description: "List, resume, or delete sessions" },

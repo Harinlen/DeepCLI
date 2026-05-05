@@ -19,6 +19,7 @@ const SESSION_ACTIONS: Item[] = [
 
 const MODEL_ACTIONS: Item[] = [
 	{ value: "list", label: "list", description: "Open model selector" },
+	{ value: "add", label: "add", description: "Add a model" },
 	{ value: "current", label: "current", description: "Show current-used roles" },
 	{ value: "use", label: "use", description: "Set current-used role" },
 ];
@@ -37,7 +38,7 @@ export const BUILTIN_SLASH_COMMANDS: SlashCommand[] = [
 	{ name: "exit", description: "Exit DeepCLI" },
 	{ name: "help", description: "Show available commands" },
 	{ name: "memory", description: "List, show, or delete memories" },
-	{ name: "model", description: "Show or switch model", getArgumentCompletions: completeModelArguments },
+	{ name: "model", description: "Manage models", getArgumentCompletions: completeModelArguments },
 	{ name: "plan", description: "Enter, exit, or inspect plan mode", getArgumentCompletions: completePlanArguments },
 	{ name: "quit", description: "Exit DeepCLI" },
 	{ name: "session", description: "List, resume, or delete sessions", getArgumentCompletions: completeSessionArguments },

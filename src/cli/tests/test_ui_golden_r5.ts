@@ -67,7 +67,8 @@ const assistant = new AssistantMessageComponent({
 	],
 	stopReason: "stop",
 	timestamp: 0,
-} as never, false);
+} as never);
+assistant.setUsageInfo({ input: 13594, output: 87, cacheRead: 0, cacheWrite: 0 }, 1500);
 const userMessage = new UserMessageComponent("不是这么做的吧，应该就是打个 tag");
 
 const bashRunning = new BashExecutionComponent("echo ok", ui as never);
@@ -136,9 +137,9 @@ const frames: GoldenFrame[] = [
 		mustInclude: ["Warning: No models available", "no-model", "info", "delete"],
 	},
 	{
-		name: "assistant markdown and thinking",
+		name: "assistant markdown and collapsed thinking",
 		lines: assistant.render(80),
-		mustInclude: ["checking state", "Hello world", "const ok = true"],
+		mustInclude: ["Thinking...", "Hello world", "const ok = true", "13,594", "87", "2s"],
 	},
 	{
 		name: "user message highlighted block",

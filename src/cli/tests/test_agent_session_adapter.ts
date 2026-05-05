@@ -25,6 +25,16 @@ const fakeSession = {
 		return { stopReason: "stop" };
 	},
 	setMode: async (_mode: string) => {},
+	getUsage: async () => ({
+		sessionId: "sess-1",
+		cwd: "/tmp",
+		kernelVersion: "1.0.0",
+		tokens: { input: 123, output: 45, cacheRead: 0, cacheWrite: 0, total: 168 },
+		context: { totalTokens: 168, contextWindow: 64_000, percent: 0.3, sections: [] },
+		history: { messages: 2, turns: 1, toolCalls: 1, compactions: 0, queuedTurns: 0, inFlight: false },
+		memory: { loaded: 0, writableScopes: 0 },
+		environment: { lspServers: [], mcpServers: [] },
+	}),
 	cancel() {},
 	cancelExecution() {},
 };
@@ -83,12 +93,17 @@ assert(stats.toolCalls === 1, "/session stats should count tool calls");
 assert(stats.tokens.input === 123, "/session stats should include live input token totals");
 assert(stats.tokens.output === 45, "/session stats should include live output token totals");
 assert(stats.tokens.total === 168, "/session stats should expose token totals");
+const usageStats = adapter.sessionManager.getUsageStatistics();
+assert(usageStats.input === 123, "status line usage stats should include live input tokens");
+assert(usageStats.output === 45, "status line usage stats should include live output tokens");
 assert(adapter.state.model.contextWindow === 64_000, "adapter should expose model context window to status line");
 assert(adapter.getAsyncJobSnapshot().running.length === 0, "adapter should expose empty async job snapshot");
 assert(adapter.modelRegistry.authStorage.hasOAuth("deepseek") === false, "adapter should expose no-op OAuth auth storage");
 assert(adapter.modelRegistry.authStorage.has("deepseek") === false, "adapter should expose no-op API key auth storage");
 assert(adapter.modelRegistry.authStorage.hasAuth("deepseek") === false, "adapter should expose no-op fallback auth storage");
 assert(adapter.currentPermissionMode === "default", "adapter should default to Ask permission mode");
+const costReport = await adapter.fetchCostReport();
+assert(costReport.tokens.total === 168, "adapter should fetch /cost usage from the active session");
 assert(
 	renderOrder.join("|") === "assistant:start|assistant:end:thinkinghello|tool:tool-1|assistant:start|assistant:end:after",
 	`adapter should project ACP stream into ordered render blocks, got: ${renderOrder.join("|")}`,
@@ -100,6 +115,7 @@ assert(assistant?.content.some((block: { type: string; text?: string }) => block
 assert(assistant?.content.some((block: { type: string; thinking?: string }) => block.type === "thinking" && block.thinking === "thinking"), "assistant thinking chunk should be appended");
 assert(assistant?.content.some((block: { type: string; id?: string }) => block.type === "toolCall" && block.id === "tool-1"), "tool call should be appended to assistant message");
 assert(assistant?.usage?.input === 123 && assistant?.usage?.output === 45, "usage_update should attach usage to assistant message");
+assert(assistant?.duration === 1500, "usage_update should attach response duration to assistant message");
 
 const subagentUpdates = [
 	{ sessionUpdate: "tool_call", toolCallId: "agent-1", title: "Agent", rawInput: "{\"description\":\"Check weather\",\"prompt\":\"Look up weather\"}" },
@@ -222,6 +238,48 @@ assert(lazyAdapter.currentPermissionMode === "accept_edits", "Shift+Tab cycle sh
 await lazyAdapter.prompt("hello");
 assert(lazyCreateCalls === 1, "first chat prompt should create the lazy session");
 assert(lazyAdapter.sessionId === "lazy-session", "lazy session id should update after first prompt");
+
+let loadUpdateHandler: ((update: any) => void) | undefined;
+const replayClient = {
+	request: async () => ({}),
+	notify: () => {},
+	promptRequest: async () => ({ stopReason: "stop" }),
+	executeShellRequest: async () => ({ exitCode: 0, cancelled: false }),
+	executePythonRequest: async () => ({ exitCode: 0, cancelled: false }),
+	onUpdate: (handler: (update: any) => void) => {
+		loadUpdateHandler = handler;
+		return () => {
+			if (loadUpdateHandler === handler) loadUpdateHandler = undefined;
+		};
+	},
+};
+const replayAdapter = new MustangAgentSessionAdapter({
+	client: replayClient as never,
+	sessionService: {
+		clientForSession: () => replayClient,
+		load: async () => {
+			loadUpdateHandler?.({ sessionUpdate: "user_message_chunk", content: { type: "text", text: "old question" } });
+			setTimeout(() => {
+				loadUpdateHandler?.({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "late answer" } });
+				loadUpdateHandler?.({ sessionUpdate: "usage_update", inputTokens: 78_768, outputTokens: 1_080, durationMs: 147_622 });
+			}, 10);
+			loadUpdateHandler?.({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "old answer" } });
+			loadUpdateHandler?.({ sessionUpdate: "tool_call", toolCallId: "old-tool", title: "Bash", rawInput: "{\"command\":\"pwd\"}" });
+			loadUpdateHandler?.({ sessionUpdate: "tool_call_update", toolCallId: "old-tool", status: "completed", content: "done" });
+			return { session: { sessionId: "loaded-session", title: "Loaded", cwd: "/tmp" } };
+		},
+		list: async () => [],
+		create: async () => ({ sessionId: "unused" }),
+	} as never,
+});
+await replayAdapter.loadSession("loaded-session");
+assert(replayAdapter.sessionId === "loaded-session", "session/load should keep the requested session id when the kernel omits top-level sessionId");
+assert(replayAdapter.messages.some((message: any) => message.role === "user" && message.content?.[0]?.text === "old question"), "session/load replay should rebuild user messages");
+const replayAssistant = replayAdapter.messages.find((message: any) => message.role === "assistant");
+assert(replayAssistant?.content.some((block: any) => block.type === "text" && block.text === "old answer"), "session/load replay should rebuild assistant text");
+assert(replayAssistant?.content.some((block: any) => block.type === "text" && block.text === "late answer"), "session/load replay should keep listening for updates that arrive after the response");
+assert(replayAssistant?.content.some((block: any) => block.type === "toolCall" && block.id === "old-tool"), "session/load replay should rebuild tool calls");
+assert(replayAssistant?.usage?.input === 78_768 && replayAssistant?.usage?.output === 1_080, "late usage_update should attach to resumed transcript");
 
 const modeCalls: Array<{ method: string; params: { modeId?: string; sessionId?: string } }> = [];
 const modeClient = {

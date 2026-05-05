@@ -6,12 +6,13 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 const commands: SlashCommand[] = [
 	{
 		name: "model",
-		description: "Show or switch model",
+		description: "Manage models",
 		getArgumentCompletions: argumentPrefix => {
 			const items = [
 				{ value: "list", label: "list", description: "List configured model profiles" },
-				{ value: "switch", label: "switch", description: "Switch default model profile" },
-				{ value: "set", label: "set", description: "Switch default model profile" },
+				{ value: "add", label: "add", description: "Add a model" },
+				{ value: "current", label: "current", description: "Show current-used roles" },
+				{ value: "use", label: "use", description: "Set current-used role" },
 			];
 			const prefix = argumentPrefix.toLowerCase();
 			const filtered = items.filter(item => item.value.startsWith(prefix));
@@ -119,7 +120,7 @@ await type(editor, "/model ");
 
 let rendered = visibleEditorText(editor);
 assert(rendered.includes("list"), "slash autocomplete should switch to /model argument suggestions after space");
-assert(rendered.includes("switch"), "slash autocomplete should show /model switch after space");
+assert(rendered.includes("add"), "slash autocomplete should show /model add after space");
 assert(editor.isShowingAutocomplete(), "autocomplete should remain open for slash command arguments");
 
 editor.handleInput("\x7f");
@@ -131,7 +132,7 @@ editor.handleInput(" ");
 await tick();
 rendered = visibleEditorText(editor);
 assert(rendered.includes("list"), "slash argument autocomplete should survive space after backspace");
-assert(rendered.includes("switch"), "slash argument autocomplete should survive repeated space entry");
+assert(rendered.includes("add"), "slash argument autocomplete should survive repeated space entry");
 assert(editor.isShowingAutocomplete(), "autocomplete should remain open after repeated slash argument transition");
 
 console.log("PASS: editor slash argument autocomplete");

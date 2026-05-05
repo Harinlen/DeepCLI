@@ -31,10 +31,10 @@ _BUILTIN_COMMANDS: list[CommandDef] = [
     ),
     CommandDef(
         name="model",
-        description="List or switch the active LLM model",
-        usage="/model [list | switch <name>]",
+        description="Manage LLM models",
+        usage="/model [list | add | current | use]",
         acp_method=MustangMethod.MODEL_PROFILE_LIST,
-        subcommands=["list", "switch"],
+        subcommands=["list", "add", "current", "use"],
     ),
     CommandDef(
         name="plan",
@@ -58,9 +58,9 @@ _BUILTIN_COMMANDS: list[CommandDef] = [
     ),
     CommandDef(
         name="cost",
-        description="Show token usage for the current session",
+        description="Show context and token usage for the current session",
         usage="/cost",
-        acp_method="session/get_usage",
+        acp_method=MustangMethod.SESSION_GET_USAGE,
     ),
     CommandDef(
         name="memory",

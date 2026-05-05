@@ -120,6 +120,7 @@ class AgentHubWebSocketServer:
             "agent.execute_python",
             "agent.cancel_execution",
             "agent.set_mode",
+            "agent.get_usage",
             "agent.close",
         }:
             return await self._forward_agent_contract(frame, frame.contract)

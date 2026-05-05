@@ -16,8 +16,10 @@ export const MustangMethod = {
   sessionRename: "_mustang.agent/session/rename",
   sessionArchive: "_mustang.agent/session/archive",
   sessionDelete: "_mustang.agent/session/delete",
+  sessionGetUsage: "_mustang.agent/session/get_usage",
   modelProfileList: "_mustang.agent/model/profile_list",
   modelProviderList: "_mustang.agent/model/provider_list",
   modelSetCurrent: "_mustang.agent/model/set_current",
+  modelAdd: "_mustang.agent/model/add",
   modelUpdate: "_mustang.agent/model/update",
 } as const;

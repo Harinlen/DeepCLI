@@ -7,6 +7,8 @@ import os
 
 import uvicorn
 
+from kernel.uvicorn_runtime import uvicorn_loop
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Mustang Access Agent")
@@ -31,6 +33,7 @@ def main() -> None:
         host=args.host,
         port=args.port,
         log_level="info" if args.dev else "warning",
+        loop=uvicorn_loop(),
         reload=False,
         ws_ping_interval=20.0,
         ws_ping_timeout=20.0,

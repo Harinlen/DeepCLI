@@ -102,6 +102,7 @@ function makeContext() {
 			},
 		},
 		toolOutputExpanded: false,
+		hideThinkingBlock: true,
 		chatContainer: {
 			children: [{ setExpanded: (expanded: boolean) => calls.push(`expand:${expanded}`) }],
 			addChild: () => calls.push("chat-add"),
@@ -186,11 +187,11 @@ ctx.streamingMessage = {
 	timestamp: 0,
 };
 controller.toggleThinkingBlockVisibility();
-assert(ctx.hideThinkingBlock === true, "thinking toggle should update hidden flag");
-assert(thinkingHideValue === true, "thinking toggle should update existing assistant components");
+assert(ctx.hideThinkingBlock === false, "thinking toggle should update hidden flag");
+assert(thinkingHideValue === false, "thinking toggle should update existing assistant components");
 assert(thinkingInvalidated, "thinking toggle should re-render existing assistant components");
 assert(!calls.includes("chat-clear"), "thinking toggle must not clear and rebuild the chat");
-assert(calls.some(item => item === "status:Thinking blocks: hidden"), "thinking toggle should report hidden state");
+assert(calls.some(item => item === "status:Thinking blocks: visible"), "thinking toggle should report visible state");
 assert(calls.includes("render:force"), "thinking toggle should force a full TUI redraw so off-viewport thinking updates");
 
 editor.setText("!");

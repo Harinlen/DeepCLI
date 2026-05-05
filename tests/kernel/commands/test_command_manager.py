@@ -95,6 +95,15 @@ async def test_command_manager_lookup_hit(module_table: MagicMock) -> None:
     assert cmd.acp_method == MustangMethod.MODEL_PROFILE_LIST
 
 
+async def test_command_manager_cost_uses_namespaced_method(module_table: MagicMock) -> None:
+    mgr = CommandManager(module_table)
+    await mgr.startup()
+
+    cmd = mgr.lookup("cost")
+    assert cmd is not None
+    assert cmd.acp_method == MustangMethod.SESSION_GET_USAGE
+
+
 async def test_command_manager_lookup_miss(module_table: MagicMock) -> None:
     mgr = CommandManager(module_table)
     await mgr.startup()

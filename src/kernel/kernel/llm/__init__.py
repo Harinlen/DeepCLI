@@ -39,6 +39,7 @@ from kernel.llm.types import (
 )
 from kernel.protocol.interfaces.contracts.add_provider_params import AddProviderParams
 from kernel.protocol.interfaces.contracts.add_provider_result import AddProviderResult
+from kernel.protocol.interfaces.contracts.add_model_params import AddModelParams
 from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
 from kernel.protocol.interfaces.contracts.list_profiles_params import ListProfilesParams
 from kernel.protocol.interfaces.contracts.list_profiles_result import (
@@ -49,6 +50,7 @@ from kernel.protocol.interfaces.contracts.list_providers_params import ListProvi
 from kernel.protocol.interfaces.contracts.list_providers_result import (
     ListProvidersResult,
     ProviderInfo,
+    ProviderTypeInfo,
 )
 from kernel.protocol.interfaces.contracts.refresh_models_params import RefreshModelsParams
 from kernel.protocol.interfaces.contracts.refresh_models_result import RefreshModelsResult
@@ -70,6 +72,49 @@ logger = logging.getLogger(__name__)
 _CONFIG_FILE = "kernel"
 _CONFIG_SECTION = "llm"
 _DEFAULT_CONTEXT_WINDOW = 128_000
+_SUPPORTED_PROVIDER_TYPES = (
+    "anthropic",
+    "bedrock",
+    "deepseek",
+    "nvidia",
+    "openai_compatible",
+)
+
+
+def normalize_optional_text(value: str | None, current: str | None) -> str | None:
+    """Return stripped optional text, preserving current value when omitted."""
+    if value is None:
+        return current
+    return value.strip() or None
+
+
+def provider_setting_fields(provider_type: str) -> list[str]:
+    """Return provider settings the UI should expose for this provider type."""
+    if provider_type == "bedrock":
+        return ["api_key", "aws_region", "aws_secret_key"]
+    return ["api_key", "base_url"]
+
+
+def provider_effective_base_url(provider_type: str, base_url: str | None) -> str | None:
+    """Return the endpoint a provider will use after defaults are applied."""
+    if base_url:
+        return base_url
+    match provider_type:
+        case "openai_compatible":
+            return "https://api.openai.com/v1"
+        case "nvidia":
+            return "https://integrate.api.nvidia.com/v1"
+        case "deepseek":
+            return "https://api.deepseek.com"
+        case _:
+            return None
+
+
+def secret_display(value: str | None) -> str | None:
+    """Return the raw secret for local user-facing configuration UIs."""
+    if not value:
+        return None
+    return value
 
 
 class LLMManager(Subsystem):
@@ -295,6 +340,14 @@ class LLMManager(Subsystem):
                 ProviderInfo(
                     name=name,
                     provider_type=pcfg.type,
+                    base_url=pcfg.base_url,
+                    effective_base_url=provider_effective_base_url(pcfg.type, pcfg.base_url),
+                    aws_region=pcfg.aws_region,
+                    has_api_key=pcfg.api_key is not None,
+                    api_key_display=secret_display(pcfg.api_key),
+                    has_aws_secret_key=pcfg.aws_secret_key is not None,
+                    aws_secret_key_display=secret_display(pcfg.aws_secret_key),
+                    setting_fields=provider_setting_fields(pcfg.type),
                     models=model_ids,
                     context_windows=context_windows,
                     display_names=display_names,
@@ -303,6 +356,14 @@ class LLMManager(Subsystem):
             )
         return ListProvidersResult(
             providers=providers,
+            provider_type_options=[
+                ProviderTypeInfo(
+                    provider_type=provider_type,
+                    setting_fields=provider_setting_fields(provider_type),
+                    effective_base_url=provider_effective_base_url(provider_type, None),
+                )
+                for provider_type in _SUPPORTED_PROVIDER_TYPES
+            ],
             current_used=self._current_used_refs(),
             default_context_window=_DEFAULT_CONTEXT_WINDOW,
         )
@@ -438,15 +499,105 @@ class LLMManager(Subsystem):
         )
         return SetCurrentModelResult(role=params.role, model=ref.to_list())
 
+    async def add_model(
+        self, ctx: HandlerContext, params: AddModelParams
+    ) -> UpdateModelResult:
+        """Add one model to an existing provider, or create a provider with it."""
+        provider_name = params.provider_name.strip()
+        model_id = params.model_id.strip()
+        if not provider_name:
+            raise ValueError("provider_name must not be empty")
+        if not model_id:
+            raise ValueError("model_id must not be empty")
+        if params.context_window is not None and params.context_window <= 0:
+            raise ValueError("context_window must be a positive integer")
+
+        existing = self._providers.get(provider_name)
+        display_name = params.display_name.strip() if params.display_name else None
+        spec = ModelSpec(
+            id=model_id,
+            display_name=display_name or None,
+            context_window=params.context_window,
+        )
+
+        if existing is None:
+            provider_type = (params.provider_type or "").strip()
+            if not provider_type:
+                raise ValueError("provider_type is required for a new provider")
+            self._provider_manager.get_provider(
+                provider_type=provider_type,
+                api_key=normalize_optional_text(params.api_key, None),
+                base_url=normalize_optional_text(params.base_url, None),
+                aws_secret_key=normalize_optional_text(params.aws_secret_key, None),
+                aws_region=normalize_optional_text(params.aws_region, None),
+            )
+            pcfg = ProviderConfig(
+                type=provider_type,
+                api_key=normalize_optional_text(params.api_key, None),
+                base_url=normalize_optional_text(params.base_url, None),
+                aws_secret_key=normalize_optional_text(params.aws_secret_key, None),
+                aws_region=normalize_optional_text(params.aws_region, None),
+                models=[spec],
+            )
+        else:
+            if self._find_model_spec(existing, model_id) is not None:
+                raise ValueError(
+                    f"Model '{model_id}' already exists in provider '{provider_name}'"
+                )
+            pcfg = existing.model_copy(update={"models": [*(existing.models or []), spec]})
+
+        self._providers[provider_name] = pcfg
+        new_ref = ModelRef(provider=provider_name, model=model_id)
+        self._assign_roles(new_ref, params.roles)
+        await self._persist()
+
+        logger.info("LLMManager: added model [%s, %s]", provider_name, model_id)
+        return UpdateModelResult(
+            model=new_ref.to_list(),
+            provider_type=pcfg.type,
+            base_url=pcfg.base_url,
+            effective_base_url=provider_effective_base_url(pcfg.type, pcfg.base_url),
+            aws_region=pcfg.aws_region,
+            has_api_key=pcfg.api_key is not None,
+            api_key_display=secret_display(pcfg.api_key),
+            has_aws_secret_key=pcfg.aws_secret_key is not None,
+            aws_secret_key_display=secret_display(pcfg.aws_secret_key),
+            setting_fields=provider_setting_fields(pcfg.type),
+            display_name=spec.display_name,
+            context_window=spec.context_window,
+            roles=self._roles_for_ref(new_ref),
+        )
+
     async def update_model(
         self, ctx: HandlerContext, params: UpdateModelParams
     ) -> UpdateModelResult:
         """Update one provider model's display settings and current-used roles."""
         ref = params.model
+        old_pcfg = self._providers.get(ref.provider)
+        if old_pcfg is None:
+            raise ModelNotFoundError(
+                f"{ref.provider}/{ref.model}",
+                known=self._all_model_keys(),
+            )
         spec = self._find_model_spec_for_ref(ref)
+
+        new_provider = (params.provider_name or ref.provider).strip()
+        new_model_id = (params.model_id or ref.model).strip()
+        if not new_provider:
+            raise ValueError("provider_name must not be empty")
+        if not new_model_id:
+            raise ValueError("model_id must not be empty")
+        new_ref = ModelRef(provider=new_provider, model=new_model_id)
+        if new_provider != ref.provider and new_provider in self._providers:
+            raise ValueError(f"Provider '{new_provider}' already exists")
+        if new_model_id != ref.model and self._find_model_spec(old_pcfg, new_model_id) is not None:
+            raise ValueError(
+                f"Model '{new_model_id}' already exists in provider '{ref.provider}'"
+            )
 
         updates: dict[str, object] = {}
         display_name = params.display_name.strip() if params.display_name else None
+        updates["id"] = new_model_id
         updates["display_name"] = display_name or None
         updates["context_window"] = params.context_window
 
@@ -454,36 +605,71 @@ class LLMManager(Subsystem):
             raise ValueError("context_window must be a positive integer")
 
         updated_spec = spec.model_copy(update=updates)
-        self._replace_model_spec(ref, updated_spec)
+        provider_updates: dict[str, object] = {
+            "type": (params.provider_type or old_pcfg.type).strip(),
+            "base_url": normalize_optional_text(params.base_url, old_pcfg.base_url),
+            "aws_region": normalize_optional_text(params.aws_region, old_pcfg.aws_region),
+        }
+        if not provider_updates["type"]:
+            raise ValueError("provider_type must not be empty")
+        if params.api_key is not None:
+            provider_updates["api_key"] = params.api_key.strip() or None
+        if params.aws_secret_key is not None:
+            provider_updates["aws_secret_key"] = params.aws_secret_key.strip() or None
 
-        if params.roles is not None:
-            requested_roles = set(params.roles)
-            unknown = requested_roles.difference(CurrentUsedConfig.model_fields)
-            if unknown:
-                raise ValueError(f"Unknown model role: {sorted(unknown)[0]!r}")
+        models = [
+            updated_spec if model_spec.id == ref.model else model_spec
+            for model_spec in (old_pcfg.models or [])
+        ]
+        provider_updates["models"] = models
+        new_pcfg = old_pcfg.model_copy(update=provider_updates)
+        if new_provider != ref.provider:
+            del self._providers[ref.provider]
+        self._providers[new_provider] = new_pcfg
+        self._retarget_refs(ref, new_ref)
 
-            current_updates: dict[str, ModelRef | None] = {}
-            for role_name, role_ref in self._current_used.model_dump().items():
-                existing = ModelRef.model_validate(role_ref) if role_ref is not None else None
-                if role_name in requested_roles:
-                    current_updates[role_name] = ref
-                elif existing == ref:
-                    current_updates[role_name] = None
-            self._current_used = self._current_used.model_copy(update=current_updates)
+        self._assign_roles(new_ref, params.roles)
 
         await self._persist()
 
-        logger.info("LLMManager: updated model [%s, %s]", ref.provider, ref.model)
+        logger.info("LLMManager: updated model [%s, %s]", new_ref.provider, new_ref.model)
         return UpdateModelResult(
-            model=ref.to_list(),
+            model=new_ref.to_list(),
+            provider_type=new_pcfg.type,
+            base_url=new_pcfg.base_url,
+            effective_base_url=provider_effective_base_url(new_pcfg.type, new_pcfg.base_url),
+            aws_region=new_pcfg.aws_region,
+            has_api_key=new_pcfg.api_key is not None,
+            api_key_display=secret_display(new_pcfg.api_key),
+            has_aws_secret_key=new_pcfg.aws_secret_key is not None,
+            aws_secret_key_display=secret_display(new_pcfg.aws_secret_key),
+            setting_fields=provider_setting_fields(new_pcfg.type),
             display_name=updated_spec.display_name,
             context_window=updated_spec.context_window,
-            roles=self._roles_for_ref(ref),
+            roles=self._roles_for_ref(new_ref),
         )
 
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
+
+    def _assign_roles(self, ref: ModelRef, roles: list[str] | None) -> None:
+        """Assign exact current-used roles to a model when roles are provided."""
+        if roles is None:
+            return
+        requested_roles = set(roles)
+        unknown = requested_roles.difference(CurrentUsedConfig.model_fields)
+        if unknown:
+            raise ValueError(f"Unknown model role: {sorted(unknown)[0]!r}")
+
+        current_updates: dict[str, ModelRef | None] = {}
+        for role_name, role_ref in self._current_used.model_dump().items():
+            existing = ModelRef.model_validate(role_ref) if role_ref is not None else None
+            if role_name in requested_roles:
+                current_updates[role_name] = ref
+            elif existing == ref:
+                current_updates[role_name] = None
+        self._current_used = self._current_used.model_copy(update=current_updates)
 
     def _resolve(self, model_ref: ModelRef | str) -> tuple[ModelSpec, Provider]:
         """Resolve a ModelRef (or alias string) to (ModelSpec, Provider).
@@ -565,6 +751,21 @@ class LLMManager(Subsystem):
             for spec in pcfg.models
         ]
         self._providers[ref.provider] = pcfg.model_copy(update={"models": models})
+
+    def _retarget_refs(self, old_ref: ModelRef, new_ref: ModelRef) -> None:
+        """Retarget current-used roles and aliases after provider/model rename."""
+        current_updates: dict[str, ModelRef] = {}
+        for role_name, role_ref in self._current_used.model_dump().items():
+            if role_ref is None:
+                continue
+            if ModelRef.model_validate(role_ref) == old_ref:
+                current_updates[role_name] = new_ref
+        if current_updates:
+            self._current_used = self._current_used.model_copy(update=current_updates)
+
+        for alias, alias_ref in list(self._aliases.items()):
+            if alias_ref == old_ref:
+                self._aliases[alias] = new_ref
 
     def _roles_for_ref(self, ref: ModelRef) -> list[str]:
         """Return current-used role names assigned to a model ref."""

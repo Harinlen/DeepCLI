@@ -123,7 +123,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	planModePaused = false;
 	planModePlanFilePath: string | undefined = undefined;
 	todoPhases: TodoPhase[] = [];
-	hideThinkingBlock = false;
+	hideThinkingBlock = true;
 	pendingImages: ImageContent[] = [];
 	compactionQueuedMessages: CompactionQueuedMessage[] = [];
 	pendingTools = new Map<string, ToolExecutionHandle>();
@@ -1482,6 +1482,10 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	showModelSelector(options?: { temporaryOnly?: boolean }): void {
 		this.#selectorController.showModelSelector(options);
+	}
+
+	showModelAdd(): void {
+		this.#selectorController.showModelAdd();
 	}
 
 	showPluginSelector(mode?: "install" | "uninstall"): void {

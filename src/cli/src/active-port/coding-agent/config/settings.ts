@@ -22,7 +22,7 @@ const defaults: Record<string, unknown> = {
 	"doubleEscapeAction": "none",
 	"edit.fuzzyMatch": true,
 	"edit.fuzzyThreshold": 0.8,
-	"hideThinkingBlock": false,
+	"hideThinkingBlock": true,
 	"images.autoResize": false,
 	"model.default": "",
 	"providers.openaiWebsockets": false,

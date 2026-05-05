@@ -27,6 +27,8 @@ from kernel.protocol.interfaces.contracts.delete_session_result import DeleteSes
 from kernel.protocol.interfaces.contracts.execute_python_params import ExecutePythonParams
 from kernel.protocol.interfaces.contracts.execute_shell_params import ExecuteShellParams
 from kernel.protocol.interfaces.contracts.execution_result import ExecutionResult
+from kernel.protocol.interfaces.contracts.get_usage_params import GetUsageParams
+from kernel.protocol.interfaces.contracts.get_usage_result import GetUsageResult
 from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
 from kernel.protocol.interfaces.contracts.list_sessions_params import (
     ListSessionsParams,
@@ -139,6 +141,12 @@ class SessionHandler(Protocol):
         self, ctx: HandlerContext, params: DeleteSessionParams
     ) -> DeleteSessionResult:
         """Permanently delete a session."""
+        ...
+
+    async def get_usage(
+        self, ctx: HandlerContext, params: GetUsageParams
+    ) -> GetUsageResult:
+        """Return context and token usage for one session."""
         ...
 
     async def close_session(

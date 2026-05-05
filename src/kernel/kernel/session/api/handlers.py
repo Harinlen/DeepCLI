@@ -16,12 +16,22 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from kernel.protocol.acp.schemas.updates import ConfigOptionUpdate, CurrentModeUpdate
-from kernel.protocol.acp.schemas.updates import SessionInfoUpdate
+from kernel.protocol.acp.schemas.updates import SessionInfoUpdate, SessionUpdateNotification, UsageUpdate
 from kernel.protocol.interfaces.contracts.archive_session_params import ArchiveSessionParams
 from kernel.protocol.interfaces.contracts.archive_session_result import ArchiveSessionResult
 from kernel.protocol.interfaces.contracts.cancel_params import CancelParams
 from kernel.protocol.interfaces.contracts.close_session_params import CloseSessionParams
 from kernel.protocol.interfaces.contracts.close_session_result import CloseSessionResult
+from kernel.protocol.interfaces.contracts.get_usage_params import GetUsageParams
+from kernel.protocol.interfaces.contracts.get_usage_result import (
+    ContextUsageSection,
+    ContextUsageSummary,
+    EnvironmentUsageSummary,
+    GetUsageResult,
+    HistoryUsageSummary,
+    MemoryUsageSummary,
+    TokenUsageSummary,
+)
 from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
 from kernel.protocol.interfaces.contracts.list_sessions_params import ListSessionsParams
 from kernel.protocol.interfaces.contracts.list_sessions_result import (
@@ -51,6 +61,8 @@ from kernel.session.events import (
     ModeChangedEvent,
     SessionInfoChangedEvent,
     SessionLoadedEvent,
+    SessionEvent,
+    TurnCompletedEvent,
 )
 from kernel.session.models import ConversationRecord
 from kernel.session.runtime.helpers import (
@@ -71,6 +83,7 @@ from kernel.session.runtime.state import Session
 UTC = timezone.utc
 logger = logging.getLogger("kernel.session")
 _CLIENT_TURN_ID_META_KEY = "mustang.agent/clientTurnId"
+_CHARS_PER_TOKEN = 4
 
 
 class SessionHandlerMixin(_SessionMixinBase):
@@ -224,14 +237,32 @@ class SessionHandlerMixin(_SessionMixinBase):
         self._bind_connection_to_session(ctx, session)
 
         events = await self._store.read_events(session_id)
-        for event in events:
-            await self._replay_event(ctx, session, event)
+        await self._replay_events(ctx, session, events)
+        if not any(isinstance(event, TurnCompletedEvent) for event in events):
+            await self._replay_usage_snapshot(ctx, session, record)
 
         await self._write_event(session, SessionLoadedEvent)
 
         return LoadSessionResult(
             config_options=_config_descriptors(session.config_options, session.mode_id),
             modes=_mode_state(session.mode_id),
+        )
+
+    async def _replay_usage_snapshot(
+        self, ctx: HandlerContext, session: Session, record: ConversationRecord
+    ) -> None:
+        total = record.total_input_tokens + record.total_output_tokens
+        if total <= 0:
+            return
+        await ctx.sender.notify(
+            "session/update",
+            SessionUpdateNotification(
+                session_id=session.session_id,
+                update=UsageUpdate(
+                    input_tokens=record.total_input_tokens,
+                    output_tokens=record.total_output_tokens,
+                ),
+            ),
         )
 
     async def resume_session(
@@ -372,6 +403,64 @@ class SessionHandlerMixin(_SessionMixinBase):
 
         page, next_cursor = self._list_page(records, cursor=params.cursor)
         return ListSessionsResult(sessions=self._session_summaries(page), next_cursor=next_cursor)
+
+    async def get_usage(
+        self, ctx: HandlerContext, params: GetUsageParams
+    ) -> GetUsageResult:
+        """Return the `/cost` usage dashboard payload for one session."""
+        record = await self._store.get_session(params.session_id)
+        if record is None:
+            raise ResourceNotFoundError(f"Session not found: {params.session_id!r}")
+
+        session = self._sessions.get(params.session_id)
+        events = await self._store.read_events(params.session_id)
+        latest_turn = _latest_completed_turn(events)
+        latest_input = int(getattr(latest_turn, "input_tokens", 0) or 0)
+        latest_output = int(getattr(latest_turn, "output_tokens", 0) or 0)
+        context_tokens = latest_input + latest_output
+        context_window = await self._context_window_for_usage(session)
+        context_percent = (
+            round((context_tokens / context_window) * 100, 1)
+            if context_window and context_window > 0
+            else 0.0
+        )
+
+        return GetUsageResult(
+            session_id=record.session_id,
+            title=record.title,
+            cwd=record.cwd,
+            created_at=record.created,
+            updated_at=record.modified,
+            model=_model_label_for_usage(session),
+            kernel_version=events[-1].kernel_version if events else "",
+            tokens=TokenUsageSummary(
+                input=record.total_input_tokens,
+                output=record.total_output_tokens,
+                total=record.total_input_tokens + record.total_output_tokens,
+            ),
+            context=ContextUsageSummary(
+                total_tokens=context_tokens,
+                context_window=context_window,
+                percent=context_percent,
+                sections=_context_sections(events, latest_input, latest_output),
+            ),
+            history=_history_summary(events, session),
+            memory=_memory_summary(self._module_table),
+            environment=_environment_summary(session),
+            cost_usd=None,
+            cost_note="Pricing is not estimated until provider/model pricing tables are trusted.",
+        )
+
+    async def _context_window_for_usage(self, session: Session | None) -> int | None:
+        if session is None:
+            return None
+        try:
+            from kernel.llm import LLMManager
+
+            llm = self._module_table.get(LLMManager)
+            return await llm.context_window(session.orchestrator.config.model)
+        except Exception:
+            return None
 
     async def prompt(self, ctx: HandlerContext, params: PromptParams) -> PromptResult:
         """Handle ACP ``session/prompt``: run the turn now or queue it.
@@ -679,3 +768,112 @@ def _turn_result_meta(client_turn_id: str, *, replayed: bool) -> dict[str, objec
         _CLIENT_TURN_ID_META_KEY: client_turn_id,
         "mustang.agent/replayedTurnResult": replayed,
     }
+
+
+def _latest_completed_turn(events: list[SessionEvent]) -> SessionEvent | None:
+    for event in reversed(events):
+        if event.type == "turn_completed":
+            return event
+    return None
+
+
+def _model_label_for_usage(session: Session | None) -> str | None:
+    if session is None:
+        return None
+    model = session.orchestrator.config.model
+    return f"{model.provider}/{model.model}"
+
+
+def _history_summary(events: list[SessionEvent], session: Session | None) -> HistoryUsageSummary:
+    completed_turns = [event for event in events if event.type == "turn_completed"]
+    messages = sum(1 for event in events if event.type in {"user_message", "agent_message"})
+    last_turn = completed_turns[-1] if completed_turns else None
+    return HistoryUsageSummary(
+        messages=messages,
+        turns=len(completed_turns),
+        tool_calls=sum(1 for event in events if event.type == "tool_call"),
+        compactions=sum(1 for event in events if event.type == "conversation_snapshot"),
+        queued_turns=len(session.queue) if session is not None else 0,
+        in_flight=session.in_flight_turn is not None if session is not None else False,
+        last_run_at=last_turn.timestamp.isoformat() if last_turn is not None else None,
+        last_duration_ms=getattr(last_turn, "duration_ms", None),
+    )
+
+
+def _memory_summary(module_table: object) -> MemoryUsageSummary:
+    try:
+        from kernel.memory import MemoryManager
+
+        memory = module_table.get(MemoryManager)  # type: ignore[attr-defined]
+    except Exception:
+        return MemoryUsageSummary()
+
+    loaded = 1 if getattr(memory, "available", True) else 0
+    return MemoryUsageSummary(loaded=loaded, writable_scopes=loaded)
+
+
+def _environment_summary(session: Session | None) -> EnvironmentUsageSummary:
+    return EnvironmentUsageSummary(
+        lsp_servers=[],
+        mcp_servers=[server.get("name", "") for server in (session.mcp_servers if session else []) if server],
+    )
+
+
+def _context_sections(
+    events: list[SessionEvent],
+    latest_input_tokens: int,
+    latest_output_tokens: int,
+) -> list[ContextUsageSection]:
+    if latest_input_tokens <= 0 and latest_output_tokens <= 0:
+        return [
+            ContextUsageSection(id="system_prompt", label="System Prompt", tokens=0, percent=0.0),
+            ContextUsageSection(id="memory", label="Memory", tokens=0, percent=0.0),
+            ContextUsageSection(id="conversation", label="Conversation", tokens=0, percent=0.0),
+            ContextUsageSection(id="tools", label="Tool Calls", tokens=0, percent=0.0),
+        ]
+
+    message_estimate = 0
+    tool_estimate = 0
+    for event in events:
+        if event.type in {"user_message", "agent_message", "agent_thought"}:
+            message_estimate += _estimate_event_tokens(event)
+        elif event.type in {"tool_call", "tool_call_update"}:
+            tool_estimate += _estimate_event_tokens(event)
+
+    estimated_known = message_estimate + tool_estimate
+    if estimated_known > 0 and latest_input_tokens > 0:
+        scale = min(1.0, latest_input_tokens / estimated_known)
+        conversation_tokens = int(message_estimate * scale)
+        tool_tokens = int(tool_estimate * scale)
+    else:
+        conversation_tokens = latest_input_tokens
+        tool_tokens = 0
+
+    system_tokens = max(0, latest_input_tokens - conversation_tokens - tool_tokens)
+    total = max(1, latest_input_tokens + latest_output_tokens)
+    sections = [
+        ContextUsageSection(id="system_prompt", label="System Prompt", tokens=system_tokens, percent=0.0),
+        ContextUsageSection(id="memory", label="Memory", tokens=0, percent=0.0),
+        ContextUsageSection(id="conversation", label="Conversation", tokens=conversation_tokens + latest_output_tokens, percent=0.0),
+        ContextUsageSection(id="tools", label="Tool Calls", tokens=tool_tokens, percent=0.0),
+    ]
+    return [
+        section.model_copy(update={"percent": round((section.tokens / total) * 100, 1)})
+        for section in sections
+    ]
+
+
+def _estimate_event_tokens(event: SessionEvent) -> int:
+    return max(0, len(_event_text(event)) // _CHARS_PER_TOKEN)
+
+
+def _event_text(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return " ".join(_event_text(item) for item in value)
+    if isinstance(value, dict):
+        return " ".join(_event_text(item) for item in value.values())
+    if hasattr(value, "model_dump"):
+        return _event_text(value.model_dump())  # type: ignore[attr-defined]
+    return ""

@@ -33,6 +33,7 @@ import { OAuthSelectorComponent } from "../components/oauth-selector";
 import { SessionObserverOverlayComponent } from "../components/session-observer-overlay";
 import { SessionSelectorComponent } from "../components/session-selector";
 import { SettingsSelectorComponent } from "../components/settings-selector";
+import { SimpleOptionSelectorComponent } from "../components/simple-option-selector";
 import { ThemeSelectorComponent } from "../components/theme-selector";
 import { ToolExecutionComponent } from "../components/tool-execution";
 import { TreeSelectorComponent } from "../components/tree-selector";
@@ -424,14 +425,29 @@ export class SelectorController {
 				},
 				async model => {
 					const providerModelCount = modelState?.providers.find(provider => provider.name === model.providerName)?.models.length ?? 1;
+					const providerTypeOptions =
+						modelState?.providers.map(provider => ({
+							type: provider.providerType,
+							settingFields: provider.settingFields,
+							effectiveBaseUrl: provider.effectiveBaseUrl,
+						})) ?? [];
 					const editor = new ModelConfigEditorComponent(
 						this.ctx.ui,
 						model,
 						providerModelCount,
+						providerTypeOptions,
+						{ providerEditable: true },
 						async update => {
-							await this.ctx.session.updateProviderModel?.({
+							const updated = await this.ctx.session.updateProviderModel?.({
 								providerName: model.providerName,
+								newProviderName: update.providerName,
+								providerType: update.providerType,
+								apiKey: update.apiKey,
+								baseUrl: update.baseUrl,
+								awsRegion: update.awsRegion,
+								awsSecretKey: update.awsSecretKey,
 								modelId: model.modelId,
+								newModelId: update.modelId,
 								displayName: update.displayName,
 								contextWindow: update.contextWindow,
 								roles: update.roles,
@@ -439,11 +455,13 @@ export class SelectorController {
 							this.ctx.statusLine.invalidate();
 							this.ctx.updateEditorBorderColor();
 							this.ctx.updateEditorTopBorder();
-							this.ctx.showStatus(`Updated model: ${model.providerName}/${model.modelId}`);
+							const updatedProvider = updated?.providerName ?? model.providerName;
+							const updatedModel = updated?.modelId ?? model.modelId;
+							this.ctx.showStatus(`Updated model: ${updatedProvider}/${updatedModel}`);
 							this.ctx.editorContainer.clear();
 							this.ctx.editorContainer.addChild(selector);
 							this.ctx.ui.setFocus(selector);
-							await selector.reload({ providerName: model.providerName, modelId: model.modelId });
+							await selector.reload({ providerName: updatedProvider, modelId: updatedModel });
 							this.ctx.ui.requestRender();
 						},
 						() => {
@@ -466,6 +484,118 @@ export class SelectorController {
 				undefined,
 			);
 			return { component: selector, focus: selector };
+		});
+	}
+
+	showModelAdd(): void {
+		this.showSelector(done => {
+			let modelState: Awaited<ReturnType<typeof this.ctx.session.listProviderModels>> | undefined;
+			const providerTypeOptions = () =>
+				(modelState?.providerTypeOptions ?? []).map(option => ({
+					type: option.providerType,
+					settingFields: option.settingFields,
+					effectiveBaseUrl: option.effectiveBaseUrl,
+				}));
+			const close = () => {
+				this.ctx.editor.setText("");
+				done();
+				this.ctx.ui.requestRender();
+			};
+			const openList = () => {
+				done();
+				this.showModelSelector();
+			};
+			const saveAdded = async update => {
+				const added = await this.ctx.session.addProviderModel?.({
+					providerName: update.providerName,
+					providerType: update.providerType,
+					apiKey: update.apiKey,
+					baseUrl: update.baseUrl,
+					awsRegion: update.awsRegion,
+					awsSecretKey: update.awsSecretKey,
+					modelId: update.modelId,
+					displayName: update.displayName,
+					contextWindow: update.contextWindow,
+					roles: update.roles,
+				});
+				this.ctx.statusLine.invalidate();
+				this.ctx.updateEditorBorderColor();
+				this.ctx.updateEditorTopBorder();
+				this.ctx.showStatus(`Added model: ${added?.providerName ?? update.providerName}/${added?.modelId ?? update.modelId}`);
+				openList();
+			};
+			const openExistingProviderEditor = provider => {
+				const model = blankProviderModel(provider);
+				const editor = new ModelConfigEditorComponent(
+					this.ctx.ui,
+					model,
+					provider.models.length + 1,
+					providerTypeOptions(),
+					{ providerEditable: false, initialFieldIndex: 7 },
+					saveAdded,
+					close,
+				);
+				this.ctx.editorContainer.clear();
+				this.ctx.editorContainer.addChild(editor);
+				this.ctx.ui.setFocus(editor);
+				this.ctx.ui.requestRender();
+			};
+			const openNewProviderEditor = () => {
+				const option = providerTypeOptions()[0] ?? { type: "deepseek", settingFields: ["api_key", "base_url"], effectiveBaseUrl: "https://api.deepseek.com" };
+				const model = blankNewProviderModel(option);
+				const editor = new ModelConfigEditorComponent(
+					this.ctx.ui,
+					model,
+					0,
+					providerTypeOptions(),
+					{ providerEditable: true, initialFieldIndex: 0 },
+					saveAdded,
+					close,
+				);
+				this.ctx.editorContainer.clear();
+				this.ctx.editorContainer.addChild(editor);
+				this.ctx.ui.setFocus(editor);
+				this.ctx.ui.requestRender();
+			};
+			const openProviderSelector = () => {
+				const providers = modelState?.providers ?? [];
+				if (providers.length === 0) {
+					openNewProviderEditor();
+					return;
+				}
+				const selector = new SimpleOptionSelectorComponent(
+					"Provider",
+					providers.map(provider => ({ label: provider.name, description: provider.providerType })),
+					index => {
+						const provider = providers[index];
+						if (provider) openExistingProviderEditor(provider);
+					},
+					close,
+				);
+				this.ctx.editorContainer.clear();
+				this.ctx.editorContainer.addChild(selector);
+				this.ctx.ui.setFocus(selector);
+				this.ctx.ui.requestRender();
+			};
+			const modeSelector = new SimpleOptionSelectorComponent(
+				"Add model",
+				[
+					{ label: "Existing provider", description: "Add a model under a configured provider" },
+					{ label: "New provider", description: "Create a provider with one model" },
+				],
+				index => {
+					if (index === 0) openProviderSelector();
+					else openNewProviderEditor();
+				},
+				close,
+			);
+			this.ctx.session.listProviderModels?.().then(state => {
+				modelState = state;
+				this.ctx.ui.requestRender();
+			}).catch(error => {
+				this.ctx.showError(`Failed to load models: ${error instanceof Error ? error.message : String(error)}`);
+			});
+			return { component: modeSelector, focus: modeSelector };
 		});
 	}
 
@@ -724,15 +854,17 @@ export class SelectorController {
 
 	async handleResumeSession(sessionPath: string): Promise<void> {
 		this.#clearTransientSessionUi();
+		this.ctx.chatContainer.clear();
 
 		// Switch session via AgentSession (emits hook and tool session events)
 		await this.ctx.session.switchSession(sessionPath);
 		this.#refreshSessionTerminalTitle();
+		this.ctx.editor.setText("");
+		this.ctx.editor.handleInput?.("\x1b");
+		this.ctx.statusLine.invalidate();
+		this.ctx.updateEditorTopBorder();
 		this.ctx.updateEditorBorderColor();
 
-		// Clear and re-render the chat
-		this.ctx.chatContainer.clear();
-		this.ctx.renderInitialMessages();
 		await this.ctx.reloadTodos();
 		this.ctx.showStatus("Resumed session");
 	}
@@ -943,4 +1075,42 @@ export class SelectorController {
 			return { component: selector, focus: selector };
 		});
 	}
+}
+
+function blankProviderModel(provider): any {
+	return {
+		displayName: "",
+		providerName: provider.name,
+		providerType: provider.providerType,
+		providerBaseUrl: provider.baseUrl,
+		providerEffectiveBaseUrl: provider.effectiveBaseUrl,
+		providerAwsRegion: provider.awsRegion,
+		providerHasApiKey: provider.hasApiKey,
+		providerApiKeyDisplay: provider.apiKeyDisplay,
+		providerHasAwsSecretKey: provider.hasAwsSecretKey,
+		providerAwsSecretKeyDisplay: provider.awsSecretKeyDisplay,
+		providerSettingFields: provider.settingFields,
+		modelId: "",
+		roles: [],
+		contextWindow: null,
+	};
+}
+
+function blankNewProviderModel(option): any {
+	return {
+		displayName: "",
+		providerName: "",
+		providerType: option.type,
+		providerBaseUrl: null,
+		providerEffectiveBaseUrl: option.effectiveBaseUrl,
+		providerAwsRegion: null,
+		providerHasApiKey: false,
+		providerApiKeyDisplay: null,
+		providerHasAwsSecretKey: false,
+		providerAwsSecretKeyDisplay: null,
+		providerSettingFields: option.settingFields,
+		modelId: "",
+		roles: [],
+		contextWindow: null,
+	};
 }

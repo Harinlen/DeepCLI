@@ -113,6 +113,10 @@ if TYPE_CHECKING:
             self, ctx: HandlerContext, session: Session, event: SessionEvent
         ) -> None: ...
 
+        async def _replay_events(
+            self, ctx: HandlerContext, session: Session, events: list[SessionEvent]
+        ) -> None: ...
+
         async def _handle_orchestrator_event(
             self,
             session: Session,

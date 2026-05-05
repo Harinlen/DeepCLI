@@ -27,6 +27,7 @@ from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
 from kernel.protocol.interfaces.contracts.archive_session_params import ArchiveSessionParams
 from kernel.protocol.interfaces.contracts.close_session_params import CloseSessionParams
 from kernel.protocol.interfaces.contracts.delete_session_params import DeleteSessionParams
+from kernel.protocol.interfaces.contracts.get_usage_params import GetUsageParams
 from kernel.protocol.interfaces.contracts.list_sessions_params import ListSessionsParams
 from kernel.protocol.interfaces.contracts.load_session_params import LoadSessionParams
 from kernel.protocol.interfaces.contracts.new_session_params import NewSessionParams
@@ -728,6 +729,76 @@ async def test_token_deltas_persist_across_turns(manager: SessionManager, tmp_pa
     assert record is not None
     assert record.total_input_tokens == 300
     assert record.total_output_tokens == 130
+
+
+async def test_get_usage_returns_cost_panel_data(
+    manager: SessionManager, tmp_path: Path
+) -> None:
+    """The /cost payload comes from durable session events and counters."""
+    ctx = _make_ctx()
+    result = await manager.new(ctx, NewSessionParams(cwd=str(tmp_path)))
+    sid = result.session_id
+
+    from kernel.session.events import AgentMessageEvent, ToolCallEvent, TurnCompletedEvent
+    from kernel.session.models import TokenUsageUpdate
+
+    base_fields = dict(
+        parent_id=None,
+        timestamp=datetime.now(UTC),
+        session_id=sid,
+        agent_depth=0,
+        kernel_version="1.0.0",
+        cwd=str(tmp_path),
+        git_branch=None,
+    )
+    await manager._store.append_event(
+        sid,
+        AgentMessageEvent(
+            event_id="ev_msg",
+            content=[{"type": "text", "text": "assistant output"}],
+            **base_fields,
+        ),
+    )
+    await manager._store.append_event(
+        sid,
+        ToolCallEvent(
+            event_id="ev_tool",
+            tool_call_id="tool-1",
+            title="Bash",
+            kind="bash",
+            raw_input='{"command":"pwd"}',
+            **base_fields,
+        ),
+    )
+    await manager._store.append_event(
+        sid,
+        TurnCompletedEvent(
+            event_id="ev_turn",
+            stop_reason="end_turn",
+            duration_ms=1200,
+            input_tokens=100,
+            output_tokens=25,
+            **base_fields,
+        ),
+        tokens=TokenUsageUpdate(100, 25),
+    )
+
+    usage = await manager.get_usage(ctx, GetUsageParams(session_id=sid))
+
+    assert usage.session_id == sid
+    assert usage.tokens.input == 100
+    assert usage.tokens.output == 25
+    assert usage.tokens.total == 125
+    assert usage.context.total_tokens == 125
+    assert usage.history.turns == 1
+    assert usage.history.tool_calls == 1
+    assert usage.history.last_duration_ms == 1200
+    assert [section.id for section in usage.context.sections] == [
+        "system_prompt",
+        "memory",
+        "conversation",
+        "tools",
+    ]
 
 
 # ---------------------------------------------------------------------------

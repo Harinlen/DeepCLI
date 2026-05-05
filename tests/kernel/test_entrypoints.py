@@ -11,7 +11,9 @@ from kernel.agent_runtime.__main__ import _dispatch_runtime_contract, _prompt_te
 from kernel.agents import HubFrame, HubFrameType
 
 
-def test_kernel_main_version_prints_and_returns(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_kernel_main_version_prints_and_returns(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     from kernel import __main__ as kernel_main
 
     monkeypatch.setattr(sys, "argv", ["python -m kernel", "--port", "9999", "--version"])
@@ -33,6 +35,7 @@ def test_kernel_main_runs_uvicorn_and_sets_dev(monkeypatch: pytest.MonkeyPatch) 
 
     assert run.call_args.kwargs["port"] == 9999
     assert run.call_args.kwargs["log_level"] == "info"
+    assert run.call_args.kwargs["loop"] == "uvloop"
     assert run.call_args.kwargs["factory"] is True
     assert run.call_args.kwargs["ws_ping_interval"] == 20.0
 
@@ -62,6 +65,7 @@ def test_access_agent_main_sets_router_or_compat_env(monkeypatch: pytest.MonkeyP
     assert access_main.os.environ["MUSTANG_AGENT_PROMPT_BACKEND"] == "router"
     assert access_main.os.environ["_MUSTANG_DEV"] == "1"
     assert run.call_args.kwargs["port"] == 9001
+    assert run.call_args.kwargs["loop"] == "uvloop"
 
     monkeypatch.setattr(
         sys,
@@ -79,6 +83,22 @@ def test_access_agent_main_sets_router_or_compat_env(monkeypatch: pytest.MonkeyP
     access_main.main()
 
     assert "MUSTANG_AGENT_PROMPT_BACKEND" not in access_main.os.environ
+
+
+def test_uvicorn_loop_is_uvloop_off_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    from kernel import uvicorn_runtime
+
+    monkeypatch.setattr(uvicorn_runtime.sys, "platform", "linux")
+
+    assert uvicorn_runtime.uvicorn_loop() == "uvloop"
+
+
+def test_uvicorn_loop_falls_back_on_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    from kernel import uvicorn_runtime
+
+    monkeypatch.setattr(uvicorn_runtime.sys, "platform", "win32")
+
+    assert uvicorn_runtime.uvicorn_loop() == "asyncio"
 
 
 def test_supervisor_main_lifecycle(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -100,7 +120,9 @@ def test_supervisor_main_lifecycle(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
             events.append("stop")
 
     monkeypatch.setattr(supervisor_main, "SupervisorRuntime", FakeRuntime)
-    monkeypatch.setattr(supervisor_main, "install_signal_handlers", lambda runtime: events.append("signals"))
+    monkeypatch.setattr(
+        supervisor_main, "install_signal_handlers", lambda runtime: events.append("signals")
+    )
     monkeypatch.setattr(
         sys,
         "argv",
@@ -130,7 +152,9 @@ def test_agent_runtime_write_json_and_prompt_text(tmp_path: Path) -> None:
     _write_json(path, {"b": 2, "a": 1})
 
     assert json.loads(path.read_text()) == {"a": 1, "b": 2}
-    assert _prompt_text([{"type": "text", "text": "ping"}, {"type": "image", "data": "..."}]) == "ping"
+    assert (
+        _prompt_text([{"type": "text", "text": "ping"}, {"type": "image", "data": "..."}]) == "ping"
+    )
     assert _prompt_text({"type": "text", "text": "nope"}) == ""
 
 
@@ -180,7 +204,10 @@ async def test_agent_runtime_dispatches_session_contracts() -> None:
             peer=None,
         )
 
-    assert await dispatch("agent.session_new", {"cwd": "/tmp"}) == {"ok": True, "sessionId": "s-new"}
+    assert await dispatch("agent.session_new", {"cwd": "/tmp"}) == {
+        "ok": True,
+        "sessionId": "s-new",
+    }
     assert await dispatch("agent.session_list", {"cwd": "/tmp"}) == {"ok": True, "sessions": []}
     assert await dispatch("agent.session_load", {"sessionId": "s1", "cwd": "/tmp"}) == {
         "ok": True,

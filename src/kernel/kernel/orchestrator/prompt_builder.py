@@ -9,25 +9,26 @@ CC order: static → session guidance → memory → Environment (last, contains
 
 1. Identity + security posture          ``orchestrator/identity``
 2. ``# System``                         ``orchestrator/system``
-3. ``# Doing tasks``                    ``orchestrator/doing_tasks``
-4. ``# Executing actions with care``    ``orchestrator/actions_with_care``
-5. ``# Using your tools``              ``orchestrator/using_tools``
-6. ``# Tone and style``                ``orchestrator/tone_and_style``
-7. ``# Output efficiency``             ``orchestrator/output_efficiency``
-8. ``# Language``                       ``orchestrator/language`` (when set)
-9. Memory strategy (Channel C)         from MemoryManager
-10. Memory index (Channel A)           from MemoryManager
-11. Available skills listing           from SkillManager
-12. Git commit/PR instructions         ``orchestrator/git_commit_pr``
-13. Summarize tool results reminder    ``orchestrator/summarize_tool_results``
+3. ``# First principles``               ``orchestrator/first_principles``
+4. ``# Doing tasks``                    ``orchestrator/doing_tasks``
+5. ``# Executing actions with care``    ``orchestrator/actions_with_care``
+6. ``# Using your tools``              ``orchestrator/using_tools``
+7. ``# Tone and style``                ``orchestrator/tone_and_style``
+8. ``# Output efficiency``             ``orchestrator/output_efficiency``
+9. ``# Language``                       ``orchestrator/language`` (when set)
+10. Memory strategy (Channel C)        from MemoryManager
+11. Memory index (Channel A)           from MemoryManager
+12. Available skills listing           from SkillManager
+13. Git commit/PR instructions         ``orchestrator/git_commit_pr``
+14. Summarize tool results reminder    ``orchestrator/summarize_tool_results``
 
 **Volatile sections** (rebuilt every turn — not cacheable):
 
-14. ``# MCP Server Instructions``      (when servers have instructions)
-15. Git context                        from GitManager
-16. AGENTS.md contents                 (future)
-17. ``# Environment``                  computed at runtime (timestamp → always last)
-18. Plan mode instructions             injected by Orchestrator after build()
+15. ``# MCP Server Instructions``      (when servers have instructions)
+16. Git context                        from GitManager
+17. AGENTS.md contents                 (future)
+18. ``# Environment``                  computed at runtime (timestamp → always last)
+19. Plan mode instructions             injected by Orchestrator after build()
 """
 
 from __future__ import annotations
@@ -50,6 +51,7 @@ logger = logging.getLogger(__name__)
 _STATIC_SECTION_KEYS: list[str] = [
     "orchestrator/identity",
     "orchestrator/system",
+    "orchestrator/first_principles",
     "orchestrator/doing_tasks",
     "orchestrator/actions_with_care",
     "orchestrator/using_tools",

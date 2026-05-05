@@ -118,6 +118,8 @@ async def test_exa_fetch_success_and_empty_result(monkeypatch: pytest.MonkeyPatc
 async def test_firecrawl_fetch_uses_custom_base_and_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FIRECRAWL_API_KEY", "fc-key")
     monkeypatch.setenv("FIRECRAWL_API_URL", "http://firecrawl.local/")
+    monkeypatch.setenv("FIRECRAWL_MAX_AGE_MS", "123")
+    monkeypatch.setenv("FIRECRAWL_PROXY", "stealth")
     calls = _patch_client(
         monkeypatch,
         lambda *_: _json_response(
@@ -138,9 +140,30 @@ async def test_firecrawl_fetch_uses_custom_base_and_metadata(monkeypatch: pytest
 
     assert calls[0][1] == "http://firecrawl.local/v2/scrape"
     assert calls[0][2]["headers"]["Authorization"] == "Bearer fc-key"
+    assert calls[0][2]["json"]["maxAge"] == 123
+    assert calls[0][2]["json"]["proxy"] == "stealth"
     assert result.url == "https://final.test"
     assert result.content == "hello"
+    assert result.truncated is True
+    assert result.raw_length == len("hello world")
     assert result.status_code == 201
+
+
+async def test_firecrawl_fetch_accepts_endpoint_url_and_failed_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FIRECRAWL_API_URL", "http://firecrawl.local/custom/scrape")
+    monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+    calls = _patch_client(
+        monkeypatch,
+        lambda *_: _json_response({"success": False, "error": "blocked upstream"}),
+    )
+
+    result = await FirecrawlFetchBackend().fetch("https://source.test")
+
+    assert calls[0][1] == "http://firecrawl.local/custom/scrape"
+    assert "Authorization" not in calls[0][2]["headers"]
+    assert result.error == "blocked upstream"
 
 
 async def test_parallel_and_tavily_fetch_empty_and_success(monkeypatch: pytest.MonkeyPatch) -> None:

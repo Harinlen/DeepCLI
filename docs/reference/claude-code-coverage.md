@@ -47,7 +47,7 @@
 | 功能领域 | 状态 | 说明 |
 |---|---|---|
 | **Notebook 编辑** | ⛔ 不在范围 | 不支持 `.ipynb`；session 日志用 SQLite，见 [session.md § ipynb](../kernel/subsystems/session.md#为什么不用-ipynb) |
-| **费用追踪** | ❌ 缺失 | /cost 命令注册存在但无实现；无按模型分解 |
+| **费用追踪** | 🟡 部分完成 | `/cost` 已通过 `_mustang.agent/session/get_usage` 显示会话 token/context/history/memory/environment；仍缺可信 pricing table 和按模型金额分解 |
 | **前端体验** | ❌ 缺失 | 无状态栏、spinner、diff 渲染、自动折叠 |
 | **IDE 集成** | ⛔ 不在范围 | VS Code / JetBrains 插件 |
 | **MCP Resources** | ❌ 缺失 | CC 新增 ListMcpResourcesTool + ReadMcpResourceTool，但两个工具在 CC 中对 async agent 仍标注 TBD；暂不做 |
@@ -69,8 +69,8 @@
 | 方面 | DeepCLI | Claude Code |
 |------|---------|------------|
 | **构建方式** | `PromptBuilder` + `PromptSection` cache 标志 | 注册表设计，每个部分有名称+计算函数 |
-| **内容量** | 精简：base prompt + env context + skills listing | 350+ 行，极其详细 |
-| **注入内容** | base prompt、环境 (date/platform/cwd/git branch)、skills 列表 | 工具使用指导、代码质量、Git 规范、模型信息、memory 教学等 |
+| **内容量** | 分段 system prompt + env context + skills listing | 350+ 行，极其详细 |
+| **注入内容** | identity/system/doing tasks/actions/tools/tone/output 等分段 prompt、环境 (date/platform/cwd/git branch)、skills 列表 | 工具使用指导、代码质量、Git 规范、模型信息、memory 教学等 |
 | **缓存策略** | section 级 cache 标志 | Anthropic API cache_control，最多 4 个断点 |
 | **Memory 注入** | Channel A (index 常驻 cacheable) + Channel B (per-turn fence 注入) + Channel C (策略规则) | 200+ 行 auto memory 指导 + MEMORY.md 常驻 + per-turn 相关文件注入 |
 | **Git 上下文** | ✅ branch + main_branch + user + status + log | status + diff + recent commits |
@@ -198,7 +198,7 @@ OAuth 完成（callback → token exchange → reconnect）在后台自动进行
 工具覆盖：CC 实际暴露给 LLM 约 26 个常规 builtin tool（10 core + 16 deferred），另有约 10 个 feature-gated/实验性新工具（Task CRUD × 4、Team × 2、Sleep、Brief、SyntheticOutput、WorkflowTool）。DeepCLI 28 个 builtin（21 BUILTIN_TOOLS + ToolSearch + REPL + 5 Memory），覆盖率 ~100%（常规工具）。
 
 **剩余差距**：
-1. **费用追踪** — /cost 命令注册但无实现
+1. **费用追踪金额分解** — `/cost` 已有用量面板，但仍缺可信 pricing table、按模型金额聚合和历史费用视图
 2. **前端体验** — 无专用客户端
 3. **Multi-agent swarms** — Task CRUD + TeamCreate 属于 CC 新增的实验性协调层，我们有 SendMessageTool 但无结构化 task 分配
 4. **task_budget 跨压缩追踪** — CC beta 功能，output token 预算在 compaction 后持续累计

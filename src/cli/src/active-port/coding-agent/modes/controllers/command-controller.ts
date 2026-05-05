@@ -467,7 +467,7 @@ export class CommandController {
 		if (!reports && costProvider.fetchCostReport) {
 			try {
 				const report = await costProvider.fetchCostReport();
-				const output = renderCostUsageReport(report, theme, Date.now());
+				const output = renderCostUsageReport(report, theme);
 				this.ctx.chatContainer.addChild(new Spacer(1));
 				this.ctx.chatContainer.addChild(new Text(output, 1, 0));
 				this.ctx.ui.requestRender();
@@ -909,32 +909,29 @@ function formatNumber(value: number, maxFractionDigits = 1): string {
 	return new Intl.NumberFormat("en-US", { maximumFractionDigits: maxFractionDigits }).format(value);
 }
 
-function renderCostUsageReport(report: any, uiTheme: typeof theme, nowMs: number): string {
+function renderCostUsageReport(report: any, uiTheme: typeof theme): string {
 	const lines: string[] = [];
-	const title = report.title || "Untitled session";
-	lines.push(uiTheme.bold(uiTheme.fg("accent", title)));
-	lines.push(uiTheme.fg("dim", report.sessionId ?? ""));
-	lines.push("");
-	lines.push(`${uiTheme.bold("Magic Context")} ${uiTheme.fg("dim", report.kernelVersion ? `v${report.kernelVersion}` : "")}`.trimEnd());
+	lines.push(uiTheme.bold("Usage"));
 	if (report.model) lines.push(uiTheme.fg("dim", report.model));
 	const context = report.context ?? {};
 	const contextTotal = context.totalTokens ?? 0;
 	const contextWindow = context.contextWindow;
-	lines.push(renderContextBar(context.sections ?? [], contextTotal, uiTheme));
-	for (const section of normalizeContextSections(context.sections ?? [])) {
-		lines.push(contextSectionLine(section, uiTheme));
-	}
-	lines.push(metricLine("Context", formatContextTotal(contextTotal, contextWindow, context.percent), uiTheme));
+	const contextSections = normalizeContextSections(context.sections ?? []);
+	const contextPercent =
+		contextWindow && contextWindow > 0
+			? (context.percent ?? Number(((contextTotal / contextWindow) * 100).toFixed(1)))
+			: undefined;
 	lines.push("");
-	lines.push(uiTheme.bold("Session"));
-	lines.push(metricLine("Messages", formatCompact(report.history?.messages ?? 0), uiTheme));
-	lines.push(metricLine("Turns", formatCompact(report.history?.turns ?? 0), uiTheme));
-	lines.push(metricLine("Tool Calls", formatCompact(report.history?.toolCalls ?? 0), uiTheme));
-	lines.push(metricLine("Compactions", formatCompact(report.history?.compactions ?? 0), uiTheme));
-	lines.push(metricLine("State", report.history?.inFlight ? uiTheme.fg("warning", "running") : "idle", uiTheme));
-	if (report.history?.lastRunAt) {
-		const age = Math.max(0, nowMs - Date.parse(report.history.lastRunAt));
-		lines.push(metricLine("Last Run", `${formatDuration(age)} ago`, uiTheme));
+	lines.push(uiTheme.bold("Context"));
+	if (contextWindow && contextWindow > 0) {
+		lines.push(contextMetricLine("Window Total", formatCompact(contextWindow), undefined, uiTheme));
+		lines.push(contextMetricLine("Window Used", formatCompact(contextTotal), contextPercent, uiTheme));
+	} else {
+		lines.push(contextMetricLine("Window Used", formatCompact(contextTotal), undefined, uiTheme));
+	}
+	lines.push(renderContextBar(contextSections, contextTotal, contextWindow, uiTheme));
+	for (const section of contextSections) {
+		lines.push(contextSectionLine(section, uiTheme));
 	}
 	lines.push("");
 	lines.push(uiTheme.bold("Tokens"));
@@ -943,35 +940,29 @@ function renderCostUsageReport(report: any, uiTheme: typeof theme, nowMs: number
 	if ((report.tokens?.cacheRead ?? 0) > 0) lines.push(metricLine("Cache Read", formatCompact(report.tokens.cacheRead), uiTheme));
 	if ((report.tokens?.cacheWrite ?? 0) > 0) lines.push(metricLine("Cache Write", formatCompact(report.tokens.cacheWrite), uiTheme));
 	lines.push(metricLine("Total", formatCompact(report.tokens?.total ?? 0), uiTheme));
-	lines.push("");
-	lines.push(uiTheme.bold("Memory"));
-	lines.push(metricLine("Loaded", formatCompact(report.memory?.loaded ?? 0), uiTheme));
-	lines.push(metricLine("Writable", formatCompact(report.memory?.writableScopes ?? 0), uiTheme));
-	lines.push("");
-	lines.push(uiTheme.bold("Environment"));
-	const lsp = report.environment?.lspServers ?? [];
-	const mcp = report.environment?.mcpServers ?? [];
-	lines.push(metricLine("LSP", formatNameList(lsp, uiTheme), uiTheme));
-	lines.push(metricLine("MCP", formatNameList(mcp, uiTheme), uiTheme));
-	lines.push("");
-	lines.push(uiTheme.bold("Billing"));
-	lines.push(metricLine("Estimated Cost", report.costUsd == null ? "unavailable" : formatUsd(report.costUsd), uiTheme));
-	if (report.costNote) {
-		lines.push(uiTheme.fg("dim", report.costNote));
-	}
 	return lines.join("\n");
 }
 
-function renderContextBar(sections: any[], totalTokens: number, uiTheme: typeof theme): string {
-	const width = 26;
-	if (!totalTokens) return `  ${uiTheme.fg("dim", `[${"░".repeat(width)}]`)}`;
-	const colors = ["accent", "warning", "success", "muted"];
+function renderContextBar(
+	sections: any[],
+	totalTokens: number,
+	contextWindow: number | null | undefined,
+	uiTheme: typeof theme,
+): string {
+	const width = 32;
+	const denominator = contextWindow && contextWindow > 0 ? contextWindow : totalTokens;
+	if (!denominator || denominator <= 0) return `  ${uiTheme.fg("dim", `[${"░".repeat(width)}]`)}`;
+
 	let used = 0;
-	const parts = sections.map((section, index) => {
-		const size = Math.max(0, Math.min(width - used, Math.round((section.tokens / totalTokens) * width)));
+	const parts: string[] = [];
+	for (const section of sections) {
+		const tokens = Math.max(0, Number(section.tokens ?? 0));
+		if (!tokens || used >= width) continue;
+		const proportional = Math.floor((tokens / denominator) * width);
+		const size = Math.min(width - used, Math.max(1, proportional));
 		used += size;
-		return uiTheme.fg(colors[index % colors.length], "█".repeat(size));
-	});
+		parts.push(colorContextText(uiTheme, contextSectionColor(section), "█".repeat(size)));
+	}
 	if (used < width) parts.push(uiTheme.fg("dim", "░".repeat(width - used)));
 	return `  ${uiTheme.fg("dim", "[")}${parts.join("")}${uiTheme.fg("dim", "]")}`;
 }
@@ -985,36 +976,59 @@ function normalizeContextSections(sections: any[]): any[] {
 }
 
 function contextSectionLabel(section: any): string {
-	if (section.id === "system_prompt") return "System Prompt";
+	if (section.id === "system_prompt") return "System Prompts";
 	if (section.id === "memory") return "Memory";
 	if (section.id === "conversation") return "Conversation";
-	if (section.id === "tools") return "Tool Calls";
+	if (section.id === "tools") return "Tool Call";
 	return section.label || section.id || "Other";
 }
 
 function contextSectionLine(section: any, uiTheme: typeof theme): string {
-	const label = padVisible(contextSectionLabel(section), 15);
-	const tokens = padVisible(formatCompact(section.tokens ?? 0), 8, "left");
-	const percent = padVisible(`${formatNumber(section.percent ?? 0, 0)}%`, 5, "left");
-	return `${uiTheme.fg("accent", label)} ${tokens} ${uiTheme.fg("dim", percent)}`;
+	return contextMetricLine(
+		contextSectionLabel(section),
+		formatCompact(section.tokens ?? 0),
+		section.percent ?? 0,
+		uiTheme,
+		contextSectionColor(section),
+	);
 }
 
 function metricLine(label: string, value: string, uiTheme: typeof theme): string {
-	return `  ${uiTheme.fg("muted", padVisible(label, 15))}${value}`;
+	return `  ${uiTheme.fg("muted", padVisible(label, 16))} ${padVisible(value, 9, "left")}`;
 }
 
-function formatContextTotal(total: number, window: number | null | undefined, percent: number | null | undefined): string {
-	if (window && window > 0) return `${formatCompact(total)} / ${formatCompact(window)} (${formatNumber(percent ?? 0)}%)`;
-	return formatCompact(total);
+function contextMetricLine(
+	label: string,
+	value: string,
+	percent: number | null | undefined,
+	uiTheme: typeof theme,
+	labelColor: ThemeColorName | ContextHexColor = "muted",
+): string {
+	const labelText = colorContextText(uiTheme, labelColor, padVisible(label, 16));
+	const valueText = padVisible(value, 9, "left");
+	if (percent === null || percent === undefined) return `  ${labelText} ${valueText}`;
+	const percentText = padVisible(`${formatNumber(percent, 0)}%`, 5, "left");
+	return `  ${labelText} ${valueText} ${uiTheme.fg("dim", percentText)}`;
 }
 
-function formatNameList(names: string[], uiTheme: typeof theme): string {
-	if (names.length === 0) return uiTheme.fg("dim", "none");
-	return names.join(", ");
+type ThemeColorName = Parameters<typeof theme.fg>[0];
+
+type ContextHexColor = `#${string}`;
+
+function contextSectionColor(section: any): ThemeColorName | ContextHexColor {
+	if (section.id === "system_prompt") return "#c084fc";
+	if (section.id === "memory") return "#34d399";
+	if (section.id === "conversation") return "#f87171";
+	if (section.id === "tools") return "#fb923c";
+	return "muted";
 }
 
-function formatUsd(value: number): string {
-	return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 4 }).format(value);
+function colorContextText(uiTheme: typeof theme, color: ThemeColorName | ContextHexColor, text: string): string {
+	if (color.startsWith("#")) {
+		const ansi = Bun.color(color, "ansi-16m");
+		return ansi ? `${ansi}${text}\x1b[39m` : text;
+	}
+	return uiTheme.fg(color, text);
 }
 
 function padVisible(value: string, width: number, align: "left" | "right" = "right"): string {

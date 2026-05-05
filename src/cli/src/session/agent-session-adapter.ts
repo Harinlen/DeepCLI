@@ -208,7 +208,15 @@ export class MustangAgentSessionAdapter {
 
 	async fetchCostReport(): Promise<CostUsageReport> {
 		const session = this.#requireSession("Run a chat prompt or /session new before using /cost.");
-		return session.getUsage();
+		const report = await session.getUsage();
+		const contextWindow = this.model.contextWindow;
+		if ((!report.context.contextWindow || report.context.contextWindow <= 0) && contextWindow && contextWindow > 0) {
+			report.context.contextWindow = contextWindow;
+			report.context.percent = report.context.totalTokens > 0
+				? Number(((report.context.totalTokens / contextWindow) * 100).toFixed(1))
+				: 0;
+		}
+		return report;
 	}
 
 	async executeBash(command: string, onChunk: (chunk: string) => void, options: { excludeFromContext?: boolean } = {}): Promise<{ exitCode: number; cancelled: boolean; output: string }> {

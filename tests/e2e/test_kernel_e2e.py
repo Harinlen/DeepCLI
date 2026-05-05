@@ -427,6 +427,43 @@ def test_model_update(kernel: tuple[int, str]) -> None:
     assert isinstance(updated["roles"], list)
 
 
+def test_model_add(kernel: tuple[int, str]) -> None:
+    """Mustang model add extension creates a provider/model through ACP."""
+    port, token = kernel
+
+    async def _run_test() -> tuple[dict[str, Any], dict[str, Any]]:
+        async with _client(port, token) as client:
+            await client.initialize()
+            added: dict[str, Any] = await client._request(
+                "_mustang.agent/model/add",
+                {
+                    "providerName": "e2e-openai",
+                    "providerType": "openai_compatible",
+                    "modelId": "e2e-model",
+                    "displayName": "E2E Added",
+                    "contextWindow": 64_000,
+                    "roles": ["compact"],
+                },
+            )
+            listed: dict[str, Any] = await client._request(
+                "_mustang.agent/model/provider_list",
+                {},
+            )
+        return added, listed
+
+    added, listed = _run(_run_test())
+
+    assert added["model"] == ["e2e-openai", "e2e-model"]
+    assert added["displayName"] == "E2E Added"
+    assert added["contextWindow"] == 64_000
+    assert added["roles"] == ["compact"]
+    provider = next(
+        provider for provider in listed["providers"] if provider["name"] == "e2e-openai"
+    )
+    assert provider["models"] == ["e2e-model"]
+    assert listed["currentUsed"]["compact"] == ["e2e-openai", "e2e-model"]
+
+
 # ---------------------------------------------------------------------------
 # 9. Prompt (full turn) — Orchestrator + LLMProvider + SessionStore
 # ---------------------------------------------------------------------------

@@ -798,7 +798,7 @@ MetaMem 占据正交位置——不负责存储和检索，只负责优化使用
 - 但不需要 MetaMem 那样复杂的双模型循环——规则由用户或
   `/memory lint` 产出即可
 - **"推理时仅 200-500 token"** → 我们注入 meta-memory 策略
-  可以放在 base prompt 的 memory 使用指引中，cost 极低
+  可以作为独立 memory 使用策略 section，cost 极低
 
 ---
 

@@ -25,8 +25,6 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from tests.e2e._home_sandbox import (
     cleanup_test_home,
     prepare_test_home,
@@ -85,11 +83,13 @@ def _run_kernel(sandbox_home: Path, port: int) -> subprocess.Popen:
 def _run(coro: Any, *, timeout: float = _TEST_TIMEOUT) -> Any:
     async def _guarded() -> Any:
         return await asyncio.wait_for(coro, timeout=timeout)
+
     return asyncio.run(_guarded())
 
 
 def _client(port: int, token: str) -> Any:
-    from probe.client import ProbeClient
+    from probe.client import ProbeClient  # type: ignore[import-untyped]
+
     return ProbeClient(port=port, token=token, request_timeout=_TEST_TIMEOUT)
 
 
@@ -108,14 +108,12 @@ def test_kernel_starts_with_global_override() -> None:
     _kill_port(_PROMPT_OVERRIDE_PORT)
     sandbox = prepare_test_home("prompt-override")
     try:
-        # Place an override: replace orchestrator/base key with extra text.
+        # Place an override: replace a real static prompt section with extra text.
         override_dir = sandbox / ".mustang" / "prompts" / "orchestrator"
         override_dir.mkdir(parents=True)
-        real_base = (
-            KERNEL_DIR / "kernel" / "prompts" / "default" / "orchestrator" / "base.txt"
-        )
-        original = real_base.read_text(encoding="utf-8")
-        (override_dir / "base.txt").write_text(original + "\n# user-override-sentinel")
+        real_system = KERNEL_DIR / "kernel" / "prompts" / "default" / "orchestrator" / "system.txt"
+        original = real_system.read_text(encoding="utf-8")
+        (override_dir / "system.txt").write_text(original + "\n# user-override-sentinel")
 
         proc = _run_kernel(sandbox, _PROMPT_OVERRIDE_PORT)
         try:
@@ -162,7 +160,9 @@ def test_kernel_starts_with_missing_override_dir() -> None:
         proc = _run_kernel(sandbox, port)
         try:
             started = _wait_for_kernel(port, _STARTUP_TIMEOUT_SECS)
-            assert started, "Kernel did not start — missing user override dir should be silently skipped"
+            assert started, (
+                "Kernel did not start — missing user override dir should be silently skipped"
+            )
 
             token_path = token_path_for(sandbox)
             assert token_path.exists()

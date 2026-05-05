@@ -136,13 +136,13 @@ projection）。四层解决不同问题；compact 之后要重新注入关键�
   `memory_delete` / `memory_list` / `memory_search`。
   `memory_delete` 需 `confirmation=True`。
 - **Hygiene via prompt**：不变 + 新增 MetaMem 启发的记忆使用
-  策略规则（200-500 token，嵌入 base prompt）。
+  策略规则（200-500 token，作为独立 prompt section 注入）。
 
 ## D18 — Prompt text lives in `.txt` files, not Python
 
-所有 prompt 字符串与模板放在 `src/kernel/kernel/**/prompts/*.txt`
-（例如 `orchestrator/prompts/base.txt`），Python 模块 import 时
-`Path.read_text()` 加载。**`.py` 文件里不许写 prompt 文本**。
+所有 prompt 字符串与模板放在 `src/kernel/kernel/prompts/default/**/*.txt`
+（例如 `prompts/default/orchestrator/system.txt`），Python 模块通过
+PromptManager 加载。**`.py` 文件里不许写 prompt 文本**。
 
 理由：干净的 diff、非 Python 编辑器可改 prompt、未来 hot-reload
 trivial、prompt 内容与加载逻辑解耦。

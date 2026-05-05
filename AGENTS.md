@@ -1,5 +1,17 @@
 # DeepCLI — Agent Instructions
 
+When answering, reason from first principles: start from the raw
+need and the essence of the problem, not from convention or templates.
+
+1. Do not assume I clearly know what I want. If the motivation or
+   goal is unclear, stop and discuss it.
+2. If the goal is clear but the path is not the shortest one, tell me
+   directly and propose a better way.
+3. When problems arise, trace the root cause; do not patch symptoms.
+   Every decision must be able to answer "why".
+4. Keep output focused. Cut everything that does not change the
+   decision.
+
 > **READ-ONLY ENTRY FILE.  DO NOT EDIT TO CHANGE BEHAVIOR.**
 >
 > This file is a bootstrap pointer.  All project rules, workflows,

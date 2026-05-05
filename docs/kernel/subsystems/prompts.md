@@ -6,7 +6,7 @@ Status: **landed** — shipped as bootstrap service (Phase 8, D18).
 
 D18 规定"所有 prompt 文本放在 `.txt` 文件里，`.py` 文件不许写 prompt
 文本"。Daemon 时代 `engine/prompts/` 有 16 个 `.txt` 文件严格执行了这条
-规则。Kernel rewrite 只迁移了 `orchestrator/prompts/base.txt`，其余全部
+规则。Kernel rewrite 一度只迁移了旧单文件 system prompt，其余全部
 硬编码在 Python 中，严重违反 D18：
 
 | 位置 | 变量 | 内容 |
@@ -54,7 +54,14 @@ src/kernel/kernel/
 │   ├── manager.py                    # PromptManager 类
 │   └── default/                      # 默认 prompt 文件树（用户可覆盖）
 │       ├── orchestrator/
-│       │   ├── base.txt              # 现有 base prompt（从 orchestrator/prompts/ 迁移）
+│       │   ├── identity.txt          # 身份、安全姿态、URL 规则
+│       │   ├── system.txt            # markdown、权限、tags、hooks、压缩规则
+│       │   ├── first_principles.txt  # 第一性原则协作规则
+│       │   ├── doing_tasks.txt       # 软件工程任务行为
+│       │   ├── actions_with_care.txt # 高风险动作确认
+│       │   ├── using_tools.txt       # 工具使用策略
+│       │   ├── tone_and_style.txt    # 输出风格
+│       │   ├── output_efficiency.txt # 简洁输出
 │       │   ├── compact_system.txt    # 会话摘要 system prompt
 │       │   ├── compact_prefix.txt    # 摘要用户消息前缀
 │       │   ├── compact_fallback.txt  # 摘要失败兜底
@@ -120,7 +127,7 @@ class PromptManager:
         """加载内置 defaults，再依次覆盖 user_dirs。
 
         Key 规则：相对路径去掉 .txt 后缀，用 "/" 分隔。
-        例如 ``default/orchestrator/base.txt`` → ``"orchestrator/base"``
+        例如 ``default/orchestrator/system.txt`` → ``"orchestrator/system"``
 
         Raises:
             PromptLoadError: defaults_dir 不存在或文件读取失败（启动 abort）。
@@ -130,7 +137,7 @@ class PromptManager:
         """按 key 查找 prompt 原文（不做模板渲染）。
 
         Args:
-            key: 如 ``"orchestrator/base"``、
+            key: 如 ``"orchestrator/system"``、
                  ``"tool_authz/bash_classifier_system"``
 
         Raises:
@@ -183,9 +190,9 @@ class PromptKeyError(KeyError):
 ```yaml
 # 每个条目对应一个 .txt 文件
 prompts:
-  - key: orchestrator/base
-    description: 核心 system prompt，cacheable
-    source: mustang        # mustang | adapted | verbatim
+  - key: orchestrator/system
+    description: markdown、权限、tags、hooks、压缩规则
+    source: verbatim       # mustang | adapted | verbatim
     cacheable: true
     has_placeholders: false
 
@@ -228,19 +235,18 @@ async with lifespan(...):
 #### PromptBuilder（`orchestrator/prompt_builder.py`）
 
 ```python
-# Before:
-_BASE_PROMPT = (_PROMPTS_DIR / "base.txt").read_text(...)
-
-# After:
 class PromptBuilder:
     def __init__(self, prompts: PromptManager, ...):
         self._prompts = prompts
 
     async def build(self, ...):
-        sections.append(PromptSection(
-            text=self._prompts.get("orchestrator/base"),
-            cache=True,
-        ))
+        static_parts = [
+            self._prompts.get("orchestrator/identity"),
+            self._prompts.get("orchestrator/system"),
+            self._prompts.get("orchestrator/doing_tasks"),
+            ...
+        ]
+        sections.append(PromptSection(text="\n\n".join(static_parts), cache=True))
 ```
 
 #### Compactor（`orchestrator/compactor.py`）
@@ -281,8 +287,8 @@ class BashClassifier:
 
 ### 5.3 旧目录清理
 
-迁移完成后删除 `orchestrator/prompts/` 目录（`base.txt` 已移至
-`prompts/default/orchestrator/base.txt`）。
+迁移完成后删除 `orchestrator/prompts/` 目录。旧单文件 system prompt
+不再保留；默认 system prompt 以独立 section 文件为权威。
 
 ---
 
@@ -308,8 +314,8 @@ class BashClassifier:
 1. 创建 `kernel/prompts/` 包：`__init__.py`、`manager.py`
 2. 创建 `kernel/prompts/default/` 目录树，把 7 段硬编码 prompt
    提取为 `.txt` 文件
-3. 把 `orchestrator/prompts/base.txt` 移入
-   `prompts/default/orchestrator/base.txt`
+3. 将旧单文件 system prompt 拆分到
+   `prompts/default/orchestrator/*.txt`
 4. 实现 `PromptManager.load()` / `get()` / `render()`
 5. 在 `app.py` lifespan 中注册 PromptManager
 6. 改造 `PromptBuilder`、`Compactor`、`BashClassifier` 使用

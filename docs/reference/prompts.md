@@ -17,28 +17,30 @@ Mirrors CC's `getSystemPrompt()` (prompts.ts:444-577).  Static
 1. identity.txt         (security posture, URL prohibition)
 2. system.txt           (# System — markdown, permissions, tags,
                          hooks, context compression)
-3. doing_tasks.txt      (# Doing tasks — software eng, OWASP,
+3. first_principles.txt (# First principles — clarify raw need,
+                         shortest path, root cause, focused output)
+4. doing_tasks.txt      (# Doing tasks — software eng, OWASP,
                          no over-engineering, no premature abstraction)
-4. actions_with_care.txt (# Executing actions with care —
+5. actions_with_care.txt (# Executing actions with care —
                           reversibility, blast radius, examples)
-5. using_tools.txt      (# Using your tools — dedicated tools > Bash,
+6. using_tools.txt      (# Using your tools — dedicated tools > Bash,
                          TodoWrite, parallel vs sequential)
-6. tone_and_style.txt   (# Tone and style — emojis, file refs,
+7. tone_and_style.txt   (# Tone and style — emojis, file refs,
                          GitHub links)
-7. output_efficiency.txt (# Output efficiency — concise, answer-first)
+8. output_efficiency.txt (# Output efficiency — concise, answer-first)
 
 [DYNAMIC]                                     ← per-query PromptSections
-8.  Environment context    (built at runtime — cwd, platform, shell,
+9.  Environment context    (built at runtime — cwd, platform, shell,
                             git repo, date/time; when a model is pinned
                             the active model id is appended using CC's
                             null-marketing-name fallback phrasing)
-9.  Git context            (from GitManager, session-level cache)
-10. AGENTS.md contents     (TODO — project + user + global instructions)
-11. Memory index + strategy (from MemoryManager)
-12. Skills listing         (from SkillManager)
-13. git_commit_pr.txt      (# Committing + # Creating PRs — full workflow)
-14. summarize_tool_results.txt (tool-result clearing reminder)
-15. Plan mode instructions (injected by Orchestrator when active)
+10. Git context            (from GitManager, session-level cache)
+11. AGENTS.md contents     (TODO — project + user + global instructions)
+12. Memory index + strategy (from MemoryManager)
+13. Skills listing         (from SkillManager)
+14. git_commit_pr.txt      (# Committing + # Creating PRs — full workflow)
+15. summarize_tool_results.txt (tool-result clearing reminder)
+16. Plan mode instructions (injected by Orchestrator when active)
 ```
 
 All `.txt` files live in `src/kernel/kernel/prompts/default/orchestrator/`.
@@ -57,6 +59,7 @@ Source column:
 |------|---------------|--------|
 | `identity.txt` | `getSimpleIntroSection()` + `CYBER_RISK_INSTRUCTION` | **Verbatim** — identical to CC external user path |
 | `system.txt` | `getSimpleSystemSection()` | **Verbatim** — all 6 bullet points |
+| `first_principles.txt` | — | **DeepCLI** — first-principles collaboration rules from `AGENTS.md` |
 | `doing_tasks.txt` | `getSimpleDoingTasksSection()` | **Verbatim** — CC external user path (no ant-only items) |
 | `actions_with_care.txt` | `getActionsSection()` | **Verbatim** |
 | `using_tools.txt` | `getUsingYourToolsSection()` | **Adapted** — hardcodes tool names (FileRead, FileEdit, etc.) |
@@ -64,7 +67,6 @@ Source column:
 | `output_efficiency.txt` | `getOutputEfficiencySection()` | **Verbatim** — CC external user path |
 | `git_commit_pr.txt` | `getCommitAndPRInstructions()` (BashTool/prompt.ts) | **Verbatim** — full commit + PR workflow |
 | `summarize_tool_results.txt` | `SUMMARIZE_TOOL_RESULTS_SECTION` | **Verbatim** |
-| `base.txt` | *(legacy, superseded)* | **Deprecated** — kept for backward compat, not loaded by PromptBuilder |
 | `plan_mode.txt` | `EnterPlanModeTool.ts` | **Verbatim** |
 | `plan_mode_exit.txt` | `ExitPlanModeTool.ts` | **Adapted** |
 | `plan_mode_reentry.txt` | — | **DeepCLI** |
@@ -116,7 +118,7 @@ hook resolves the text from PromptManager at `to_schema()` time.
 
 ## Parity Status vs Claude Code
 
-**System prompt**: 10 verbatim sections, 1 adapted, 4 DeepCLI-original.
+**System prompt**: 10 verbatim sections, 1 adapted, 5 DeepCLI-original.
 **Tool descriptions**: 13 verbatim, 4 adapted, 5 DeepCLI-original — all migrated out of `.py` into `prompts/default/tools/*.txt` (Phase 1 CC alignment).
 **Overall**: ~85% inherited from Claude Code.
 

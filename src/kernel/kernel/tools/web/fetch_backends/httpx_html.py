@@ -6,7 +6,9 @@ This is the last-resort backend in the fallback chain.
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 
 import httpx
 
@@ -16,10 +18,25 @@ from kernel.tools.web.html_convert import html_to_markdown
 
 logger = logging.getLogger(__name__)
 
-_USER_AGENT = "deepcli/1.0"
+_DEFAULT_USER_AGENT = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36"
+_DEFAULT_HEADERS = {
+    "Accept": "text/markdown, text/html;q=0.9, application/json;q=0.8, text/plain;q=0.7, */*;q=0.1",
+    "Accept-Language": "en-US,en;q=0.9",
+    "User-Agent": _DEFAULT_USER_AGENT,
+}
+_USER_AGENT_ENV = "DEEPCLI_WEB_FETCH_USER_AGENT"
+_HEADERS = dict(_DEFAULT_HEADERS)
 _TIMEOUT_S = 30.0
-_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+_MAX_BYTES = 2 * 1024 * 1024  # 2 MB
 _MAX_REDIRECTS = 10
+
+
+def get_fetch_headers() -> dict[str, str]:
+    headers = dict(_DEFAULT_HEADERS)
+    user_agent = os.getenv(_USER_AGENT_ENV, "").strip()
+    if user_agent:
+        headers["User-Agent"] = user_agent
+    return headers
 
 
 async def _send_with_redirect_check(
@@ -72,7 +89,7 @@ class HttpxFetchBackend(FetchBackend):
             async with httpx.AsyncClient(
                 timeout=_TIMEOUT_S,
                 follow_redirects=False,
-                headers={"User-Agent": _USER_AGENT},
+                headers=get_fetch_headers(),
                 max_redirects=0,
             ) as client:
                 response, final_url = await _send_with_redirect_check(client, url)
@@ -93,23 +110,80 @@ class HttpxFetchBackend(FetchBackend):
 
         content_type = response.headers.get("content-type", "")
 
-        # Byte cap
-        body_bytes = response.content[:_MAX_BYTES]
+        # Byte cap: read enough for useful context without letting large
+        # documents dominate the tool result.
+        response_bytes = response.content
+        body_bytes = response_bytes[:_MAX_BYTES]
         body_text = body_bytes.decode("utf-8", errors="replace")
+        response_truncated = len(response_bytes) > _MAX_BYTES
 
-        if "json" in content_type or "xml" in content_type or "text/plain" in content_type:
+        if response.status_code >= 400:
+            error_detail = body_text[:4_000].strip()
+            return FetchResult(
+                url=final_url,
+                content=error_detail,
+                content_type=content_type,
+                status_code=response.status_code,
+                error=f"HTTP {response.status_code}: {response.reason_phrase}",
+                truncated=response_truncated,
+                raw_length=len(response_bytes),
+            )
+
+        if "text/markdown" in content_type:
             content = body_text[:max_chars]
-        elif "html" in content_type:
+        elif "json" in content_type:
+            content = _format_json(body_text)[:max_chars]
+        elif "xml" in content_type or "text/plain" in content_type:
+            content = body_text[:max_chars]
+        elif "html" in content_type or _looks_like_html(body_text):
             content = html_to_markdown(body_text, max_chars)
+        elif _looks_like_binary(body_bytes, content_type):
+            return FetchResult(
+                url=final_url,
+                content="",
+                content_type=content_type,
+                status_code=response.status_code,
+                error=(
+                    "Unsupported binary response. Use a browser, download tool, "
+                    "or a specialised document/PDF reader for this URL."
+                ),
+                truncated=response_truncated,
+                raw_length=len(response_bytes),
+            )
         else:
             content = body_text[:max_chars]
 
+        raw_text_length = len(body_text)
+        content_truncated = response_truncated or raw_text_length > max_chars
         return FetchResult(
             url=final_url,
             content=content,
             content_type=content_type,
             status_code=response.status_code,
+            truncated=content_truncated,
+            raw_length=len(response_bytes),
         )
 
 
-__all__ = ["HttpxFetchBackend"]
+def _looks_like_html(value: str) -> bool:
+    head = value.lstrip()[:256].lower()
+    return head.startswith("<!doctype html") or head.startswith("<html") or "<body" in head
+
+
+def _format_json(value: str) -> str:
+    try:
+        return json.dumps(json.loads(value), ensure_ascii=False, indent=2)
+    except json.JSONDecodeError:
+        return value
+
+
+def _looks_like_binary(value: bytes, content_type: str) -> bool:
+    lower_type = content_type.lower()
+    if lower_type.startswith(("image/", "audio/", "video/")):
+        return True
+    if "application/octet-stream" in lower_type or "application/pdf" in lower_type:
+        return True
+    return b"\x00" in value[:1024]
+
+
+__all__ = ["HttpxFetchBackend", "_HEADERS", "get_fetch_headers"]

@@ -22,6 +22,9 @@ class FetchResult:
     title: str = ""
     status_code: int = 200
     error: str | None = None
+    truncated: bool = False
+    raw_length: int = 0
+    cached: bool = False
 
 
 class FetchBackend(ABC):

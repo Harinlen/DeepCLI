@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 import os
+import time
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from kernel.tools.web.fetch_backends.base import FetchBackend, FetchResult
@@ -25,6 +27,8 @@ _ANTI_BOT_MARKERS = (
     "verify you are human",
     "access denied",
 )
+_CACHE_TTL_S = 10 * 60
+_FETCH_CACHE: dict[str, tuple[float, FetchResult, str]] = {}
 
 
 def _has_env(name: str) -> bool:
@@ -88,6 +92,14 @@ async def fetch_with_fallback(
     If *preferred* is set, that backend is tried first.
     If *backends* is provided, use that list instead of auto-detecting.
     """
+    use_cache = backends is None
+    cache_key = f"{url}\0{max_chars}\0{preferred or ''}"
+    if use_cache:
+        cached = _read_cache(cache_key)
+        if cached is not None:
+            result, name = cached
+            return replace(result, cached=True), name
+
     if backends is None:
         backends = get_available_backends()
 
@@ -112,6 +124,8 @@ async def fetch_with_fallback(
                     httpx_result = result
                 continue
 
+            if use_cache:
+                _write_cache(cache_key, result, backend.name)
             return result, backend.name
 
         except Exception as exc:
@@ -127,6 +141,23 @@ async def fetch_with_fallback(
         content_type="",
         error=f"All backends failed: {'; '.join(errors)}",
     ), "none"
+
+
+def _read_cache(key: str) -> tuple[FetchResult, str] | None:
+    cached = _FETCH_CACHE.get(key)
+    if cached is None:
+        return None
+    expires_at, result, name = cached
+    if expires_at <= time.monotonic():
+        _FETCH_CACHE.pop(key, None)
+        return None
+    return result, name
+
+
+def _write_cache(key: str, result: FetchResult, name: str) -> None:
+    if result.error:
+        return
+    _FETCH_CACHE[key] = (time.monotonic() + _CACHE_TTL_S, result, name)
 
 
 __all__ = [

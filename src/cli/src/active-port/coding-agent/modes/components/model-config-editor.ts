@@ -159,8 +159,8 @@ export class ModelConfigEditorComponent extends Container implements Focusable {
 		);
 		this.addChild(new Spacer(1));
 		this.addChild(new Text(theme.fg("accent", "  Model Settings"), 0, 0));
-		this.#addValueField("Name:", fieldValue(this.#displayName, "<empty>", this.#focused && this.#fieldIndex === 6), 6);
-		this.#addValueField("Model ID:", fieldValue(this.#modelId, "<empty>", this.#focused && this.#fieldIndex === 7), 7);
+		this.#addValueField("Model ID:", fieldValue(this.#modelId, "<empty>", this.#focused && this.#fieldIndex === 6), 6);
+		this.#addValueField("Name:", fieldValue(this.#displayName, "<empty>", this.#focused && this.#fieldIndex === 7), 7);
 		this.#addValueField("Context tokens:", fieldValue(this.#contextWindow, "<default>", this.#focused && this.#fieldIndex === 8), 8);
 		this.#addValueField("Roles:", this.#formatRoles(), ROLE_FIELD_INDEX);
 		if (this.#error) {
@@ -277,8 +277,8 @@ export class ModelConfigEditorComponent extends Container implements Focusable {
 		if (this.#fieldIndex === 3) return this.#baseUrl;
 		if (this.#fieldIndex === 4) return this.#awsRegion;
 		if (this.#fieldIndex === 5) return this.#awsSecretKey;
-		if (this.#fieldIndex === 6) return this.#displayName;
-		if (this.#fieldIndex === 7) return this.#modelId;
+		if (this.#fieldIndex === 6) return this.#modelId;
+		if (this.#fieldIndex === 7) return this.#displayName;
 		if (this.#fieldIndex === 8) return this.#contextWindow;
 		return "";
 	}
@@ -290,8 +290,8 @@ export class ModelConfigEditorComponent extends Container implements Focusable {
 		if (this.#fieldIndex === 3) this.#baseUrl = value;
 		if (this.#fieldIndex === 4) this.#awsRegion = value;
 		if (this.#fieldIndex === 5) this.#awsSecretKey = value;
-		if (this.#fieldIndex === 6) this.#displayName = value;
-		if (this.#fieldIndex === 7) this.#modelId = value;
+		if (this.#fieldIndex === 6) this.#modelId = value;
+		if (this.#fieldIndex === 7) this.#displayName = value;
 		if (this.#fieldIndex === 8) this.#contextWindow = value;
 	}
 

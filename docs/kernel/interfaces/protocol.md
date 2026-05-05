@@ -62,11 +62,11 @@ ACP 里有很多"可选"能力。Kernel 作为 Agent 的采纳状态：
 | `model/update` | Request | Model (LLMManager) | DeepCLI 扩展 |
 | `session/compact` | Request | Session | DeepCLI 扩展 —— 待实现 |
 | `session/delete` | Request | Session | DeepCLI 扩展 —— 待实现 |
-| `session/get_usage` | Request | Session | DeepCLI 扩展 —— 待实现 |
+| `_mustang.agent/session/get_usage` | Request | Session | DeepCLI 扩展 —— Implemented（`/cost` 用量面板） |
 | `commands/list` | Request | Commands (CommandManager) | DeepCLI 扩展 —— 待实现 |
 | `$/cancel_request` | Notification | Protocol | Optional (RFD) —— 一期不实现，二期再加 |
 
-`model/*`、`session/compact`、`session/delete`、`session/get_usage`、`commands/list` 均是 DeepCLI 在 ACP 规范外新增的命名空间（[ACP 扩展机制](../references/acp/protocol/extensibility.md)允许非标准方法）。
+`model/*`、`session/compact`、`session/delete`、`_mustang.agent/session/get_usage`、`commands/list` 均是 DeepCLI 在 ACP 规范外新增的命名空间（[ACP 扩展机制](../references/acp/protocol/extensibility.md)允许非标准方法）。新实现优先使用 `_mustang.agent/*` 前缀，避免与未来 ACP 标准方法碰撞。
 
 ### 我们实现的方法（Client 方向，Kernel → Client）
 
@@ -355,11 +355,17 @@ class ModelHandler(Protocol):
 
 isolation 保证同 SessionHandler：`LLMManager` 不 import 任何 `kernel.protocol.acp` 内容，只见 Pydantic contract 类型。
 
-`model/provider_list` exposes all configured provider models, role refs
-via `currentUsed`, per-model `contextWindows`, optional `displayNames`,
-and `defaultContextWindow` for models whose provider cannot report an
-exact window. `model/update` persists model-level display name,
-context-window override, and exact role assignments.
+`model/provider_list` exposes all configured provider models, provider
+metadata, role refs via `currentUsed`, per-model `contextWindows`,
+optional `displayNames`, provider `settingFields`, effective endpoint
+values, and local user-facing provider secrets for configuration
+management. `defaultContextWindow` is included for models whose provider
+cannot report an exact window. `model/add` creates a model under an
+existing provider or creates a new provider with one model. `model/update`
+persists provider settings, provider/model id renames, model-level
+display name, context-window override, and exact role assignments. If a
+provider/model ref is renamed, existing `currentUsed` roles and aliases
+move to the new ref.
 
 ### 协议层 / 会话层的 seam
 

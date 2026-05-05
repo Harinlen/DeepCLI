@@ -9,9 +9,9 @@ import httpx
 
 from kernel.tools.web.domain_filter import check_domain
 from kernel.tools.web.fetch_backends.base import FetchBackend, FetchResult
+from kernel.tools.web.fetch_backends.httpx_html import get_fetch_headers, _send_with_redirect_check
 from kernel.tools.web.html_convert import html_to_markdown
 
-_USER_AGENT = "deepcli/1.0"
 _TIMEOUT_S = 30.0
 _MAX_REDIRECTS = 10
 
@@ -38,11 +38,15 @@ class ReadabilityFetchBackend(FetchBackend):
         try:
             async with httpx.AsyncClient(
                 timeout=_TIMEOUT_S,
-                follow_redirects=True,
+                follow_redirects=False,
                 max_redirects=_MAX_REDIRECTS,
-                headers={"User-Agent": _USER_AGENT},
+                headers=get_fetch_headers(),
             ) as client:
-                response = await client.get(url)
+                response, final_url = await _send_with_redirect_check(
+                    client,
+                    url,
+                    max_redirects=_MAX_REDIRECTS,
+                )
         except httpx.HTTPError as exc:
             return FetchResult(
                 url=url,
@@ -51,13 +55,22 @@ class ReadabilityFetchBackend(FetchBackend):
                 error=f"HTTP error: {exc}",
             )
 
+        if response.status_code >= 400:
+            return FetchResult(
+                url=final_url,
+                content=response.text[:4_000],
+                content_type=response.headers.get("content-type", ""),
+                status_code=response.status_code,
+                error=f"HTTP {response.status_code}: {response.reason_phrase}",
+            )
+
         doc = Document(response.text)
         html_content = doc.summary()
         title = doc.title()
         markdown = html_to_markdown(html_content, max_chars)
 
         return FetchResult(
-            url=str(response.url),
+            url=final_url,
             content=markdown,
             content_type=response.headers.get("content-type", ""),
             title=title,

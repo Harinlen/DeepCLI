@@ -1133,6 +1133,16 @@ Status: **pending**
 3. 最终用一个零外部依赖方案兜底（httpx+html2text / DuckDuckGo）
 4. 唯一新增必须依赖：`html2text`；唯一可选依赖：`playwright`、`readability-lxml`（本地处理用，非 API 客户端）
 
+**2026-05-05 implementation note**：WebFetchTool 已整合 OpenClaw / Hermes
+里对抓取成功率最有用的部分：本地 `httpx` backend 使用浏览器级
+`User-Agent` / `Accept-Language` / `text/markdown` 优先请求；HTTP 4xx/5xx
+作为错误结果而不是成功页面；JSON 会 pretty-print；二进制响应会明确拒绝；
+fallback 层缓存成功结果；Firecrawl REST backend 支持 endpoint URL、
+`maxAge`、`proxy`、`storeInCache` 和 failed-payload 归一化；Tool 输出带
+`title` / `truncated` / `raw_length` / `cached` 元数据。默认 UA 不绑定具体
+Chrome 版本；需要模拟特定当前浏览器时，用 `DEEPCLI_WEB_FETCH_USER_AGENT`
+覆盖。
+
 ---
 
 ## 2. 三家实现复盘

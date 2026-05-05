@@ -531,7 +531,7 @@ export class SelectorController {
 					model,
 					provider.models.length + 1,
 					providerTypeOptions(),
-					{ providerEditable: false, initialFieldIndex: 7 },
+					{ providerEditable: false, initialFieldIndex: 6 },
 					saveAdded,
 					close,
 				);

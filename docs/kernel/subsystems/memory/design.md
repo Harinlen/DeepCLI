@@ -383,7 +383,7 @@ for entry in relevant:
 
 ### Channel C — 记忆使用策略（MetaMem 启发）
 
-在 base prompt 中嵌入 200-500 token 的**策略规则**，教 LLM 怎么用记忆：
+作为独立 cacheable prompt section 注入 200-500 token 的**策略规则**，教 LLM 怎么用记忆：
 
 ```
 # 记忆使用策略（prompts/memory_strategy.txt）
@@ -692,7 +692,7 @@ src/kernel/kernel/memory/
     ├── extraction.txt       # 后台提取 prompt
     ├── selection.txt        # relevance scoring prompt
     ├── consolidation.txt    # 去重/合并/矛盾检测 prompt
-    └── memory_strategy.txt  # 注入到 base prompt 的使用策略
+    └── memory_strategy.txt  # 注入为独立 cacheable 使用策略 section
 ```
 
 ---

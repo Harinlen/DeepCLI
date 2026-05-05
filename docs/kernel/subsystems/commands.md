@@ -23,14 +23,16 @@ CommandManager 是**命令目录提供者**，不是执行者。
 
 | 命令 | ACP 方法（WS 客户端） | Kernel 内部（Discord 等） | 缺口 |
 |------|----------------------|--------------------------|----|
-| `/model` | `model/profile_list` | `LLMManager.list_models()` | 无 |
-| `/model switch <name>` | `session/set_config_option` | `session_manager.set_config_option()` + `orchestrator.set_config()` | `set_config_option` 未连 orchestrator ⚠️ |
+| `/model list` | `model/provider_list` | `LLMManager.list_providers()` | 无 |
+| `/model add` | `model/add` | `LLMManager.add_model()` | 无 |
+| `/model current` | `model/provider_list` | `LLMManager.list_providers()` | 无 |
+| `/model use [role] <provider>/<model>` | `model/set_current` | `LLMManager.set_current_model()` | 无 |
 | `/plan [enter\|exit\|status]` | `session/set_mode` | `session_manager.set_mode()` | 无 |
 | `/compact` | `session/compact` ← 待新增 | `orchestrator.manual_compact()` | ACP 方法缺失 ⚠️ |
 | `/session list` | `session/list` | `session_manager.list()` | 无 |
 | `/session delete <id>` | `session/delete` ← 待新增 | `session_manager.delete()` | ACP 方法缺失 ⚠️ |
 | `/session resume <id>` | `session/load` | `session_manager.load_session()` | 无 |
-| `/cost` | `session/get_usage` ← 待新增 | `session.usage_stats` | ACP 方法缺失 ⚠️ |
+| `/cost` | `_mustang.agent/session/get_usage` | `SessionManager.get_usage()` | 美元价格估算待可信 pricing table |
 | `/help` | 本地渲染（从 catalog 生成） | 本地渲染 | 无 |
 | `/memory` | 本地渲染 + file I/O | 同左 | 无 |
 | `/auth` | `secrets/auth` | `SecretManager` API | 无 |
@@ -57,7 +59,7 @@ src/kernel/kernel/commands/
 class CommandDef:
     name: str
     description: str          # /help 显示
-    usage: str                # "/model [list | switch <name>]"
+    usage: str                # "/model [list | add | current | use]"
     acp_method: str | None    # WS 客户端用 ("session/set_config_option")
                               # None = 本地命令（/help）
     subcommands: list[str] = field(default_factory=list)
@@ -100,9 +102,9 @@ Kernel → { result: [ { name, description, usage, acp_method }, ... ] }
 ## WS 客户端的职责
 
 1. 获取目录 → 维护本地命令注册表（用于 autocomplete、`/help`）
-2. 用户输入 `/model switch gpt-4`：
-   - 查本地目录：`acp_method = "session/set_config_option"`
-   - 直接发 `{ method: "session/set_config_option", params: { config_id: "model", value: "gpt-4" } }`
+2. 用户输入 `/model use default provider/model`：
+   - 查本地目录：`acp_method = "model/set_current"`
+   - 直接发 `{ method: "model/set_current", params: { role: "default", provider: "provider", model: "model" } }`
    - 从 ACP response / broadcast 中渲染结果
 3. 用户输入 `/help`：本地渲染目录，不发任何网络请求
 
@@ -132,21 +134,9 @@ if text.startswith("/"):
 - `session/set_mode` → plan mode ✅
 - `session/list` → 列出 sessions ✅
 - `session/load` → resume session ✅
-- `model/profile_list` → 列出模型 ✅
-
-### 需要修复（小改动）
-
-**`set_config_option` 未连 orchestrator**（当前 Bug）
-
-`set_config_option` 目前只把值存入 `session.config_options` dict
-并广播，没有调 `session.orchestrator.set_config()`。
-`/model switch` 存了新模型名但下一次 LLM 调用仍然用旧模型。
-
-修复：在 `SessionManager.set_config_option()` 里加一行：
-```python
-if params.config_id == "model":
-    session.orchestrator.set_config(OrchestratorConfigPatch(model=params.value))
-```
+- `model/provider_list` → 列出和管理模型 ✅
+- `model/add` → 新增模型 ✅
+- `model/set_current` → 切换 current-used role ✅
 
 ### 需要新增 ACP 方法（中等工作量）
 
@@ -154,20 +144,22 @@ if params.config_id == "model":
 |------|---------|--------|
 | `session/compact` | `/compact` | 小 — Compactor 已存在，加 ACP 入口 + routing；in-flight turn 时返回 `InvalidRequest` |
 | `session/delete` | `/session delete` | 小 — SessionManager 加 delete 方法 + routing；`/session clear` 由客户端循环调用此方法 |
-| `session/get_usage` | `/cost` | 小 — 见下方 token 统计设计 |
 | `commands/list` | 目录查询 | 小 — CommandManager startup 后可直接响应 |
 
-### Token 统计持久化（`session/get_usage` 的前提）
+### Token 统计持久化（`_mustang.agent/session/get_usage`）
 
 Token 字段的实现属于 SQLite 迁移计划（`session-storage-sqlite.md`），
-CommandManager 直接依赖其结果，无需重复实现。
+CommandManager 直接依赖其结果，无需重复实现。当前 `/cost` 已通过
+`_mustang.agent/session/get_usage` 暴露会话累计 input/output token、
+上下文占用、历史轮次、记忆和环境摘要；按模型金额估算仍等待可信的
+provider/model pricing table。
 
 迁移完成后：
 - `TurnCompletedEvent` 包含 4 个 per-turn token 字段
 - `sessions` 表包含 4 个累计 token 列
 - `IndexEntry` 包含对应的累计字段
 
-`session/get_usage` 从 `IndexEntry`（内存缓存）读取累计值，无需查 DB。
+`_mustang.agent/session/get_usage` 从 session store 和内存 session 读取累计值。
 
 ### 需要新建（本设计的主体）
 - `kernel/commands/` 目录 + `CommandDef` + `CommandRegistry` + `CommandManager` — 小
@@ -190,8 +182,8 @@ CommandManager 直接依赖其结果，无需重复实现。
 ```
 1. 修复 set_config_option → orchestrator.set_config() 连接（Bug fix，优先）
 2. 新建 CommandManager + CommandDef catalog（是后续的前提）
-3. session/compact + session/delete + session/get_usage ACP 方法
-   （token 统计字段由 SQLite 迁移计划提供，需先完成迁移）
+3. session/compact + session/delete ACP 方法
+   （`_mustang.agent/session/get_usage` 已为 `/cost` 落地，金额聚合后续补齐）
 4. commands/list ACP 方法
 ```
 

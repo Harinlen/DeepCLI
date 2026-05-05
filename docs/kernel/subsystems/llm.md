@@ -160,6 +160,7 @@ class ModelHandler(Protocol):
     async def remove_provider(...) -> RemoveProviderResult: ...
     async def refresh_models(...) -> RefreshModelsResult: ...
     async def set_current_model(...) -> SetCurrentModelResult: ...
+    async def add_model(...) -> UpdateModelResult: ...
     async def update_model(...) -> UpdateModelResult: ...
 ```
 
@@ -170,16 +171,25 @@ class ModelHandler(Protocol):
 | `model/provider_remove` | `remove_provider` |
 | `model/provider_refresh` | `refresh_models` |
 | `model/set_current` | `set_current_model` |
+| `model/add` | `add_model` |
 | `model/update` | `update_model` |
 
-`model/provider_list` returns provider entries with model ids,
-`context_windows`, `display_names`, `current_used`, and
+`model/provider_list` returns provider entries with provider metadata,
+model ids, `context_windows`, `display_names`, `current_used`, and
 `default_context_window`; the wire response is camel-cased as
 `contextWindows`, `displayNames`, `currentUsed`, and
 `defaultContextWindow`. Missing provider-specific context values are
-filled by the kernel fallback before the UI renders them. `model/update`
-persists model-level display name, context-window override, and exact
-role assignments for one provider/model ref.
+filled by the kernel fallback before the UI renders them. Provider
+setting field visibility is returned by the kernel as `settingFields`
+so UIs do not infer Bedrock/AWS-specific form shape locally. Local
+configuration UIs receive provider secrets so the user can inspect and
+edit their own keys; agent prompts must not include those values.
+`model/add` adds one model to an existing provider, or creates a new
+provider with one model when the provider does not exist. `model/update`
+persists provider settings, optional provider/model renames, model-level
+display name, context-window override, and exact role assignments for
+one provider/model ref; when the ref changes, `current_used` roles and
+model aliases are retargeted to the new ref.
 
 ---
 

@@ -12,7 +12,7 @@ Lookup order (highest priority first):
 Key derivation: relative path from the root directory, ``.txt``
 suffix stripped, forward-slash separated.  Example::
 
-    default/orchestrator/base.txt  →  "orchestrator/base"
+    default/orchestrator/system.txt  →  "orchestrator/system"
 """
 
 from __future__ import annotations
@@ -112,7 +112,7 @@ class PromptManager:
 
         Args:
             key: Slash-separated identifier, e.g.
-                ``"orchestrator/base"``.
+                ``"orchestrator/system"``.
 
         Raises:
             PromptKeyError: If *key* is not loaded.

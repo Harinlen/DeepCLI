@@ -345,7 +345,7 @@ async function main(): Promise<void> {
 			"PTY_PY",
 			"Resume Session",
 			"Second session",
-			"Magic Context",
+			"Usage",
 			"14.4K",
 			"14.6K",
 			"success grep",
@@ -500,9 +500,9 @@ expect("model list opens editor flow", ["fake-model", "[fake]", "@default"])
 send("\r")
 expect("model editor opens", ["Provider Settings", "Provider: fake", "Model Settings", "Context"])
 send("\x1b[B\x1b[B\x1b[B\x1b[B")
-send("Fake Model")
-send("\x1b[B")
 send("-v2")
+send("\x1b[B")
+send("Fake Model")
 send("\r")
 expect("model editor saves", ["Updated model: fake/fake-model-v2"])
 expect("model list refreshes after save", ["fake-model-v2", "Fake Model", "Context: 128K tokens"])
@@ -522,8 +522,8 @@ expect("session list renders via OMP selector", ["Resume Session", "Second sessi
 send("\r")
 expect("session selector enter resumes session", ["loaded question", "loaded answer", "Resumed session", "15K (11.4%/128K)"])
 send("/cost\r")
-expect("cost after loaded session succeeds", ["Magic Context", "System Prompt", "Conversation", "Tokens", "14.4K", "14.6K"])
-expect_not_after("cost does not fail invalid params", "Magic Context", "Invalid params")
+expect("cost after loaded session succeeds", ["Usage", "Context", "Window Total", "Window Used", "System Prompts", "Memory", "Conversation", "Tool Call", "Tokens", "14.4K", "14.6K"])
+expect_not_after("cost does not fail invalid params", "Usage", "Invalid params")
 send("\x1b")
 read_for(0.2)
 send("show tool\r")

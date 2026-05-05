@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 
+import kernel.tools.web.fetch_backends as fetch_backends
 from kernel.tools.web.fetch_backends import (
     _has_env,
     _looks_like_anti_bot,
@@ -16,6 +17,7 @@ from kernel.tools.web.fetch_backends import (
 )
 from kernel.tools.web.fetch_backends.base import FetchBackend, FetchResult
 from kernel.tools.web.fetch_backends.httpx_html import (
+    _HEADERS,
     HttpxFetchBackend,
     _send_with_redirect_check,
 )
@@ -87,6 +89,30 @@ async def test_fallback_all_fail():
     )
     assert result.error
     assert "All backends failed" in (result.error or name)
+
+
+async def test_fetch_with_fallback_caches_success(monkeypatch):
+    fetch_backends._FETCH_CACHE.clear()
+    backend = MockFetchBackend("ok", content="cached page" + "x" * 100)
+    original_fetch = backend.fetch
+    calls = 0
+
+    async def _fetch(url: str, *, max_chars: int = 50_000) -> FetchResult:
+        nonlocal calls
+        calls += 1
+        return await original_fetch(url, max_chars=max_chars)
+
+    monkeypatch.setattr(fetch_backends, "get_available_backends", lambda: [backend])
+    monkeypatch.setattr(backend, "fetch", _fetch)
+
+    first, first_name = await fetch_with_fallback("https://cache.test")
+    second, second_name = await fetch_with_fallback("https://cache.test")
+
+    assert first_name == second_name == "ok"
+    assert first.cached is False
+    assert second.cached is True
+    assert second.content == first.content
+    assert calls == 1
 
 
 async def test_preferred_tried_first():
@@ -197,6 +223,152 @@ async def test_httpx_fetch_blocks_private_domain_before_network():
     assert "rejected" in result.error.lower()
 
 
+async def test_httpx_fetch_uses_browser_headers_and_reports_http_errors(monkeypatch):
+    captured_headers: dict[str, str] = {}
+
+    class _Client:
+        def __init__(self, **kwargs: Any) -> None:
+            captured_headers.update(kwargs["headers"])
+
+        async def __aenter__(self) -> "_Client":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        async def request(self, method: str, url: str) -> httpx.Response:
+            assert method == "GET"
+            return httpx.Response(
+                403,
+                text="<html><body>blocked</body></html>",
+                headers={"content-type": "text/html"},
+                request=httpx.Request("GET", url),
+            )
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client(**kwargs))
+
+    result = await HttpxFetchBackend().fetch("https://example.test")
+
+    assert "Mozilla/5.0" in captured_headers["User-Agent"]
+    assert "text/markdown" in captured_headers["Accept"]
+    assert result.status_code == 403
+    assert result.error == "HTTP 403: Forbidden"
+    assert "blocked" in result.content
+
+
+async def test_httpx_fetch_user_agent_can_be_overridden(monkeypatch):
+    captured_headers: dict[str, str] = {}
+
+    class _Client:
+        def __init__(self, **kwargs: Any) -> None:
+            captured_headers.update(kwargs["headers"])
+
+        async def __aenter__(self) -> "_Client":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        async def request(self, method: str, url: str) -> httpx.Response:
+            return httpx.Response(
+                200,
+                text="ok",
+                headers={"content-type": "text/plain"},
+                request=httpx.Request(method, url),
+            )
+
+    monkeypatch.setenv("DEEPCLI_WEB_FETCH_USER_AGENT", "CustomFetch/1.0")
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client(**kwargs))
+
+    result = await HttpxFetchBackend().fetch("https://example.test")
+
+    assert result.error is None
+    assert captured_headers["User-Agent"] == "CustomFetch/1.0"
+
+
+async def test_httpx_fetch_converts_html_without_content_type(monkeypatch):
+    class _Client:
+        def __init__(self, **_: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "_Client":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        async def request(self, method: str, url: str) -> httpx.Response:
+            return httpx.Response(
+                200,
+                text="<html><body><h1>Hello</h1><p>World</p></body></html>",
+                request=httpx.Request(method, url),
+            )
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client(**kwargs))
+
+    result = await HttpxFetchBackend().fetch("https://example.test")
+
+    assert result.error is None
+    assert "Hello" in result.content
+    assert "World" in result.content
+
+
+async def test_httpx_fetch_pretty_prints_json(monkeypatch):
+    class _Client:
+        def __init__(self, **_: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "_Client":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        async def request(self, method: str, url: str) -> httpx.Response:
+            return httpx.Response(
+                200,
+                text='{"b":2,"a":{"nested":true}}',
+                headers={"content-type": "application/json"},
+                request=httpx.Request(method, url),
+            )
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client(**kwargs))
+
+    result = await HttpxFetchBackend().fetch("https://example.test/data")
+
+    assert result.error is None
+    assert '"nested": true' in result.content
+    assert "\n" in result.content
+
+
+async def test_httpx_fetch_rejects_binary_content(monkeypatch):
+    class _Client:
+        def __init__(self, **_: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "_Client":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        async def request(self, method: str, url: str) -> httpx.Response:
+            return httpx.Response(
+                200,
+                content=b"%PDF-1.7\x00binary",
+                headers={"content-type": "application/pdf"},
+                request=httpx.Request(method, url),
+            )
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client(**kwargs))
+
+    result = await HttpxFetchBackend().fetch("https://example.test/file.pdf")
+
+    assert result.error is not None
+    assert "Unsupported binary" in result.error
+    assert result.raw_length > 0
+
+
 async def test_send_with_redirect_check_blocks_bad_redirect():
     request = httpx.Request("GET", "https://safe.test")
     redirect = httpx.Response(
@@ -240,7 +412,8 @@ async def test_readability_fetch_success_and_http_error(monkeypatch):
         async def __aexit__(self, *_: object) -> None:
             return None
 
-        async def get(self, url: str) -> httpx.Response:
+        async def request(self, method: str, url: str) -> httpx.Response:
+            assert method == "GET"
             if self.fail:
                 raise httpx.ConnectError("offline", request=httpx.Request("GET", url))
             return httpx.Response(
@@ -254,6 +427,7 @@ async def test_readability_fetch_success_and_http_error(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client(**kwargs))
 
     result = await ReadabilityFetchBackend().fetch("https://example.test", max_chars=20)
+    assert _HEADERS["User-Agent"].startswith("Mozilla/5.0")
     assert result.title == "Readable"
     assert "Hello" in result.content
 

@@ -499,6 +499,7 @@ ACP 一共定义 **10 个** `sessionUpdate` variant（见 [schema.json](../refer
 | `ConfigOptionChanged(...)` | `config_option_update` with **完整** config state | ACP 要求发完整状态，不是 diff |
 | `SessionInfoChanged(title, ...)` | `session_info_update` with **只改动的字段** | 和 ConfigOption 相反，这里是 partial update |
 | `AvailableCommandsChanged(commands)` | `available_commands_update` with `availableCommands: [{name, description, _meta?}]` | 由 SkillRegistry 在 skill 列表变化时 emit。`AvailableCommand` schema 和 skill metadata 一一对应 |
+| `QueryError(message, code)` | `agent_message_chunk` with visible error text + `_meta.mustang.agent/errorCode` | Provider / Orchestrator failure after recovery attempts; prompt response closes with DeepCLI extension `stopReason: "error"` |
 | `PermissionRequest(...)` | ⚠ **不是 update** —— 走 `ProtocolAPI.request("session/request_permission", ...)` | 这是出站 request 不是 notification |
 | `SubAgentStart / SubAgentEnd` | ⚠ **ACP 无原生对应** —— 放在 update 的 `_meta` 字段下，namespace `mustang/agent_start` / `mustang/agent_end` | 详见下文 `_meta` 扩展 |
 

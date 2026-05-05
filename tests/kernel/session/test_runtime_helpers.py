@@ -34,7 +34,7 @@ def test_map_orchestrator_stop_reason_known_values() -> None:
     assert map_orch_stop_reason(StopReason.end_turn) == "end_turn"
     assert map_orch_stop_reason(StopReason.max_turns) == "max_turn_requests"
     assert map_orch_stop_reason(StopReason.cancelled) == "cancelled"
-    assert map_orch_stop_reason(StopReason.error) == "end_turn"
+    assert map_orch_stop_reason(StopReason.error) == "error"
     assert map_orch_stop_reason(StopReason.hook_blocked) == "end_turn"
 
 

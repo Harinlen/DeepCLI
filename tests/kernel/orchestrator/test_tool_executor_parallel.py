@@ -104,12 +104,43 @@ class _UnsafeTool(Tool[dict[str, Any], str]):
         )
 
 
+class _ContextProbeTool(Tool[dict[str, Any], str]):
+    """Tool that records the module table passed through ToolContext."""
+
+    name = "ContextProbe"
+    description = "context probe"
+    kind = ToolKind.other
+
+    def __init__(self) -> None:
+        self.call_module_table: Any = None
+
+    async def validate_input(self, input: dict[str, Any], ctx: Any) -> None:
+        pass
+
+    async def call(
+        self, input: dict[str, Any], ctx: Any
+    ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
+        from kernel.protocol.interfaces.contracts.text_block import TextBlock
+        from kernel.tools.types import TextDisplay
+
+        self.call_module_table = ctx.module_table
+        yield ToolCallResult(
+            data="ok",
+            llm_content=[TextBlock(type="text", text="ok")],
+            display=TextDisplay(text="ok"),
+        )
+
+
 class _StubAuthorizer:
     """Always-allow authorizer."""
+
+    def __init__(self) -> None:
+        self.ctx_module_table: Any = None
 
     async def authorize(
         self, *, tool: Tool, tool_input: dict[str, Any], ctx: AuthorizeContext
     ) -> PermissionAllow:
+        self.ctx_module_table = ctx.module_table
         return PermissionAllow(
             decision_reason=ReasonDefaultRisk(risk="low", reason="test", tool_name=tool.name),
         )
@@ -145,11 +176,13 @@ def _tool_source(*tools: Tool) -> MagicMock:
 def _deps(
     *tools: Tool,
     authorizer: Any = None,
+    module_table: Any = None,
 ) -> OrchestratorDeps:
     return OrchestratorDeps(
         provider=MagicMock(),
         tool_source=_tool_source(*tools),
         authorizer=authorizer or _StubAuthorizer(),
+        module_table=module_table,
     )
 
 
@@ -173,6 +206,25 @@ async def _collect_results(
     ):
         events.append(event)
     return events
+
+
+@pytest.mark.asyncio
+async def test_executor_forwards_module_table_to_authorizer_and_tool() -> None:
+    module_table = object()
+    tool = _ContextProbeTool()
+    authorizer = _StubAuthorizer()
+    executor = ToolExecutor(
+        _deps(tool, authorizer=authorizer, module_table=module_table),
+        session_id="s",
+        cwd=Path.cwd(),
+    )
+
+    executor.add_tool(_tc("1", "ContextProbe"))
+    executor.finalize_stream()
+    await _collect_results(executor)
+
+    assert authorizer.ctx_module_table is module_table
+    assert tool.call_module_table is module_table
 
 
 # ---------------------------------------------------------------------------

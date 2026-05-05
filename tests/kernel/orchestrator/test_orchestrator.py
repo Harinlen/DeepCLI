@@ -325,6 +325,61 @@ async def test_stream_error_yields_query_error(
     assert orc.stop_reason == StopReason.error
 
 
+async def test_transient_stream_error_retries_before_output(
+    make_orchestrator,
+    fake_provider: FakeLLMProvider,
+    monkeypatch,
+) -> None:
+    from kernel.llm.types import StreamError as SE
+
+    async def no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", no_sleep)
+    fake_provider.responses.append(
+        [SE(message="incomplete chunked read", code="transient_transport")]
+    )
+    fake_provider.add_text_response("ok after retry")
+
+    orc = make_orchestrator()
+    events = await collect(orc.query([TextContent(text="q")], on_permission=no_permission))
+
+    assert len(fake_provider.calls) == 2
+    assert [e.content for e in events if isinstance(e, TextDelta)] == ["ok after retry"]
+    assert not [e for e in events if isinstance(e, QueryError)]
+    assert orc.stop_reason == StopReason.end_turn
+
+
+async def test_transient_stream_error_after_output_does_not_retry(
+    make_orchestrator,
+    fake_provider: FakeLLMProvider,
+    monkeypatch,
+) -> None:
+    from kernel.llm.types import StreamError as SE, TextChunk
+
+    async def no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", no_sleep)
+    fake_provider.responses.append(
+        [
+            TextChunk(content="partial"),
+            SE(message="connection dropped", code="transient_transport"),
+        ]
+    )
+    fake_provider.add_text_response("should not be used")
+
+    orc = make_orchestrator()
+    events = await collect(orc.query([TextContent(text="q")], on_permission=no_permission))
+
+    assert len(fake_provider.calls) == 1
+    assert [e.content for e in events if isinstance(e, TextDelta)] == ["partial"]
+    query_errors = [e for e in events if isinstance(e, QueryError)]
+    assert len(query_errors) == 1
+    assert query_errors[0].code == "transient_transport"
+    assert orc.stop_reason == StopReason.error
+
+
 async def test_provider_error_yields_query_error(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
@@ -453,9 +508,7 @@ async def test_set_plan_mode_backward_compat(
     assert orc.plan_mode is False
 
 
-async def test_plan_mode_property_compat(
-    make_orchestrator, fake_provider: FakeLLMProvider
-) -> None:
+async def test_plan_mode_property_compat(make_orchestrator, fake_provider: FakeLLMProvider) -> None:
     """set_mode('plan') is reflected in plan_mode property."""
     orc = make_orchestrator()
     orc.set_mode("plan")
@@ -490,7 +543,9 @@ async def test_set_config_partial_update_preserves_other_fields(make_orchestrato
     from kernel.orchestrator import OrchestratorConfigPatch
     from kernel.llm.config import ModelRef
 
-    orc = make_orchestrator(config=OrchestratorConfig(model=ModelRef(provider="test", model="m1"), temperature=0.5))
+    orc = make_orchestrator(
+        config=OrchestratorConfig(model=ModelRef(provider="test", model="m1"), temperature=0.5)
+    )
     orc.set_config(OrchestratorConfigPatch(model=ModelRef(provider="test", model="m2")))
     assert orc.config.model == ModelRef(provider="test", model="m2")
     assert orc.config.temperature == 0.5
@@ -888,7 +943,9 @@ async def test_media_size_error_strips_images_and_retries(
     orc = make_orchestrator()
     # Pre-populate history with an image in a user message.
     orc._history.append_user([TextContent(text="look at this")])
-    orc._history._messages[0] = __import__("kernel.llm.types", fromlist=["UserMessage"]).UserMessage(
+    orc._history._messages[0] = __import__(
+        "kernel.llm.types", fromlist=["UserMessage"]
+    ).UserMessage(
         content=[
             TextContent(text="look at this"),
             ImageContent(media_type="image/png", data_base64="abc123"),
@@ -1097,9 +1154,7 @@ async def test_stop_hook_not_fired_when_hooks_none(
 # ---------------------------------------------------------------------------
 
 
-async def test_token_budget_exceeded(
-    make_orchestrator, fake_provider: FakeLLMProvider
-) -> None:
+async def test_token_budget_exceeded(make_orchestrator, fake_provider: FakeLLMProvider) -> None:
     """When cumulative tokens exceed budget, query yields QueryError
     and stops with budget_exceeded."""
     fake_provider.add_text_response("ok", input_tokens=100, output_tokens=50)
@@ -1119,9 +1174,7 @@ async def test_token_budget_exceeded(
     assert orc.stop_reason == StopReason.budget_exceeded
 
 
-async def test_token_budget_not_exceeded(
-    make_orchestrator, fake_provider: FakeLLMProvider
-) -> None:
+async def test_token_budget_not_exceeded(make_orchestrator, fake_provider: FakeLLMProvider) -> None:
     """When cumulative tokens are within budget, query completes normally."""
     fake_provider.add_text_response("ok", input_tokens=10, output_tokens=5)
     orc = make_orchestrator()
@@ -1146,9 +1199,7 @@ async def test_token_budget_none_means_no_cap(
     fake_provider.add_text_response("ok", input_tokens=999999, output_tokens=999999)
     orc = make_orchestrator()
 
-    events = await collect(
-        orc.query([TextContent(text="q")], on_permission=no_permission)
-    )
+    events = await collect(orc.query([TextContent(text="q")], on_permission=no_permission))
 
     query_errors = [e for e in events if isinstance(e, QueryError)]
     assert len(query_errors) == 0

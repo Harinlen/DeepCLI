@@ -14,7 +14,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from kernel.orchestrator import CancelledEvent
+from kernel.orchestrator import CancelledEvent, QueryError
 from kernel.orchestrator.types import (
     PermissionCallback,
     StopReason as OrchestratorStopReason,
@@ -216,7 +216,7 @@ class SessionTurnRunnerMixin(_SessionMixinBase):
         assert task is not None, "_run_turn_core must be invoked from an asyncio task"
         start_time = datetime.now(UTC)
         stop_reason: Literal[
-            "end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled"
+            "end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled", "error"
         ] = "end_turn"
 
         completion_future: asyncio.Future[PromptResult] = asyncio.get_running_loop().create_future()
@@ -265,6 +265,11 @@ class SessionTurnRunnerMixin(_SessionMixinBase):
                     # balance the outstanding cancel so the task can resume.
                     stop_reason = "cancelled"
                     task.uncancel()
+                elif isinstance(event, QueryError):
+                    stop_reason = "error"
+                    await self._handle_orchestrator_event(
+                        session, event, accumulated_text, accumulated_thought
+                    )
                 else:
                     await self._handle_orchestrator_event(
                         session, event, accumulated_text, accumulated_thought

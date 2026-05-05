@@ -18,6 +18,7 @@ AcpStopReason = Literal[
     "max_turn_requests",
     "refusal",
     "cancelled",
+    "error",
 ]
 
 # ---------------------------------------------------------------------------

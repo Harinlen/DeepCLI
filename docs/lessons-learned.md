@@ -25,6 +25,12 @@ wall twice.
 
 ## Async / Concurrency
 
+- **OpenAI-compatible SSE must not treat EOF as success unless `[DONE]` arrived**:
+  a provider can close a chunked response mid-stream with an incomplete body,
+  or end the SSE stream without the terminal marker.  Both are transport
+  failures, not normal completions.  Mark them as transient transport
+  `StreamError`s so the orchestrator can retry before any history/tool commit.
+
 - **Agent Runtime prompt calls cannot use short RPC timeouts**: the Hub
   to Primary Runtime `agent.prompt` path is a full LLM turn, not a
   control-plane ping.  A fixed 5s websocket response timeout turns
@@ -100,6 +106,15 @@ wall twice.
 ---
 
 ## Implementation Discipline
+
+- **Subsystem-dependent tools need a real context bridge probe**:
+  SkillTool had documentation saying `ToolContext` carried
+  `module_table`, but the dataclass and ToolExecutor builder did not
+  actually pass it.  Unit tests that only checked SkillManager startup
+  and prompt construction missed the real closure seam; a live
+  SkillTool probe caught the failure.  For subsystem-backed tools,
+  test both discovery/listing and actual tool invocation through
+  ToolExecutor.
 
 - **Root `.gitignore` `scripts/` matches nested script directories**:
   the pattern ignores `src/cli/scripts/` as well as the repo-root
@@ -222,6 +237,15 @@ wall twice.
   Probe caught the mismatch as `Session not found` from the Access-local
   SessionManager.  Treat every method carrying a `sessionId` as suspect
   when adding router backend support.
+
+- **Router backend model methods must mutate the Primary Runtime, not
+  Access-local config only.**  `/model` reads/writes look global, but
+  prompt execution in router mode uses the Primary Runtime's LLMManager
+  and active Orchestrator instances.  If `_mustang.agent/model/*` stops
+  at Access, the UI can show the new default while the next prompt still
+  goes to the old provider.  Route model-management ACP methods through
+  Hub to Primary Runtime and probe by asserting the fake provider sees
+  the switched model on an already-open session.
 
 - **Primary Runtime needs the same trailing subsystem order as the
   kernel app.**  Cron tools looked registered but failed under Probe

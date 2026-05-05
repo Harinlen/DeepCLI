@@ -35,19 +35,17 @@ def get_git_branch(cwd: Path) -> str | None:
 
 def map_orch_stop_reason(
     reason: OrchestratorStopReason,
-) -> Literal["end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled"]:
+) -> Literal["end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled", "error"]:
     """Map orchestrator stop reasons to ACP prompt result values."""
     mapping: dict[
         OrchestratorStopReason,
-        Literal["end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled"],
+        Literal["end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled", "error"],
     ] = {
         OrchestratorStopReason.end_turn: "end_turn",
         OrchestratorStopReason.max_turns: "max_turn_requests",
         OrchestratorStopReason.cancelled: "cancelled",
-        OrchestratorStopReason.error: "end_turn",
+        OrchestratorStopReason.error: "error",
     }
-    if reason == OrchestratorStopReason.error:
-        logger.warning("Orchestrator returned StopReason.error — treating as end_turn")
     return mapping.get(reason, "end_turn")
 
 

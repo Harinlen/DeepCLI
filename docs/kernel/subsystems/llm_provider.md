@@ -192,8 +192,11 @@ Universal 类型（`LLMChunk`、`PromptSection`、`Message`、`ToolSchema`）
   一次性 `json.loads()` 后 emit，Orchestrator 不处理流式 JSON 片段。
 
 - **`StreamError` 不抛异常**：可恢复错误（限流、临时 API 故障）以
-  `StreamError` chunk 形式 yield。不可恢复错误（认证失败、配置错误）
-  在 Provider 构造时或 `stream()` 开始前 raise `ProviderError`。
+  `StreamError` chunk 形式 yield。OpenAI-compatible 传输断流、
+  timeout、HTTP client 错误、以及 SSE 未收到 `[DONE]` 就结束，统一标记
+  `code="transient_transport"`，由 Orchestrator 决定是否重试。不可恢复错误
+  （认证失败、配置错误）在 Provider 构造时或 `stream()` 开始前 raise
+  `ProviderError`。
 
 - **`BedrockProvider` 强制关闭 prompt caching**：Bedrock 不支持 Anthropic
   的 prompt caching 机制，`stream()` override 始终传 `prompt_caching=False`。

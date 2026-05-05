@@ -10,6 +10,7 @@ import pytest
 from kernel.orchestrator.events import (
     ConfigOptionChanged,
     ModeChanged,
+    QueryError,
     SessionInfoChanged,
     TextDelta,
     ToolCallLocations,
@@ -119,6 +120,30 @@ async def test_text_delta_is_accumulated_and_broadcast_as_agent_message_chunk() 
     update = mapper.broadcasts[0]
     assert isinstance(update, AgentMessageChunk)
     assert update.content.text == "hello"
+    assert mapper.writes == []
+
+
+@pytest.mark.anyio
+async def test_query_error_is_accumulated_and_broadcast_as_error_text() -> None:
+    mapper = _Mapper()
+    session = _session()
+    accumulated_text: list[str] = []
+    accumulated_thought: list[str] = []
+
+    await mapper._handle_orchestrator_event(
+        session,
+        QueryError(message="connection dropped", code="transient_transport"),
+        accumulated_text,
+        accumulated_thought,
+    )
+
+    assert accumulated_text == ["Error: connection dropped"]
+    assert accumulated_thought == []
+    assert len(mapper.broadcasts) == 1
+    update = mapper.broadcasts[0]
+    assert isinstance(update, AgentMessageChunk)
+    assert update.content.text == "Error: connection dropped"
+    assert update.meta == {"mustang.agent/errorCode": "transient_transport"}
     assert mapper.writes == []
 
 
@@ -265,9 +290,7 @@ async def test_mode_change_updates_session_persists_old_mode_and_broadcasts_curr
     await mapper._handle_orchestrator_event(session, ModeChanged(mode_id="plan"), [], [])
 
     assert session.mode_id == "plan"
-    assert mapper.writes == [
-        (ModeChangedEvent, {"mode_id": "plan", "from_mode": "default"})
-    ]
+    assert mapper.writes == [(ModeChangedEvent, {"mode_id": "plan", "from_mode": "default"})]
     update = mapper.broadcasts[0]
     assert isinstance(update, CurrentModeUpdate)
     assert update.mode_id == "plan"

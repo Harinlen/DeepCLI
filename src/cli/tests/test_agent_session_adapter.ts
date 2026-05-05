@@ -313,4 +313,29 @@ await modeAdapter.cyclePermissionMode();
 assert(modeAdapter.currentPermissionMode === "bypass", "cycle should follow Auto -> Bypass");
 assert(modeCalls.some(call => call.params.modeId === "bypass"), "cycle should call session/set_mode with next mode");
 
+const promptModeOrder: string[] = [];
+const promptModeAdapter = new MustangAgentSessionAdapter({
+	client: { onUpdate: () => () => {} } as never,
+	session: {
+		sessionId: "prompt-mode-session",
+		summary: { sessionId: "prompt-mode-session", modes: { currentModeId: "bypass" } },
+		setMode: async (mode: string) => {
+			promptModeOrder.push(`set:${mode}`);
+		},
+		prompt: async (_text: string, _onUpdate: unknown, options?: { mode?: string }) => {
+			promptModeOrder.push(`prompt:${options?.mode ?? "none"}`);
+			return { stopReason: "stop" };
+		},
+		cancel() {},
+		cancelExecution() {},
+	} as never,
+	sessionService: fakeSessionService as never,
+});
+assert(promptModeAdapter.currentPermissionMode === "bypass", "adapter should restore startup mode from session summary");
+await promptModeAdapter.prompt("sync before prompt");
+assert(
+	promptModeOrder.join("|") === "prompt:bypass",
+	`adapter should pass current permission mode into prompt, got: ${promptModeOrder.join("|")}`,
+);
+
 console.log("PASS: agent session adapter");

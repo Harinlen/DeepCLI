@@ -160,5 +160,13 @@ class ToolContext:
     ``None`` when the hook subsystem is unavailable — tools surface a
     clear error in that case."""
 
+    module_table: Any = None
+    """KernelModuleTable bridge for tools that need subsystem lookup.
+
+    SkillTool uses this to reach SkillManager for activation and
+    skill-scoped hook checks.  Keeping the table on ToolContext preserves
+    the "tools access kernel state only through context" rule.
+    """
+
 
 __all__ = ["ToolContext"]

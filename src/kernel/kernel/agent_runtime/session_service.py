@@ -130,7 +130,8 @@ class AgentSessionRuntimeService:
         flags.register("transport", TransportFlags)
         flags.register("protocol", ProtocolFlags)
         kernel_flags = flags.get_section("kernel")
-        assert isinstance(kernel_flags, KernelFlags)
+        if not isinstance(kernel_flags, KernelFlags):
+            raise RuntimeError("kernel flags section did not return KernelFlags")
 
         secrets = SecretManager()
         await secrets.startup()
@@ -338,6 +339,25 @@ class AgentSessionRuntimeService:
         )
         self._connections.pop(params.session_id, None)
         return result.model_dump()
+
+    async def model_request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Run a model-management ACP request inside the Primary Runtime."""
+        from kernel.protocol.acp.routing import REQUEST_DISPATCH
+
+        if self.module_table is None:
+            raise RuntimeError("session runtime service is not started")
+        spec = REQUEST_DISPATCH.get(method)
+        if spec is None or spec.target != "model":
+            raise ValueError(f"unsupported model request: {method}")
+
+        from kernel.llm import LLMManager
+
+        model_handler = self.module_table.get(LLMManager)
+        sender = CollectingRuntimeSender()
+        ctx = _handler_context(sender)
+        request_params = spec.params_type.model_validate(params)
+        result = await spec.handler(model_handler, ctx, request_params)
+        return result.model_dump(by_alias=True)
 
     def _manager(self) -> SessionManager:
         if self._session_manager is None:

@@ -18,6 +18,12 @@ type MustangSessionClient = Pick<
 
 export type PermissionMode = "default" | "accept_edits" | "plan" | "auto" | "dont_ask" | "bypass";
 
+type SessionModeState = {
+  configOptions?: unknown;
+  config_options?: unknown;
+  modes?: unknown;
+};
+
 export interface CostUsageReport {
   sessionId: string;
   title?: string | null;
@@ -86,16 +92,19 @@ export class MustangSession {
   async prompt(
     text: string,
     onUpdate: (update: SessionUpdateParams) => void,
+    options: { mode?: PermissionMode } = {},
   ): Promise<PromptResult> {
     const unsub = this.client.onUpdate(onUpdate);
     const clientTurnId = randomUUID();
     try {
-      await this.resumeWithRetry();
+      let resumeState = await this.resumeWithRetry();
+      await this.syncModeAfterResume(options.mode, resumeState);
       try {
         return await this.client.promptRequest(this.sessionId, text, { clientTurnId });
       } catch (error) {
         if (!(error instanceof KernelDisconnected)) throw error;
-        await this.resumeWithRetry();
+        resumeState = await this.resumeWithRetry();
+        await this.syncModeAfterResume(options.mode, resumeState);
         return await this.client.promptRequest(this.sessionId, text, { clientTurnId });
       }
     } finally {
@@ -153,12 +162,11 @@ export class MustangSession {
     });
   }
 
-  private async resumeWithRetry(): Promise<void> {
+  private async resumeWithRetry(): Promise<SessionModeState> {
     let lastError: unknown;
     for (let attempt = 1; attempt <= RESUME_RETRY_ATTEMPTS; attempt++) {
       try {
-        await this.resume();
-        return;
+        return await this.resume();
       } catch (error) {
         lastError = error;
         if (!isTransientResumeError(error) || attempt === RESUME_RETRY_ATTEMPTS) break;
@@ -168,11 +176,20 @@ export class MustangSession {
     throw lastError;
   }
 
-  private async resume(): Promise<void> {
-    await this.client.request(AcpMethod.sessionResume, {
+  private async resume(): Promise<SessionModeState> {
+    return await this.client.request<SessionModeState>(AcpMethod.sessionResume, {
       sessionId: this.sessionId,
       cwd: cwd(),
     });
+  }
+
+  private async syncModeAfterResume(
+    desiredMode: PermissionMode | undefined,
+    resumeState: SessionModeState,
+  ): Promise<void> {
+    if (!desiredMode) return;
+    if (extractPermissionMode(resumeState) === desiredMode) return;
+    await this.setMode(desiredMode);
   }
 }
 
@@ -182,4 +199,32 @@ function isTransientResumeError(error: unknown): boolean {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function extractPermissionMode(value: unknown): PermissionMode | undefined {
+  const item = value as Record<string, unknown> | undefined;
+  const modes = item?.modes as { currentModeId?: unknown; current_mode_id?: unknown } | undefined;
+  const fromModes = parsePermissionMode(modes?.currentModeId ?? modes?.current_mode_id);
+  if (fromModes) return fromModes;
+
+  const configOptions = Array.isArray(item?.configOptions)
+    ? item.configOptions
+    : Array.isArray(item?.config_options)
+      ? item.config_options
+      : undefined;
+  const modeConfig = configOptions?.find(option => {
+    const record = option as { configId?: unknown; config_id?: unknown } | undefined;
+    return record?.configId === "mode" || record?.config_id === "mode";
+  }) as { currentValue?: unknown; current_value?: unknown } | undefined;
+  const fromConfig = parsePermissionMode(modeConfig?.currentValue ?? modeConfig?.current_value);
+  if (fromConfig) return fromConfig;
+
+  return item && "raw" in item ? extractPermissionMode(item.raw) : undefined;
+}
+
+function parsePermissionMode(value: unknown): PermissionMode | undefined {
+  const modes: PermissionMode[] = ["default", "accept_edits", "plan", "auto", "dont_ask", "bypass"];
+  return typeof value === "string" && modes.includes(value as PermissionMode)
+    ? value as PermissionMode
+    : undefined;
 }

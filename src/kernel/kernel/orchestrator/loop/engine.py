@@ -46,6 +46,9 @@ from kernel.orchestrator.types import PermissionCallback, StopReason
 
 logger = logging.getLogger(__name__)
 
+MAX_TRANSIENT_STREAM_RETRIES = 2
+TRANSIENT_STREAM_ERROR_CODES = frozenset({"transient_transport"})
+
 
 @dataclass
 class TurnState:
@@ -55,6 +58,7 @@ class TurnState:
     reactive_retries: int = 0
     max_tokens_override: int | None = None
     max_tokens_retries: int = 0
+    transient_stream_retries: int = 0
 
     def start_next_iteration(self) -> None:
         """Advance to the next LLM/tool loop iteration.
@@ -152,6 +156,7 @@ async def run_query(
             executor = make_executor(orchestrator)
             streaming_tools = orchestrator._config.streaming_tools
             stream_result = StreamAccumulator()
+            retry_transient_stream = False
 
             try:
                 stream = await orchestrator._deps.provider.stream(
@@ -186,6 +191,24 @@ async def run_query(
                         stream_result.last_stop_reason = chunk.stop_reason
                     elif isinstance(chunk, StreamError):
                         executor.discard()
+                        if (
+                            chunk.code in TRANSIENT_STREAM_ERROR_CODES
+                            and turn.transient_stream_retries < MAX_TRANSIENT_STREAM_RETRIES
+                            and not stream_result.has_sampled_output
+                        ):
+                            turn.transient_stream_retries += 1
+                            await asyncio.sleep(0.5 * turn.transient_stream_retries)
+                            turn.rewind_retry_iteration()
+                            logger.info(
+                                "Orchestrator[%s]: retrying transient stream error "
+                                "attempt=%d/%d message=%s",
+                                orchestrator._session_id,
+                                turn.transient_stream_retries,
+                                MAX_TRANSIENT_STREAM_RETRIES,
+                                chunk.message,
+                            )
+                            retry_transient_stream = True
+                            break
                         yield QueryError(message=chunk.message, code=chunk.code)
                         orchestrator._stop_reason = StopReason.error
                         return
@@ -222,6 +245,9 @@ async def run_query(
                 yield QueryError(message=str(exc))
                 orchestrator._stop_reason = StopReason.error
                 return
+
+            if retry_transient_stream:
+                continue
 
             if stream_result.has_sampled_output:
                 await orchestrator._fire_hook(event=HookEvent.POST_SAMPLING)

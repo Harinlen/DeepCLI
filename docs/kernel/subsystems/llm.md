@@ -191,6 +191,14 @@ display name, context-window override, and exact role assignments for
 one provider/model ref; when the ref changes, `current_used` roles and
 model aliases are retargeted to the new ref.
 
+In Supervisor router mode, model-management ACP methods are routed to
+the Primary Runtime, not handled by the Access Agent's local LLMManager.
+This keeps `/model` mutations, active session orchestrators, and the
+provider instance that will serve the next prompt in the same process.
+When `current_used.default` changes, SessionManager updates active
+sessions that were still using the old default model while preserving
+sessions that already have a different session-specific model.
+
 ---
 
 ## Probe REPL 命令

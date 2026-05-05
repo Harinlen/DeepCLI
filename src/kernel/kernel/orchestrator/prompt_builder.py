@@ -41,6 +41,7 @@ from pathlib import Path
 
 from kernel.llm.config import ModelRef
 from kernel.llm.types import PromptSection
+from kernel.orchestrator.runtime import system_reminder_section
 from kernel.orchestrator.types import OrchestratorDeps
 
 logger = logging.getLogger(__name__)
@@ -160,7 +161,13 @@ class PromptBuilder:
         if skills is not None:
             listing = skills.get_skill_listing()
             if listing:
-                sections.append(PromptSection(text=listing, cache=True))
+                sections.append(
+                    system_reminder_section(
+                        "# Available skills\n\n"
+                        "These skills are available through the Skill tool:\n\n"
+                        f"{listing}"
+                    )
+                )
 
         # 12. Git commit/PR instructions (static, cacheable)
         if prompts is not None and prompts.has("orchestrator/git_commit_pr"):

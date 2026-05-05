@@ -123,12 +123,14 @@ class OpenAICompatibleProvider(Provider):
                 input_tokens = 0
                 output_tokens = 0
                 cache_read_tokens = 0
+                saw_done = False
 
                 async for line in resp.aiter_lines():
                     if not line.startswith("data: "):
                         continue
                     payload = line[len("data: ") :]
                     if payload.strip() == "[DONE]":
+                        saw_done = True
                         break
 
                     try:
@@ -185,6 +187,13 @@ class OpenAICompatibleProvider(Provider):
                         parsed = {}
                     yield ToolUseChunk(id=buf["id"], name=buf["name"], input=parsed)
 
+                if not saw_done:
+                    yield StreamError(
+                        message="stream ended before [DONE]",
+                        code="transient_transport",
+                    )
+                    return
+
                 yield UsageChunk(
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
@@ -195,10 +204,10 @@ class OpenAICompatibleProvider(Provider):
             raise
         except httpx.TimeoutException as exc:
             logger.warning("OpenAICompatibleProvider timeout: %s", exc)
-            yield StreamError(message=f"Request timed out: {exc}")
+            yield StreamError(message=f"Request timed out: {exc}", code="transient_transport")
         except httpx.HTTPError as exc:
             logger.warning("OpenAICompatibleProvider HTTP error: %s", exc)
-            yield StreamError(message=str(exc))
+            yield StreamError(message=str(exc), code="transient_transport")
         except Exception as exc:
             logger.warning("OpenAICompatibleProvider unexpected error: %s", exc)
             yield StreamError(message=str(exc))

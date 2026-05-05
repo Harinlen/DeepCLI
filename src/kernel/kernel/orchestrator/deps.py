@@ -97,3 +97,6 @@ class OrchestratorDeps:
     # Volatile MCP prompt instructions are loaded per turn, not cached globally.
     mcp_instructions: Callable[[], list[tuple[str, str]]] | None = field(default=None)
     mcp: Any = field(default=None)
+    # Kernel module registry for tools that need controlled subsystem access
+    # through ToolContext rather than ad-hoc globals.
+    module_table: Any = field(default=None)

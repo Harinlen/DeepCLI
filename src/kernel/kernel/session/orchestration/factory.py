@@ -258,6 +258,7 @@ class SessionOrchestratorFactoryMixin(_SessionMixinBase):
             git=_git_manager,
             summarise=summarise_fn,
             mcp_instructions=_mcp_instructions,
+            module_table=self._module_table,
         )
 
         # Read prefs on every build instead of caching in ``startup`` so

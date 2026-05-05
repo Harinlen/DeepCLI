@@ -113,6 +113,18 @@ logger = logging.getLogger(__name__)
 
 _HUB_RUNTIME_RETRY_ATTEMPTS = 24
 _HUB_RUNTIME_RETRY_DELAY_SECONDS = 0.25
+_ROUTER_MODEL_METHODS = frozenset(
+    {
+        MustangMethod.MODEL_PROFILE_LIST,
+        MustangMethod.MODEL_PROVIDER_LIST,
+        MustangMethod.MODEL_PROVIDER_ADD,
+        MustangMethod.MODEL_PROVIDER_REMOVE,
+        MustangMethod.MODEL_PROVIDER_REFRESH,
+        MustangMethod.MODEL_SET_CURRENT,
+        MustangMethod.MODEL_ADD,
+        MustangMethod.MODEL_UPDATE,
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -227,8 +239,8 @@ class AcpSessionHandler:
                 yield out
             return
 
-        # AcpInboundRequest
-        assert isinstance(msg, AcpInboundRequest)
+        if not isinstance(msg, AcpInboundRequest):
+            raise InvalidRequest(f"Unsupported ACP inbound message: {type(msg).__name__}")
         async for out in self._handle_request(msg, conn, sender):
             yield out
 
@@ -355,7 +367,10 @@ class AcpSessionHandler:
             MustangMethod.SESSION_EXECUTE_PYTHON,
             MustangMethod.SESSION_CANCEL_EXECUTION,
             MustangMethod.SESSION_GET_USAGE,
+            *_ROUTER_MODEL_METHODS,
         }:
+            if method in _ROUTER_MODEL_METHODS:
+                return await self._route_model_request_through_hub(method, msg, conn)
             if method == "session/new":
                 try:
                     new_params = NewSessionRequest.model_validate(msg.params)
@@ -757,6 +772,30 @@ class AcpSessionHandler:
         if conn.bound_session_id == params.session_id:
             conn.bound_session_id = None
         return CloseSessionResponse()
+
+    async def _route_model_request_through_hub(
+        self,
+        method: str,
+        msg: AcpInboundRequest,
+        conn: ConnectionContext,
+    ) -> pydantic.BaseModel:
+        spec = REQUEST_DISPATCH.get(method)
+        if spec is None or spec.target != "model":
+            raise MethodNotFound(f"Method not found: {method!r}")
+        try:
+            params = spec.params_type.model_validate(msg.params)
+        except pydantic.ValidationError as exc:
+            raise _make_invalid_params(exc)
+        payload = await self._route_agent_contract_through_hub(
+            contract="agent.model_request",
+            params={
+                "method": method,
+                "params": params.model_dump(by_alias=True),
+            },
+            session_id=conn.bound_session_id,
+            conn=conn,
+        )
+        return spec.result_type.model_validate(payload)
 
     async def _route_agent_contract_through_hub(
         self,

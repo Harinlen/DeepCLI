@@ -243,6 +243,14 @@ class AuthorizeContext:
     Aligns with Claude Code's ``shouldAvoidPermissionPrompts`` field.
     """
 
+    module_table: Any = None
+    """Optional KernelModuleTable bridge for Tool.default_risk().
+
+    Most tools only need cwd/session metadata for risk classification.
+    SkillTool needs SkillManager lookup to see whether the requested
+    skill declares allowed-tools or hooks before authorization decides.
+    """
+
 
 __all__ = [
     "AuthorizeContext",

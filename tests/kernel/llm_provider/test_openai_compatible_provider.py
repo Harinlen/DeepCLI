@@ -61,7 +61,7 @@ async def test_stream_emits_text_tool_use_and_usage() -> None:
                                     {
                                         "index": 0,
                                         "id": "call-1",
-                                        "function": {"name": "Echo", "arguments": "{\"text\""},
+                                        "function": {"name": "Echo", "arguments": '{"text"'},
                                     }
                                 ]
                             }
@@ -75,7 +75,7 @@ async def test_stream_emits_text_tool_use_and_usage() -> None:
                                 "tool_calls": [
                                     {
                                         "index": 0,
-                                        "function": {"arguments": ":\"ok\"}"},
+                                        "function": {"arguments": ':"ok"}'},
                                     }
                                 ]
                             },
@@ -186,7 +186,28 @@ async def test_stream_yields_stream_error_for_transport_failures() -> None:
     finally:
         await provider.aclose()
 
-    assert chunks == [StreamError(message="cannot connect")]
+    assert chunks == [StreamError(message="cannot connect", code="transient_transport")]
+
+
+async def test_stream_yields_transient_error_when_sse_ends_without_done() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=_sse({"choices": [{"delta": {"content": "partial"}}]}),
+        )
+
+    provider = OpenAICompatibleProvider(api_key=None, base_url="https://fake.local/v1")
+    await provider._client.aclose()
+    provider._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        chunks = await _collect(provider)
+    finally:
+        await provider.aclose()
+
+    assert chunks == [
+        TextChunk(content="partial"),
+        StreamError(message="stream ended before [DONE]", code="transient_transport"),
+    ]
 
 
 async def test_discover_models_handles_success_non_200_and_exceptions() -> None:

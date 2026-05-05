@@ -114,7 +114,9 @@ async def _amain() -> None:
             payload={"ok": True},
         )
 
-    server = MinimalAgentRuntimeServer(host=args.host, port=args.port, handler=_handle_runtime_frame)
+    server = MinimalAgentRuntimeServer(
+        host=args.host, port=args.port, handler=_handle_runtime_frame
+    )
     await server.start()
     request = AgentRegistrationRequest(
         agent_id=args.agent_id,
@@ -194,9 +196,7 @@ async def _dispatch_runtime_contract(
         )
         return {"ok": True, **result}
     if frame.contract == "agent.cancel":
-        await session_service.cancel(
-            CancelNotification.model_validate(frame.payload["params"])
-        )
+        await session_service.cancel(CancelNotification.model_validate(frame.payload["params"]))
         return {"ok": True}
     if frame.contract == "agent.execute_shell":
         result = await session_service.execute_shell(
@@ -226,6 +226,13 @@ async def _dispatch_runtime_contract(
     if frame.contract == "agent.close":
         result = await session_service.close_session(
             CloseSessionRequest.model_validate(frame.payload["params"])
+        )
+        return {"ok": True, **result}
+    if frame.contract == "agent.model_request":
+        payload = dict(frame.payload.get("params", {}))
+        result = await session_service.model_request(
+            str(payload.get("method", "")),
+            dict(payload.get("params", {})),
         )
         return {"ok": True, **result}
     return None

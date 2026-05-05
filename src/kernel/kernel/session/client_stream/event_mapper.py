@@ -32,7 +32,7 @@ from kernel.orchestrator import (
     ToolCallResult,
     ToolCallStart,
 )
-from kernel.orchestrator.events import HistoryAppend, HistorySnapshot
+from kernel.orchestrator.events import HistoryAppend, HistorySnapshot, QueryError
 from kernel.protocol.acp.schemas.content import AcpTextBlock
 from kernel.protocol.acp.schemas.enums import AcpToolCallStatus, AcpToolKind
 from kernel.protocol.acp.schemas.updates import (
@@ -411,6 +411,17 @@ class SessionEventMapperMixin(_SessionMixinBase):
                 session.session_id,
                 event.tokens_before,
                 event.tokens_after,
+            )
+
+        elif isinstance(event, QueryError):
+            text = f"Error: {event.message}"
+            accumulated_text.append(text)
+            await self._broadcast(
+                session,
+                AgentMessageChunk(
+                    content=AcpTextBlock(type="text", text=text),
+                    meta={"mustang.agent/errorCode": event.code},
+                ),
             )
 
 

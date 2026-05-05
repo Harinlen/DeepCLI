@@ -242,6 +242,18 @@ kernel/orchestrator/
 | **6. Tools** | ✅ 并发分批 (`partition_tool_calls` + Queue merge + Semaphore + Lock); abort check ② | ~~Haiku summary~~ (WONTFIX), attachments |
 | **Cancel** | ✅ `CancelledError` → synthetic `ToolResultContent` for orphan tool_use → `CancelledEvent` → `StopReason.cancelled` | — |
 
+### Transient stream retry
+
+Provider `StreamError(code="transient_transport")` 表示 HTTP/SSE 传输层断流
+（例如 incomplete chunked read、timeout、SSE 没收到 `[DONE]`）。Orchestrator
+在同一个 logical turn 内最多重试 2 次，并 rewind 当前 loop iteration：
+
+- 重试不追加新的 user message，不写 assistant history，不执行工具。
+- 只有尚未向客户端流出 text/thought/tool output 时自动重试，避免 CLI 出现重复
+  partial assistant 内容。
+- 如果已经流出 partial output，或重试耗尽，则 yield `QueryError` 并以
+  `StopReason.error` 结束；Session 会把错误文本和 `stopReason="error"` 传给客户端。
+
 ---
 
 ## 内部组件详解

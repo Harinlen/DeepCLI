@@ -75,7 +75,9 @@ def phase2_kernel() -> Generator[tuple[int, str, Path, Path], None, None]:
     _write_probe_hooks(sandbox_home)
     _write_llm_config(sandbox_home, fake_llm.base_url)
     mcp_json_path = KERNEL_DIR / ".mcp.json"
-    previous_mcp_json = mcp_json_path.read_text(encoding="utf-8") if mcp_json_path.exists() else None
+    previous_mcp_json = (
+        mcp_json_path.read_text(encoding="utf-8") if mcp_json_path.exists() else None
+    )
     mcp_json_path.write_text(
         json.dumps(
             {
@@ -245,6 +247,45 @@ def test_probe_model_and_secret_extension_methods_are_usable(
     assert masked["value"] != "phase2-secret-value"
 
 
+def test_probe_model_set_current_updates_existing_session_runtime(
+    phase2_kernel: tuple[int, str, Path, Path],
+) -> None:
+    port, token, workspace, _home = phase2_kernel
+
+    async def _test() -> tuple[str, str, dict[str, Any]]:
+        async with ProbeClient(port=port, token=token) as client:
+            await client.initialize()
+            sid = await client.new_session(cwd=str(workspace))
+            before = await _collect_text(client, sid, "PHASE2_MODEL_ECHO")
+            result = await client._request(
+                "_mustang.agent/model/set_current",
+                {
+                    "role": "default",
+                    "provider": "phase2_alt",
+                    "model": "phase2-alt-model",
+                },
+            )
+            after = await _collect_text(client, sid, "PHASE2_MODEL_ECHO")
+            await client._request(
+                "_mustang.agent/model/set_current",
+                {
+                    "role": "default",
+                    "provider": "phase2_fake",
+                    "model": "phase2-fake-model",
+                },
+            )
+            return before, after, result
+
+    before, after, result = _run(_test())
+
+    assert result == {
+        "role": "default",
+        "model": ["phase2_alt", "phase2-alt-model"],
+    }
+    assert before == "MODEL:phase2-fake-model"
+    assert after == "MODEL:phase2-alt-model"
+
+
 def test_probe_gateway_webhook_route_reports_missing_adapter(
     phase2_kernel: tuple[int, str, Path, Path],
 ) -> None:
@@ -284,6 +325,32 @@ def test_probe_router_prompt_and_client_turn_id_replay(
     assert first == "pong"
     assert second == "pong"
     assert sum(isinstance(event, UserChunk) for event in history) == 1
+
+
+def test_probe_router_prompt_retries_transient_llm_disconnect(
+    phase2_kernel: tuple[int, str, Path, Path],
+) -> None:
+    port, token, workspace, _home = phase2_kernel
+
+    async def _prompt() -> tuple[str, str]:
+        async with ProbeClient(port=port, token=token) as client:
+            await client.initialize()
+            sid = await client.new_session(cwd=str(workspace))
+            text_parts: list[str] = []
+            stop_reason = "unknown"
+            async for event in client.prompt(
+                sid, "PHASE2_TRANSIENT_RETRY", timeout=_PROMPT_TIMEOUT
+            ):
+                if isinstance(event, AgentChunk):
+                    text_parts.append(event.text)
+                elif isinstance(event, TurnComplete):
+                    stop_reason = event.stop_reason
+            return "".join(text_parts), stop_reason
+
+    text, stop_reason = _run(_prompt())
+
+    assert text == "PHASE2_TRANSIENT_RETRY_OK"
+    assert stop_reason == "end_turn"
 
 
 def test_probe_file_read_tool_observable_through_router(
@@ -386,7 +453,11 @@ def test_probe_permission_reject_finishes_turn_without_writing(
         ("PHASE2_TODO: update the todo list.", "TodoWrite", "PHASE2_TODO_OK"),
         ("PHASE2_GLOB: find txt files.", "Glob", "PHASE2_GLOB_OK"),
         ("PHASE2_GREP: search fixture files.", "Grep", "PHASE2_GREP_OK"),
-        ("PHASE2_SENDMESSAGE_MISSING: route to a missing durable agent.", "SendMessage", "PHASE2_SENDMESSAGE_ERROR_OK"),
+        (
+            "PHASE2_SENDMESSAGE_MISSING: route to a missing durable agent.",
+            "SendMessage",
+            "PHASE2_SENDMESSAGE_ERROR_OK",
+        ),
         ("PHASE2_TOOLSEARCH: search for Bash tool.", "ToolSearch", "PHASE2_TOOLSEARCH_OK"),
     ],
 )
@@ -460,9 +531,21 @@ def test_probe_ask_user_question_updated_input_round_trip(
 @pytest.mark.parametrize(
     ("prompt", "expected_tool", "expected_text"),
     [
-        ("PHASE2_MCP_ECHO: call the resources MCP echo tool.", "resources/echo", "PHASE2_MCP_ECHO_OK"),
-        ("PHASE2_MCP_LIST: list resources from the resources MCP server.", "ListMcpResources", "PHASE2_MCP_LIST_OK"),
-        ("PHASE2_MCP_READ: read config://app/settings from MCP.", "ReadMcpResource", "PHASE2_MCP_READ_OK"),
+        (
+            "PHASE2_MCP_ECHO: call the resources MCP echo tool.",
+            "resources/echo",
+            "PHASE2_MCP_ECHO_OK",
+        ),
+        (
+            "PHASE2_MCP_LIST: list resources from the resources MCP server.",
+            "ListMcpResources",
+            "PHASE2_MCP_LIST_OK",
+        ),
+        (
+            "PHASE2_MCP_READ: read config://app/settings from MCP.",
+            "ReadMcpResource",
+            "PHASE2_MCP_READ_OK",
+        ),
     ],
 )
 def test_probe_mcp_tool_and_resource_matrix(
@@ -491,11 +574,19 @@ def test_probe_mcp_tool_and_resource_matrix(
     [
         ("PHASE2_SKILL: invoke the phase2 probe skill.", "Skill", "PHASE2_SKILL_OK"),
         ("PHASE2_MEMORY_WRITE: write a probe memory.", "memory_write", "PHASE2_MEMORY_WRITE_OK"),
-        ("PHASE2_MEMORY_APPEND: append to the probe memory.", "memory_append", "PHASE2_MEMORY_APPEND_OK"),
+        (
+            "PHASE2_MEMORY_APPEND: append to the probe memory.",
+            "memory_append",
+            "PHASE2_MEMORY_APPEND_OK",
+        ),
         ("PHASE2_MEMORY_LIST: list probe memories.", "memory_list", "PHASE2_MEMORY_LIST_OK"),
         ("PHASE2_CRON_CREATE: create a probe cron job.", "CronCreate", "PHASE2_CRON_CREATE_OK"),
         ("PHASE2_CRON_LIST: list probe cron jobs.", "CronList", "PHASE2_CRON_LIST_OK"),
-        ("PHASE2_CRON_DELETE_MISSING: delete a missing probe cron job.", "CronDelete", "PHASE2_CRON_DELETE_OK"),
+        (
+            "PHASE2_CRON_DELETE_MISSING: delete a missing probe cron job.",
+            "CronDelete",
+            "PHASE2_CRON_DELETE_OK",
+        ),
     ],
 )
 def test_probe_subsystem_tool_matrix_through_router(
@@ -705,6 +796,7 @@ class _FakeOpenAIServer:
         return f"http://{host}:{port}/v1"
 
     def start(self) -> None:
+        _FakeOpenAIHandler._transient_attempts.clear()
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), _FakeOpenAIHandler)
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
@@ -719,13 +811,14 @@ class _FakeOpenAIServer:
 
 class _FakeOpenAIHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    _transient_attempts: dict[str, int] = {}
 
     def log_message(self, _format: str, *_args: object) -> None:
         return
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path.endswith("/models"):
-            self._json({"data": [{"id": "phase2-fake-model"}]})
+            self._json({"data": [{"id": "phase2-fake-model"}, {"id": "phase2-alt-model"}]})
             return
         self.send_error(404)
 
@@ -735,6 +828,19 @@ class _FakeOpenAIHandler(BaseHTTPRequestHandler):
             return
         length = int(self.headers.get("Content-Length", "0"))
         body = json.loads(self.rfile.read(length) or b"{}")
+        user_text = _last_user_text(body)
+        if "PHASE2_TRANSIENT_RETRY" in user_text:
+            attempts = self._transient_attempts.get("PHASE2_TRANSIENT_RETRY", 0)
+            self._transient_attempts["PHASE2_TRANSIENT_RETRY"] = attempts + 1
+            if attempts == 0:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
+                self.wfile.write(b'40\r\ndata: {"choices":[{"delta":{"content":"')
+                self.wfile.flush()
+                self.close_connection = True
+                return
         response = _script_response(body)
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
@@ -757,6 +863,8 @@ class _FakeOpenAIHandler(BaseHTTPRequestHandler):
 def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
     body_text = json.dumps(body, ensure_ascii=False)
     user_text = _last_user_text(body)
+    if "PHASE2_MODEL_ECHO" in user_text:
+        return _text_chunks(f"MODEL:{body.get('model')}")
     if _has_tool_result(body):
         if "PHASE2_BASH" in user_text:
             return _text_chunks("PHASE2_BASH_OK")
@@ -803,6 +911,8 @@ def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
         if "phase2_existing.txt" in body_text:
             return _text_chunks("PHASE2_PERMISSION_ALLOWED")
         return _text_chunks("PHASE2_TOOL_DONE")
+    if "PHASE2_TRANSIENT_RETRY" in user_text:
+        return _text_chunks("PHASE2_TRANSIENT_RETRY_OK")
     if "PHASE2_FILE_READ" in user_text:
         return _tool_call(
             "call_file_read",
@@ -1081,7 +1191,13 @@ def _write_llm_config(home: Path, fake_base_url: str) -> None:
                     "base_url": fake_base_url,
                     "api_key": "phase2-test",
                     "models": ["phase2-fake-model"],
-                }
+                },
+                "phase2_alt": {
+                    "type": "openai_compatible",
+                    "base_url": fake_base_url,
+                    "api_key": "phase2-test",
+                    "models": ["phase2-alt-model"],
+                },
             },
             "current_used": {
                 "default": ["phase2_fake", "phase2-fake-model"],
@@ -1101,8 +1217,10 @@ def _wait_for_readiness(port: int, timeout: float) -> None:
         try:
             with urllib.request.urlopen(url, timeout=1) as resp:
                 payload = json.loads(resp.read())
-            if payload.get("process_ready") and payload.get("hub_ready") and payload.get(
-                "default_route_ready"
+            if (
+                payload.get("process_ready")
+                and payload.get("hub_ready")
+                and payload.get("default_route_ready")
             ):
                 return
         except (urllib.error.URLError, OSError, json.JSONDecodeError):

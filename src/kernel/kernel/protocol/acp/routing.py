@@ -97,9 +97,6 @@ from kernel.protocol.interfaces.contracts.cancel_execution_params import (
 from kernel.protocol.interfaces.contracts.add_provider_params import (
     AddProviderParams,
 )
-from kernel.protocol.interfaces.contracts.add_provider_result import (
-    AddProviderResult,
-)
 from kernel.protocol.interfaces.contracts.add_model_params import AddModelParams
 from kernel.protocol.interfaces.contracts.cancel_params import CancelParams
 from kernel.protocol.interfaces.contracts.execute_python_params import (
@@ -113,9 +110,6 @@ from kernel.protocol.interfaces.contracts.list_profiles_params import (
 )
 from kernel.protocol.interfaces.contracts.list_providers_params import (
     ListProvidersParams,
-)
-from kernel.protocol.interfaces.contracts.list_providers_result import (
-    ListProvidersResult,
 )
 from kernel.protocol.interfaces.contracts.list_sessions_params import (
     ListSessionsParams,
@@ -144,14 +138,8 @@ from kernel.protocol.interfaces.contracts.resume_session_result import ResumeSes
 from kernel.protocol.interfaces.contracts.refresh_models_params import (
     RefreshModelsParams,
 )
-from kernel.protocol.interfaces.contracts.refresh_models_result import (
-    RefreshModelsResult,
-)
 from kernel.protocol.interfaces.contracts.remove_provider_params import (
     RemoveProviderParams,
-)
-from kernel.protocol.interfaces.contracts.remove_provider_result import (
-    RemoveProviderResult,
 )
 from kernel.protocol.interfaces.contracts.set_config_option_params import (
     SetConfigOptionParams,
@@ -161,9 +149,6 @@ from kernel.protocol.interfaces.contracts.set_config_option_result import (
 )
 from kernel.protocol.interfaces.contracts.set_current_model_params import (
     SetCurrentModelParams,
-)
-from kernel.protocol.interfaces.contracts.set_current_model_result import (
-    SetCurrentModelResult,
 )
 from kernel.protocol.interfaces.contracts.update_model_params import UpdateModelParams
 from kernel.protocol.interfaces.contracts.update_model_result import UpdateModelResult
@@ -572,9 +557,7 @@ async def _handle_set_current(
     return SetCurrentModelResponse(role=result.role, model=result.model)
 
 
-async def _handle_model_add(
-    mh: ModelHandler, ctx: HandlerContext, p: AddModelRequest
-) -> BaseModel:
+async def _handle_model_add(mh: ModelHandler, ctx: HandlerContext, p: AddModelRequest) -> BaseModel:
     result = await mh.add_model(
         ctx,
         AddModelParams(
@@ -792,43 +775,43 @@ REQUEST_DISPATCH: dict[str, RequestSpec] = {
     MustangMethod.MODEL_PROVIDER_LIST: RequestSpec(
         handler=_handle_provider_list,
         params_type=ListProvidersRequest,
-        result_type=ListProvidersResult,
+        result_type=ListProvidersResponse,
         target="model",
     ),
     MustangMethod.MODEL_PROVIDER_ADD: RequestSpec(
         handler=_handle_provider_add,
         params_type=AddProviderRequest,
-        result_type=AddProviderResult,
+        result_type=AddProviderResponse,
         target="model",
     ),
     MustangMethod.MODEL_PROVIDER_REMOVE: RequestSpec(
         handler=_handle_provider_remove,
         params_type=RemoveProviderRequest,
-        result_type=RemoveProviderResult,
+        result_type=RemoveProviderResponse,
         target="model",
     ),
     MustangMethod.MODEL_PROVIDER_REFRESH: RequestSpec(
         handler=_handle_provider_refresh,
         params_type=RefreshModelsRequest,
-        result_type=RefreshModelsResult,
+        result_type=RefreshModelsResponse,
         target="model",
     ),
     MustangMethod.MODEL_SET_CURRENT: RequestSpec(
         handler=_handle_set_current,
         params_type=SetCurrentModelRequest,
-        result_type=SetCurrentModelResult,
+        result_type=SetCurrentModelResponse,
         target="model",
     ),
     MustangMethod.MODEL_ADD: RequestSpec(
         handler=_handle_model_add,
         params_type=AddModelRequest,
-        result_type=UpdateModelResult,
+        result_type=UpdateModelResponse,
         target="model",
     ),
     MustangMethod.MODEL_UPDATE: RequestSpec(
         handler=_handle_model_update,
         params_type=UpdateModelRequest,
-        result_type=UpdateModelResult,
+        result_type=UpdateModelResponse,
         target="model",
     ),
     # secrets/* -- routed to SecretManager (bootstrap service)

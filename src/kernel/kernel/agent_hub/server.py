@@ -122,6 +122,7 @@ class AgentHubWebSocketServer:
             "agent.set_mode",
             "agent.get_usage",
             "agent.close",
+            "agent.model_request",
         }:
             return await self._forward_agent_contract(frame, frame.contract)
         raise ValueError(f"unknown hub contract: {frame.contract}")

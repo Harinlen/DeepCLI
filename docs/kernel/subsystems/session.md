@@ -22,6 +22,11 @@ Pydantic 结果对象。它**不接触** ACP JSON 线格式、JSON-RPC id、或 
 - ❌ **不实现** Orchestrator 内部逻辑（LLM 调用、tool 执行、prompt 构建）—— 那是 [Orchestrator](orchestrator.md) 的事
 - ❌ **不接触** JSON-RPC 帧、WebSocket IO、ACP 方法路由 —— 那是协议层的事
 
+Provider / Orchestrator 故障不会再被折叠成正常 `end_turn`。当
+Orchestrator 以 `StopReason.error` 结束时，Session 将 `QueryError` 转成一条
+可见 assistant error text update，并用 `stopReason="error"` 关闭该 prompt
+response；CLI 因而能把失败显示为失败，而不是安静回到输入框。
+
 ## Session vs Orchestrator 的边界
 
 这两个东西经常被混在一起说，但它们**是两个独立的设计**：
@@ -65,6 +70,13 @@ client 回传的唯一通道是 permission 请求，由 `on_permission` callback
 [protocol.md 的事件映射表](../interfaces/protocol.md#会话层事件--sessionupdate-映射)。
 
 这个 seam 让 Session 可以**先于** Orchestrator 完成设计 —— 我们不需要等 Provider / Tools / Memory 那些子系统都设计完才能动 Session。
+
+SessionManager also subscribes to the `kernel.llm` config section. When
+`current_used.default` changes, it patches the Orchestrator config for
+active sessions that were still using the old default. This prevents a
+router-mode split-brain where `/model` shows the new global default but
+an already-open Primary Runtime session keeps sending prompts to the old
+provider.
 
 ## Design Decisions
 

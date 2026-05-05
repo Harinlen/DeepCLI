@@ -67,6 +67,7 @@ class ToolContextMixin:
             git_manager=getattr(self._deps, "git", None),
             summarise=getattr(self._deps, "summarise", None),
             fire_hook=self._make_tool_hook_bridge(),
+            module_table=getattr(self._deps, "module_table", None),
         )
 
     def _build_authorize_context(self, *, mode: PermissionMode) -> AuthorizeContext:
@@ -87,6 +88,7 @@ class ToolContextMixin:
             cwd=self._cwd,
             connection_auth=self._deps.connection_auth,
             should_avoid_prompts=self._session_should_avoid_prompts(),
+            module_table=getattr(self._deps, "module_table", None),
         )
 
     def _session_can_prompt_user(self) -> bool:

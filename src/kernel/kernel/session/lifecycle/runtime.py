@@ -70,12 +70,65 @@ class SessionLifecycleMixin(_SessionMixinBase):
             )
             self._prefs_section = None
 
+        self._disconnect_llm_config: Any = None
+        self._subscribe_llm_config()
         self._sessions: dict[str, Session] = {}
         logger.info(
             "SessionManager ready — agent=%s sessions DB at %s",
             self._agent_context.agent_id,
             sessions_dir,
         )
+
+    def _subscribe_llm_config(self) -> None:
+        """Keep active session orchestrators aligned with global model roles."""
+        try:
+            from kernel.llm.config import LLMConfig
+
+            llm_section = self._module_table.config.get_section(
+                file="kernel",
+                section="llm",
+                schema=LLMConfig,
+            )
+        except Exception:
+            logger.exception(
+                "SessionManager: could not subscribe to llm config — "
+                "active sessions will keep their startup model until reloaded"
+            )
+            return
+
+        async def _on_llm_config_change(old: LLMConfig, new: LLMConfig) -> None:
+            self._sync_default_model_for_active_sessions(
+                old.current_used.default,
+                new.current_used.default,
+            )
+
+        self._disconnect_llm_config = llm_section.changed.connect(_on_llm_config_change)
+
+    def _sync_default_model_for_active_sessions(
+        self,
+        old_default: Any,
+        new_default: Any,
+    ) -> None:
+        """Move active sessions that were using the old default to the new one."""
+        if new_default is None or old_default == new_default:
+            return
+
+        from kernel.llm.config import ModelRef
+        from kernel.orchestrator.config import OrchestratorConfigPatch
+
+        new_ref = ModelRef.model_validate(new_default)
+        for session in list(self._sessions.values()):
+            current = session.orchestrator.config.model
+            if _model_refs_match(current, old_default) or (
+                old_default is None and _is_placeholder_default(current)
+            ):
+                session.orchestrator.set_config(OrchestratorConfigPatch(model=new_ref))
+                logger.info(
+                    "SessionManager: session %s model synced to current_used.default [%s, %s]",
+                    session.session_id,
+                    new_ref.provider,
+                    new_ref.model,
+                )
 
     async def _create_session(
         self,
@@ -143,6 +196,11 @@ class SessionLifecycleMixin(_SessionMixinBase):
         ToolAuthorizer (if loaded) gets a chance to drop its per-session
         grant cache as we go.
         """
+        disconnect = getattr(self, "_disconnect_llm_config", None)
+        if callable(disconnect):
+            disconnect()
+            self._disconnect_llm_config = None
+
         try:
             from kernel.tool_authz import ToolAuthorizer
 
@@ -224,7 +282,8 @@ class SessionLifecycleMixin(_SessionMixinBase):
             deleted = await self._delete_session_by_id(ctx_or_session_id, force=True)
             return deleted
 
-        assert params is not None, "DeleteSessionParams required for ACP delete"
+        if params is None:
+            raise InvalidRequest("DeleteSessionParams required for ACP delete")
         deleted = await self._delete_session_by_id(
             params.session_id,
             force=params.force,
@@ -342,3 +401,19 @@ class SessionLifecycleMixin(_SessionMixinBase):
                     "session=%s python worker shutdown failed",
                     session.session_id,
                 )
+
+
+def _model_refs_match(left: Any, right: Any) -> bool:
+    """Compare model refs without requiring both objects to share a class."""
+    if left is None or right is None:
+        return left is right
+    return getattr(left, "provider", None) == getattr(right, "provider", None) and getattr(
+        left, "model", None
+    ) == getattr(right, "model", None)
+
+
+def _is_placeholder_default(model: Any) -> bool:
+    """Return whether *model* is the no-config placeholder used by fresh installs."""
+    return (
+        getattr(model, "provider", None) == "default" and getattr(model, "model", None) == "default"
+    )

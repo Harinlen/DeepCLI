@@ -48,6 +48,7 @@ if TYPE_CHECKING:
         _flags: SessionFlags
         _module_table: Any
         _prefs_section: MutableSection[OrchestratorPrefs] | None
+        _disconnect_llm_config: Any
         _agent_context: AgentContext
         _agent_resource_view: AgentResourceView | NullAgentResourceView
 

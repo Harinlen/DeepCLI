@@ -134,7 +134,9 @@ export class MustangAgentSessionAdapter {
 		this.#emit({ type: "agent_start" });
 
 		try {
-			const result = await session.prompt(text, update => this.#handleUpdate(update));
+			const result = await session.prompt(text, update => this.#handleUpdate(update), {
+				mode: this.currentPermissionMode,
+			});
 			await this.#flushEvents();
 			this.#activeAssistant.stopReason = String((result as { stopReason?: string })?.stopReason ?? "stop");
 			this.#endAssistantSegment(this.#activeAssistant.stopReason);

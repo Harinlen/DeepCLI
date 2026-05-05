@@ -23,6 +23,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from kernel.llm.config import ModelRef
+from kernel.orchestrator.config import OrchestratorConfig
 from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
 from kernel.protocol.interfaces.contracts.archive_session_params import ArchiveSessionParams
 from kernel.protocol.interfaces.contracts.close_session_params import CloseSessionParams
@@ -40,6 +42,7 @@ from kernel.protocol.interfaces.contracts.text_block import TextBlock
 from kernel.protocol.interfaces.errors import InvalidParams, InvalidRequest, ResourceNotFoundError
 from kernel.session import AgentContext, SessionManager
 from kernel.session.events import UserMessageEvent
+from kernel.session.runtime.state import Session
 from kernel.session.store import SessionStore
 
 # Mark every async test in this module to run under anyio (asyncio backend).
@@ -236,9 +239,7 @@ async def test_agent_resource_view_refreshes_at_turn_start(
     assert calls == 1
 
 
-async def test_prompt_broadcasts_usage_update(
-    manager: SessionManager, tmp_path: Path
-) -> None:
+async def test_prompt_broadcasts_usage_update(manager: SessionManager, tmp_path: Path) -> None:
     fake_orch = manager._make_orchestrator.return_value[0]
     fake_orch.last_turn_usage = (100, 25)
     new_ctx = _make_ctx()
@@ -563,9 +564,7 @@ async def test_load_session_rejects_session_scoped_mcp_servers(
         )
 
 
-async def test_resume_session_binds_without_replay(
-    manager: SessionManager, tmp_path: Path
-) -> None:
+async def test_resume_session_binds_without_replay(manager: SessionManager, tmp_path: Path) -> None:
     first_ctx = _make_ctx()
     result = await manager.new(first_ctx, NewSessionParams(cwd=str(tmp_path)))
     sid = result.session_id
@@ -638,6 +637,71 @@ async def test_set_config_option_rejects_unknown_option(
             _make_ctx(),
             SetConfigOptionParams(session_id=result.session_id, config_id="thinking", value="true"),
         )
+
+
+async def test_default_model_change_updates_active_session_orchestrator(
+    manager: SessionManager,
+    tmp_path: Path,
+) -> None:
+    old_ref = ModelRef(provider="nvidia-build", model="deepseek-ai/deepseek-v4-pro")
+    new_ref = ModelRef(provider="deepseek", model="deepseek-v4-pro")
+
+    orch = MagicMock()
+    orch.config = OrchestratorConfig(model=old_ref)
+    orch.set_config = MagicMock(
+        side_effect=lambda patch: setattr(orch, "config", OrchestratorConfig(model=patch.model))
+    )
+    manager._sessions = {
+        "active": Session(
+            session_id="active",
+            cwd=tmp_path,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            title=None,
+            git_branch=None,
+            mode_id=None,
+            config_options={},
+            mcp_servers=[],
+            orchestrator=orch,
+        )
+    }
+
+    manager._sync_default_model_for_active_sessions(old_ref, new_ref)
+
+    orch.set_config.assert_called_once()
+    assert manager._sessions["active"].orchestrator.config.model == new_ref
+
+
+async def test_default_model_change_preserves_session_specific_model(
+    manager: SessionManager,
+    tmp_path: Path,
+) -> None:
+    old_ref = ModelRef(provider="nvidia-build", model="deepseek-ai/deepseek-v4-pro")
+    new_ref = ModelRef(provider="deepseek", model="deepseek-v4-pro")
+    pinned_ref = ModelRef(provider="bedrock", model="us.anthropic.claude-sonnet-4-6")
+
+    orch = MagicMock()
+    orch.config = OrchestratorConfig(model=pinned_ref)
+    orch.set_config = MagicMock()
+    manager._sessions = {
+        "pinned": Session(
+            session_id="pinned",
+            cwd=tmp_path,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            title=None,
+            git_branch=None,
+            mode_id=None,
+            config_options={},
+            mcp_servers=[],
+            orchestrator=orch,
+        )
+    }
+
+    manager._sync_default_model_for_active_sessions(old_ref, new_ref)
+
+    orch.set_config.assert_not_called()
+    assert manager._sessions["pinned"].orchestrator.config.model == pinned_ref
 
 
 # ---------------------------------------------------------------------------
@@ -731,9 +795,7 @@ async def test_token_deltas_persist_across_turns(manager: SessionManager, tmp_pa
     assert record.total_output_tokens == 130
 
 
-async def test_get_usage_returns_cost_panel_data(
-    manager: SessionManager, tmp_path: Path
-) -> None:
+async def test_get_usage_returns_cost_panel_data(manager: SessionManager, tmp_path: Path) -> None:
     """The /cost payload comes from durable session events and counters."""
     ctx = _make_ctx()
     result = await manager.new(ctx, NewSessionParams(cwd=str(tmp_path)))

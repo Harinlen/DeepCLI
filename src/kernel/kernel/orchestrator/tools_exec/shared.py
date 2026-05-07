@@ -14,7 +14,7 @@ DEFAULT_MAX_CONCURRENCY = 10
 # Skill discovery currently needs notifications only for tools that can create
 # or modify files.  Delete/move tools can be added when they expose enough path
 # metadata for reliable invalidation.
-FILE_MUTATING_TOOLS = frozenset({"FileEdit", "FileWrite"})
+FILE_MUTATING_TOOLS = frozenset({"Edit", "FileEdit", "Write", "FileWrite"})
 
 # Queue payloads are always EventPair, so ``None`` is reserved as end-of-stream.
 SENTINEL = None

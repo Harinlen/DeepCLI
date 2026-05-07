@@ -77,6 +77,9 @@ class TestValidateInput:
     async def test_valid(self, tmp_path: Path) -> None:
         await self.tool.validate_input({"path": "foo.txt"}, _RiskCtx(tmp_path))
 
+    async def test_valid_file_path(self, tmp_path: Path) -> None:
+        await self.tool.validate_input({"file_path": "foo.txt"}, _RiskCtx(tmp_path))
+
 
 # ---------------------------------------------------------------------------
 # default_risk

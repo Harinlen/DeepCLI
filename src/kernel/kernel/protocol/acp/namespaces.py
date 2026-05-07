@@ -65,6 +65,8 @@ class MustangMethod:
     MODEL_ADD = "_mustang.agent/model/add"
     MODEL_UPDATE = "_mustang.agent/model/update"
     SECRETS_AUTH = "_mustang.agent/secrets/auth"
+    RUNTIME_STATUS = "_mustang.agent/runtime/status"
+    RUNTIME_RESTART = "_mustang.agent/runtime/restart"
 
 
 MUSTANG_EXTENSION_METHODS = frozenset(
@@ -88,6 +90,8 @@ MUSTANG_EXTENSION_METHODS = frozenset(
         MustangMethod.MODEL_ADD,
         MustangMethod.MODEL_UPDATE,
         MustangMethod.SECRETS_AUTH,
+        MustangMethod.RUNTIME_STATUS,
+        MustangMethod.RUNTIME_RESTART,
     }
 )
 

@@ -174,6 +174,31 @@ async def test_stream_raises_for_unrecoverable_http_statuses(
         await provider.aclose()
 
 
+async def test_stream_http_error_extracts_openai_compatible_error_message() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "message": "tool_calls must be followed by tool messages",
+                    "type": "invalid_request_error",
+                }
+            },
+        )
+
+    provider = OpenAICompatibleProvider(api_key=None, base_url="https://fake.local/v1")
+    await provider._client.aclose()
+    provider._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(
+            ProviderError,
+            match="tool_calls must be followed by tool messages",
+        ):
+            await _collect(provider)
+    finally:
+        await provider.aclose()
+
+
 async def test_stream_yields_stream_error_for_transport_failures() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("cannot connect", request=request)

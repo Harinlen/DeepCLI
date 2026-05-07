@@ -206,12 +206,12 @@ async def run() -> int:  # noqa: C901 — long, but flat
             )
         print("  ✓ Agent present in plan-mode snapshot")
 
-        for mutating in ("Bash", "FileEdit", "FileWrite"):
+        for mutating in ("Bash", "Edit", "Write"):
             if mutating in pm_names:
                 return _fail(
                     f"{mutating} should be filtered in plan mode (kind=execute/edit)"
                 )
-        print("  ✓ Bash / FileEdit / FileWrite absent (mutating, correctly filtered)")
+        print("  ✓ Bash / Edit / Write absent (mutating, correctly filtered)")
         # (Guidance builder check follows after orchestrator construction below.)
 
         # ── 2. Build an Orchestrator wired to the real ToolManager.

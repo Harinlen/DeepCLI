@@ -145,12 +145,12 @@ def inject_plan_mode_prompts(
         if get_plan(orchestrator._session_id) is not None:
             info = (
                 f"A plan file already exists at {plan_file_path}. "
-                "You can read it and make incremental edits using the FileEdit tool."
+                "You can read it and make incremental edits using the Edit tool."
             )
         else:
             info = (
                 "No plan file exists yet. You should create your plan at "
-                f"{plan_file_path} using the FileWrite tool."
+                f"{plan_file_path} using the Write tool."
             )
         text = prompts.render("orchestrator/plan_mode", plan_file_info=info)
     else:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,11 @@ from kernel.supervisor.runtime import (
     _wait_runtime_file,
     _write_json,
     install_signal_handlers,
+)
+from kernel.supervisor.control import (
+    SupervisorControlConfig,
+    SupervisorControlServer,
+    request_control,
 )
 from kernel.supervisor.child_kernel import build_child_kernel_spec
 
@@ -178,7 +184,10 @@ def test_start_removes_stale_runtime_files_before_waiting(
     assert removed_before_start == {"hub": True, "access": True, "primary": True}
 
 
-def test_wait_raises_when_child_exits(tmp_path: Path) -> None:
+def test_child_exit_restarts_from_failed_child(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     runtime = SupervisorRuntime(
         SupervisorConfig(
             access_port=8331,
@@ -186,10 +195,55 @@ def test_wait_raises_when_child_exits(tmp_path: Path) -> None:
             workspace=tmp_path,
         )
     )
-    runtime.children = {"hub": _Proc(pid=1, returncode=9)}
+    runtime.build_specs()
+    runtime.children = {
+        "hub": _Proc(pid=1),
+        "access": _Proc(pid=2),
+        "primary": _Proc(pid=3, returncode=9),
+    }
+    restarted: list[str] = []
 
-    with pytest.raises(SystemExit, match="child hub exited with code 9"):
-        runtime.wait()
+    def fake_start_child(spec: ChildSpec) -> None:
+        restarted.append(spec.name)
+        runtime.children[spec.name] = _Proc(pid=10 + len(restarted))
+
+    monkeypatch.setattr(runtime, "_start_child", fake_start_child)
+    monkeypatch.setattr(
+        supervisor_runtime, "_wait_runtime_file", lambda path: {"runtimeFile": path.name}
+    )
+    monkeypatch.setattr(supervisor_runtime, "_wait_default_route", lambda *_args: None)
+
+    runtime._handle_child_exit("primary", 9)
+
+    assert restarted == ["primary"]
+    assert runtime.status == "ready"
+    assert runtime.restart_counts["primary"] == 1
+    assert runtime.last_exit is not None
+    assert runtime.last_exit["child"] == "primary"
+    assert runtime.last_exit["code"] == 9
+
+
+def test_child_exit_enters_degraded_when_restart_budget_exceeded(tmp_path: Path) -> None:
+    runtime = SupervisorRuntime(
+        SupervisorConfig(
+            access_port=8331,
+            state_dir=tmp_path / "state",
+            workspace=tmp_path,
+        )
+    )
+    runtime.children = {
+        "hub": _Proc(pid=1),
+        "access": _Proc(pid=2),
+        "primary": _Proc(pid=3, returncode=9),
+    }
+    runtime._restart_attempts = [time.time()] * supervisor_runtime.RESTART_BUDGET_MAX_ATTEMPTS
+
+    runtime._handle_child_exit("primary", 9)
+
+    payload = json.loads(runtime.config.runtime_file.read_text(encoding="utf-8"))
+    assert runtime.status == "degraded"
+    assert payload["status"] == "degraded"
+    assert "restart budget exceeded" in payload["degradedReason"]
 
 
 def test_stop_terminates_running_children_and_writes_stopped_file(tmp_path: Path) -> None:
@@ -233,6 +287,29 @@ def test_stop_kills_child_that_does_not_exit_before_deadline(tmp_path: Path) -> 
     assert stubborn.killed is True
 
 
+def test_control_socket_routes_status_and_restart_agent(tmp_path: Path) -> None:
+    target = _ControlTarget()
+    server = SupervisorControlServer(
+        SupervisorControlConfig(socket_path=tmp_path / "control.sock", token="secret"),
+        target,
+    )
+    server.start()
+    try:
+        status = request_control(tmp_path / "control.sock", "secret", "status")
+        restart = request_control(
+            tmp_path / "control.sock",
+            "secret",
+            "restart_agent",
+            {"agent_id": "primary", "reason": "test"},
+        )
+    finally:
+        server.stop()
+
+    assert status["status"] == "ready"
+    assert restart["agent"] == "primary"
+    assert target.restart_agent_calls == [("primary", "test")]
+
+
 def test_wait_runtime_file_reads_json_when_written(tmp_path: Path) -> None:
     path = tmp_path / "runtime.json"
     path.write_text('{"ready": true}', encoding="utf-8")
@@ -257,10 +334,15 @@ def test_write_json_replaces_file_atomically(tmp_path: Path) -> None:
 def test_wait_http_readiness_returns_when_process_and_hub_ready(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: _Response({
-        "process_ready": True,
-        "hub_ready": True,
-    }))
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *_args, **_kwargs: _Response(
+            {
+                "process_ready": True,
+                "hub_ready": True,
+            }
+        ),
+    )
 
     _wait_http_readiness("127.0.0.1", 8331, timeout=0.01)
 
@@ -268,19 +350,29 @@ def test_wait_http_readiness_returns_when_process_and_hub_ready(
 def test_wait_http_readiness_times_out_when_readiness_never_arrives(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: _Response({
-        "process_ready": True,
-        "hub_ready": False,
-    }))
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *_args, **_kwargs: _Response(
+            {
+                "process_ready": True,
+                "hub_ready": False,
+            }
+        ),
+    )
 
     with pytest.raises(TimeoutError, match="Access Agent did not become ready"):
         _wait_http_readiness("127.0.0.1", 8331, timeout=0.01)
 
 
 def test_wait_default_route_returns_when_ready(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: _Response({
-        "default_route_ready": True,
-    }))
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *_args, **_kwargs: _Response(
+            {
+                "default_route_ready": True,
+            }
+        ),
+    )
 
     _wait_default_route("127.0.0.1", 8331, timeout=0.01)
 
@@ -288,15 +380,22 @@ def test_wait_default_route_returns_when_ready(monkeypatch: pytest.MonkeyPatch) 
 def test_wait_default_route_times_out_when_route_never_arrives(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: _Response({
-        "default_route_ready": False,
-    }))
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *_args, **_kwargs: _Response(
+            {
+                "default_route_ready": False,
+            }
+        ),
+    )
 
     with pytest.raises(TimeoutError, match="default_route_ready did not become true"):
         _wait_default_route("127.0.0.1", 8331, timeout=0.01)
 
 
-def test_install_signal_handlers_stops_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_install_signal_handlers_stops_runtime(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     runtime = SupervisorRuntime(
         SupervisorConfig(
             access_port=8331,
@@ -399,3 +498,21 @@ class _Response:
 
     def read(self) -> bytes:
         return json.dumps(self.payload).encode("utf-8")
+
+
+class _ControlTarget:
+    def __init__(self) -> None:
+        self.restart_agent_calls: list[tuple[str, str]] = []
+
+    def control_status(self) -> dict[str, object]:
+        return {"status": "ready"}
+
+    def control_restart_runtime(self, reason: str) -> dict[str, object]:
+        return {"status": "restarted", "reason": reason}
+
+    def control_restart_agent(self, agent_id: str, reason: str) -> dict[str, object]:
+        self.restart_agent_calls.append((agent_id, reason))
+        return {"agent": agent_id, "reason": reason}
+
+    def control_stop_runtime(self, reason: str) -> dict[str, object]:
+        return {"status": "stopped", "reason": reason}

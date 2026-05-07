@@ -16,9 +16,9 @@ class ToolFlags(BaseModel):
 
     bash: bool = Field(True, description="Enable the Bash tool")
     powershell: bool = Field(True, description="Enable the PowerShell tool")
-    file_read: bool = Field(True, description="Enable the FileRead tool")
-    file_edit: bool = Field(True, description="Enable the FileEdit tool")
-    file_write: bool = Field(True, description="Enable the FileWrite tool")
+    file_read: bool = Field(True, description="Enable the Read tool")
+    file_edit: bool = Field(True, description="Enable the Edit tool")
+    file_write: bool = Field(True, description="Enable the Write tool")
     glob: bool = Field(True, description="Enable the Glob tool")
     grep: bool = Field(True, description="Enable the Grep tool")
     repl: bool = Field(
@@ -35,8 +35,11 @@ class ToolFlags(BaseModel):
         mapping = {
             "Bash": self.bash,
             "PowerShell": self.powershell,
+            "Read": self.file_read,
             "FileRead": self.file_read,
+            "Edit": self.file_edit,
             "FileEdit": self.file_edit,
+            "Write": self.file_write,
             "FileWrite": self.file_write,
             "Glob": self.glob,
             "Grep": self.grep,

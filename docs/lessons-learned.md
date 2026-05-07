@@ -78,6 +78,45 @@ wall twice.
   `--primary-token=<token>` / `--registration-token=<token>` for
   generated values.
 
+## Tool Contracts
+
+- **Tool implementation class names are not the LLM contract**:
+  Claude Code's file reader is implemented as `FileReadTool`, but the
+  exposed tool name is `Read`.  When porting tools, align the schema
+  name, prompt text, permission rules, REPL hiding, and input parameter
+  names with the exposed contract.  Keep implementation names only as
+  code organization details, and add aliases only for backwards
+  compatibility.
+
+- **Runtime lifecycle is a control-plane concern, not a shell side
+  effect**: letting an Agent run `kill` against its own runtime can cut
+  the turn before the tool result is persisted, producing orphan
+  `tool_calls` and provider-invalid history on the next request.
+  Self-restart must be a narrow tool (`RestartSelf`) that first returns
+  a normal tool result, then asks Supervisor to restart the current Agent
+  after the response has had time to flush.  Full runtime restarts belong
+  to operator ACP/CLI methods such as `/kernel restart`, not model-visible
+  Bash commands.
+
+- **OpenAI-compatible tool results must repair adjacency, not just
+  existence**: providers such as DeepSeek reject any assistant message
+  with `tool_calls` unless matching tool messages immediately follow it.
+  A later user retry or assistant error means appending a synthetic result
+  at the end is too late.  Repair the retained conversation by inserting
+  synthetic error tool results directly after the offending assistant
+  message, remove duplicate/orphan tool results that no longer have a
+  preceding assistant `tool_calls`, persist a `HistorySnapshot`, then
+  retry the provider call once.
+
+- **Resume state must restore behavior, not only UI metadata**:
+  after a Primary Runtime restart, `session/resume` may correctly return
+  `modes.currentModeId="bypass"` while the newly constructed Orchestrator
+  remains in its default mode.  The CLI then displays Bypass but the
+  ToolAuthorizer still asks for permissions.  When loading a session from
+  disk, apply the persisted mode to both `Session.mode_id` and
+  `session.orchestrator.set_mode(...)`, then verify with a live
+  restart/resume/tool probe, not only a resume response assertion.
+
 - **CLI/Probe live smokes must assert ACP initialization, not just socket auth**:
   before 2026-05-03 the kernel had a non-ACP echo stack, so a live
   CLI smoke could connect and authenticate successfully but hang forever
@@ -271,6 +310,21 @@ wall twice.
   internal blocks in Kernel title generation, summarise skill activations
   as `/skill args`, and keep CLI list/welcome renderers defensive against
   old dirty titles.
+
+- **Current skill state must override stale skill context.**  Deleting
+  `~/.deepcli/skills/*/SKILL.md` after Kernel startup leaves two stale
+  surfaces unless handled explicitly: the in-memory SkillRegistry and old
+  assistant/system-reminder text already persisted in a conversation.  Prune
+  missing file-backed skills whenever listings/lookups/activations are read,
+  emit `skills_changed` so command projections update, and inject a current
+  empty Available skills reminder so resumed sessions ignore old skill lists.
+
+- **OpenAI-compatible tool histories must be sealed before resume.**  If a
+  process dies after an assistant `tool_calls` message is persisted but
+  before matching `tool_result` messages are written, the next user prompt
+  creates a provider-invalid transcript.  Seal pending tool uses with
+  synthetic error results before appending the resumed prompt; do not rely on
+  provider formatters to silently repair or discard history.
 
 - **Primary Runtime needs the same trailing subsystem order as the
   kernel app.**  Cron tools looked registered but failed under Probe

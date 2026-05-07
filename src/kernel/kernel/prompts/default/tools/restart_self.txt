@@ -1,0 +1,5 @@
+Request a supervised restart of this agent runtime after the current turn is saved.
+
+Use this when your own runtime needs to reload or recover. Do not use shell
+commands to kill DeepCLI Supervisor, Kernel, Hub, Access Agent, or Agent Runtime
+processes.

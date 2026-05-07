@@ -1,7 +1,7 @@
 """REPL — batch-execution wrapper for primitive tools.
 
-When enabled via ``ToolFlags.repl``, primitive tools (Bash, FileRead,
-FileEdit, FileWrite, Glob, Grep, Agent, etc.) are hidden from the LLM's
+When enabled via ``ToolFlags.repl``, primitive tools (Bash, Read,
+Edit, Write, Glob, Grep, Agent, etc.) are hidden from the LLM's
 direct tool list.  The LLM calls REPL instead, submitting an array of
 tool invocations that are dispatched internally and returned as a single
 combined result.
@@ -44,8 +44,11 @@ REPL_HIDDEN_TOOLS: frozenset[str] = frozenset(
         "Cmd",
         "PowerShell",
         "Python",
+        "Read",
         "FileRead",
+        "Edit",
         "FileEdit",
+        "Write",
         "FileWrite",
         "Glob",
         "Grep",

@@ -7,7 +7,7 @@ via a temporary flags file + ``MUSTANG_FLAGS_PATH`` env var.
 Coverage map
 ------------
 test_repl_hides_primitive_tools   → ToolManager registers REPL, snapshot hides primitives
-test_repl_batch_execution         → LLM uses REPL to batch-execute Glob + FileRead
+test_repl_batch_execution         → LLM uses REPL to batch-execute Glob + Read
 test_repl_error_inline            → REPL reports inner tool errors without crashing
 
 Port strategy: uses 18202 to avoid collision with the main E2E kernel on 18200

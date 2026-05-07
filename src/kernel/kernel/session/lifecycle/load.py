@@ -25,6 +25,7 @@ from kernel.session.events import (
     SessionInfoChangedEvent,
 )
 from kernel.session.message_serde import deserialize_message
+from kernel.session.runtime.config_options import MODE_CONFIG_ID
 from kernel.session.runtime.state import Session
 
 UTC = timezone.utc
@@ -203,6 +204,11 @@ class SessionLoaderMixin(_SessionMixinBase):
                 session_id,
                 len(state.history_messages),
             )
+        restored_mode = state.mode_id or state.config_options.get(MODE_CONFIG_ID)
+        if restored_mode:
+            state.mode_id = restored_mode
+            state.config_options[MODE_CONFIG_ID] = restored_mode
+
         orchestrator, task_registry = self._make_orchestrator(
             session_id, cwd, state.history_messages, None
         )
@@ -221,4 +227,6 @@ class SessionLoaderMixin(_SessionMixinBase):
             task_registry=task_registry,
             last_event_id=state.last_event_id,
         )
+        if restored_mode:
+            session.orchestrator.set_mode(restored_mode)
         self._sessions[session_id] = session

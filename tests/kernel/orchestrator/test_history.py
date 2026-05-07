@@ -135,6 +135,79 @@ def test_append_tool_results_noop_when_empty() -> None:
     assert len(h.messages) == 0
 
 
+def test_append_interrupted_tool_results_seals_pending_tool_uses() -> None:
+    h = ConversationHistory()
+    h.append_user([TextContent(text="q")])
+    tc1 = ToolUseContent(id="tc_1", name="bash", input={})
+    tc2 = ToolUseContent(id="tc_2", name="Read", input={"file_path": "x"})
+    h.append_assistant(text="", thoughts=[], tool_calls=[tc1, tc2])
+
+    sealed = h.append_interrupted_tool_results("Interrupted before result")
+
+    assert sealed == ["tc_1", "tc_2"]
+    assert h.pending_tool_use_ids() == []
+    assert isinstance(h.messages[-1], UserMessage)
+    result_blocks = [b for b in h.messages[-1].content if isinstance(b, ToolResultContent)]
+    assert [b.tool_use_id for b in result_blocks] == ["tc_1", "tc_2"]
+    assert all(b.is_error for b in result_blocks)
+
+
+def test_append_interrupted_tool_results_noops_without_pending_tool_uses() -> None:
+    h = ConversationHistory()
+
+    sealed = h.append_interrupted_tool_results("Interrupted before result")
+
+    assert sealed == []
+    assert h.messages == []
+
+
+def test_repair_orphan_tool_results_inserts_after_older_assistant() -> None:
+    h = ConversationHistory()
+    h.append_user([TextContent(text="q")])
+    h.append_assistant(
+        text="",
+        thoughts=[],
+        tool_calls=[ToolUseContent(id="tc_1", name="Bash", input={"command": "kill 1"})],
+    )
+    h.append_user([TextContent(text="continue")])
+    h.append_assistant(text="Error: provider rejected history", thoughts=[], tool_calls=[])
+
+    repaired = h.repair_orphan_tool_results("Interrupted before tool result was recorded")
+
+    assert repaired == ["tc_1"]
+    repair_msg = h.messages[2]
+    assert isinstance(repair_msg, UserMessage)
+    assert isinstance(repair_msg.content[0], ToolResultContent)
+    assert repair_msg.content[0].tool_use_id == "tc_1"
+    assert repair_msg.content[0].is_error is True
+    assert isinstance(h.messages[3], UserMessage)
+
+
+def test_repair_orphan_tool_results_removes_duplicate_tool_result() -> None:
+    h = ConversationHistory()
+    h.append_assistant(
+        text="",
+        thoughts=[],
+        tool_calls=[ToolUseContent(id="tc_1", name="Bash", input={"command": "kill 1"})],
+    )
+    h.append_tool_results([ToolResultContent(tool_use_id="tc_1", content="done")])
+    h.append_user([TextContent(text="continue")])
+    h.append_tool_results(
+        [ToolResultContent(tool_use_id="tc_1", content="duplicate", is_error=True)]
+    )
+
+    repaired = h.repair_orphan_tool_results("Interrupted before tool result was recorded")
+
+    assert repaired == ["tc_1"]
+    assert len(h.messages) == 3
+    assert isinstance(h.messages[0], AssistantMessage)
+    assert isinstance(h.messages[1], UserMessage)
+    assert isinstance(h.messages[1].content[0], ToolResultContent)
+    assert h.messages[1].content[0].content == "done"
+    assert isinstance(h.messages[2], UserMessage)
+    assert isinstance(h.messages[2].content[0], TextContent)
+
+
 # ---------------------------------------------------------------------------
 # update_token_count
 # ---------------------------------------------------------------------------

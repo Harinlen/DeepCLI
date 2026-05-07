@@ -1,4 +1,4 @@
-"""E2E tests for FileRead using real sample assets.
+"""E2E tests for Read using real sample assets.
 
 Uses ``tests/assert/sample.png`` and ``tests/assert/sample.pdf`` to
 verify the full kernel pipeline with real image and PDF files.
@@ -64,7 +64,7 @@ def test_read_real_png(kernel: tuple[int, str]) -> None:
             sid = await c.new_session()
             async for event in c.prompt(
                 sid,
-                f"Use the FileRead tool to read this image: {img_path}\n"
+                f"Use the Read tool to read this image: {img_path}\n"
                 "Describe what you see. Be concise (1-2 sentences).",
             ):
                 if isinstance(event, AgentChunk):
@@ -80,8 +80,8 @@ def test_read_real_png(kernel: tuple[int, str]) -> None:
 
     tool_events, text, stop_reason = _run(_run_test())
 
-    assert any(e.title == "FileRead" for e in tool_events), (
-        f"Expected FileRead call, got: {[e.title for e in tool_events]}"
+    assert any(e.title == "Read" for e in tool_events), (
+        f"Expected Read call, got: {[e.title for e in tool_events]}"
     )
     assert stop_reason == "end_turn"
     assert len(text) > 0
@@ -107,7 +107,7 @@ def test_read_real_pdf(kernel: tuple[int, str]) -> None:
             sid = await c.new_session()
             async for event in c.prompt(
                 sid,
-                f"Use the FileRead tool to read this PDF: {pdf_path}\n"
+                f"Use the Read tool to read this PDF: {pdf_path}\n"
                 "Summarize the content. Be concise (2-3 sentences).",
             ):
                 if isinstance(event, AgentChunk):
@@ -123,8 +123,8 @@ def test_read_real_pdf(kernel: tuple[int, str]) -> None:
 
     tool_events, text, stop_reason = _run(_run_test())
 
-    assert any(e.title == "FileRead" for e in tool_events), (
-        f"Expected FileRead call, got: {[e.title for e in tool_events]}"
+    assert any(e.title == "Read" for e in tool_events), (
+        f"Expected Read call, got: {[e.title for e in tool_events]}"
     )
     assert stop_reason == "end_turn"
     assert len(text) > 0

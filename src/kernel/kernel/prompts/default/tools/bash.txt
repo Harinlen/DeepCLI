@@ -6,11 +6,13 @@ IMPORTANT: Avoid using this tool to run `find`, `grep`, `cat`, `head`, `tail`, `
 
  - File search: Use Glob (NOT find or ls)
  - Content search: Use Grep (NOT grep or rg)
- - Read files: Use FileRead (NOT cat/head/tail)
- - Edit files: Use FileEdit (NOT sed/awk)
- - Write files: Use FileWrite (NOT echo >/cat <<EOF)
+ - Read files: Use Read (NOT cat/head/tail)
+ - Edit files: Use Edit (NOT sed/awk)
+ - Write files: Use Write (NOT echo >/cat <<EOF)
  - Communication: Output text directly (NOT echo/printf)
 While the Bash tool can do similar things, it's better to use the built-in tools as they provide a better user experience and make it easier to review tool calls and give permission.
+
+IMPORTANT: Do not use Bash to kill or restart DeepCLI Supervisor, Kernel, Hub, Access Agent, or Agent Runtime processes. If this Agent Runtime needs to restart, use RestartSelf. If the full runtime needs to restart, ask the user to run `/kernel restart`.
 
 # Instructions
  - If your command will create new directories or files, first use this tool to run `ls` to verify the parent directory exists and is the correct location.

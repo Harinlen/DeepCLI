@@ -371,7 +371,7 @@ def test_probe_file_read_tool_observable_through_router(
     text, tools, updates = _run(_test())
 
     assert "PHASE2_FILE_READ_OK" in text
-    assert "FileRead" in tools
+    assert "Read" in tools
     assert "completed" in updates
 
 
@@ -406,7 +406,7 @@ def test_probe_permission_allow_executes_file_write(
     text, tools, saw_permission = _run(_test())
 
     assert saw_permission is True
-    assert "FileWrite" in tools
+    assert "Write" in tools
     assert "PHASE2_PERMISSION_ALLOWED" in text
     assert (workspace / "phase2_existing.txt").read_text(encoding="utf-8") == "new content\n"
 
@@ -916,20 +916,20 @@ def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
     if "PHASE2_FILE_READ" in user_text:
         return _tool_call(
             "call_file_read",
-            "FileRead",
-            {"path": "phase2_fixture.txt"},
+            "Read",
+            {"file_path": "phase2_fixture.txt"},
         )
     if "PHASE2_FILE_WRITE_ALLOW" in user_text:
         return _tool_call(
             "call_file_write",
-            "FileWrite",
-            {"path": "phase2_existing.txt", "content": "new content\n"},
+            "Write",
+            {"file_path": "phase2_existing.txt", "content": "new content\n"},
         )
     if "PHASE2_FILE_WRITE_REJECT" in user_text:
         return _tool_call(
             "call_file_write_reject",
-            "FileWrite",
-            {"path": "phase2_reject.txt", "content": "should not exist\n"},
+            "Write",
+            {"file_path": "phase2_reject.txt", "content": "should not exist\n"},
         )
     if "PHASE2_BASH" in user_text:
         return _tool_call("call_bash", "Bash", {"command": "printf PHASE2_BASH_STDOUT"})

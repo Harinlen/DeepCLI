@@ -13,7 +13,7 @@ WebFetch 现在已经有轻量本地路径和多个可选 provider 路径，但�
 - 当前 Playwright backend 只是裸 `goto + document.body.innerText`，承担了浏览器安装成本，却没有足够强的正文抽取价值。
 - Firecrawl 很强，但它是云服务，免费额度有限，不能当成默认长期答案。
 
-真实需求不是“在 OOBE 里装一次依赖”，而是建立一套长期可管理的 WebFetch 能力模型：用户第一次启动后，以及后续进入 CLI 后，都应该能检查、安装、验证、启用、禁用、偏好后端。OOBE 只负责首次提示和引导，不应该成为唯一管理入口。
+真实需求是建立一套长期可管理的 WebFetch 命令面：用户进入 CLI 后，应该能检查、安装、验证、启用、禁用、偏好后端。
 
 ## 决策
 
@@ -29,11 +29,7 @@ WebFetch 现在已经有轻量本地路径和多个可选 provider 路径，但�
 
    运行期冻结的功能启用/禁用属于 `FlagManager`。环境变量仍然可以用于 provider credentials 或兼容性覆盖，但不能作为产品 feature gate。
 
-4. OOBE 不拥有 WebFetch 安装逻辑。
-
-   OOBE 应该展示这个能力，并把用户带到后续 CLI 也能访问的同一套管理动作。用户完成 onboarding 之后，仍然必须能管理 WebFetch 后端。
-
-5. 后端安装、验证、诊断是一级用户操作。
+4. 后端安装、验证、诊断是一级用户操作。
 
    产品应该明确展示 installed/missing 状态、成本模型、依赖、健康检查、精确安装动作，而不是静默失败，或让用户从 traceback 里猜该装什么。
 
@@ -112,7 +108,7 @@ tools:
 
 ## Kernel Surface
 
-新增 Kernel-owned methods，供 CLI 和 OOBE 共用：
+新增 Kernel-owned methods，供 `/webfetch` 管理命令调用：
 
 ```text
 _mustang.agent/web_fetch/backends
@@ -134,7 +130,7 @@ _mustang.agent/web_fetch/set_policy
 
 ## CLI Surface
 
-提供长期可用的管理命令，而不是只在 OOBE 里出现：
+提供长期可用的管理命令：
 
 ```text
 /webfetch
@@ -155,28 +151,6 @@ deepcli webfetch doctor
 ```
 
 TUI 应该把它做成运维/设置界面，不是 marketing 页面：backend 表格、状态、install/verify 按钮、warning、下一步动作。
-
-## OOBE
-
-OOBE 应该是进入同一套管理面的引导入口。
-
-建议 first-run prompt：
-
-```text
-Enhanced WebFetch can install local browser extraction for JavaScript-heavy
-pages using Crawl4AI. It is free software, but it installs browser dependencies
-and uses local CPU/memory.
-```
-
-选项：
-
-```text
-Install now
-Manage WebFetch
-Skip for now
-```
-
-`Install now` 调用和 `/webfetch install crawl4ai` 相同的 Kernel install action。`Manage WebFetch` 打开长期管理界面。`Skip for now` 保持 WebFetch 通过 `httpx`/Readability/provider paths 可用。
 
 ## Crawl4AI Backend
 
@@ -214,7 +188,7 @@ OpenManus 是 Crawl4AI 使用方式的最近参考：
 web-crawl4ai = ["crawl4ai>=..."]
 ```
 
-OOBE/CLI 安装动作应该在当前 active Kernel Python environment 里执行：
+`/webfetch install crawl4ai` 安装动作应该在当前 active Kernel Python environment 里执行：
 
 ```bash
 uv pip install crawl4ai
@@ -272,7 +246,6 @@ docs/kernel/subsystems/tools.md
 - 本地 JavaScript-rendered page：`httpx` 抓不到或缺失动态文本；安装 Crawl4AI 后能抓到。
 - `/webfetch backends` 报告准确 installed/missing 状态。
 - `/webfetch install crawl4ai` 使用 allowlisted install recipe，并要求权限确认。
-- OOBE 打开或调用同一个管理动作，不重复实现安装逻辑。
 
 ## 实施切片
 
@@ -282,7 +255,7 @@ docs/kernel/subsystems/tools.md
 
 2. Crawl4AI backend。
 
-   增加 optional backend、测试、fallback-chain 接入。先不接 OOBE。
+   增加 optional backend、测试、fallback-chain 接入。
 
 3. 删除 Playwright backend。
 
@@ -292,11 +265,7 @@ docs/kernel/subsystems/tools.md
 
    增加由 Kernel methods 支撑的 `/webfetch` 命令。
 
-5. OOBE 接入。
-
-   增加 first-run prompt，并把选项路由到同一套 backend-management methods。
-
-6. Policy controls。
+5. Policy controls。
 
    只有当产品确实需要时，再加入 FlagManager kill switches 和 backend preference policy。
 

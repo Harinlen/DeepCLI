@@ -82,6 +82,13 @@ _BUILTIN_COMMANDS: list[CommandDef] = [
         acp_method=MustangMethod.SECRETS_AUTH,
         subcommands=["set", "get", "list", "delete", "import-env"],
     ),
+    CommandDef(
+        name="kernel",
+        description="Inspect or restart the local DeepCLI runtime",
+        usage="/kernel [status | restart]",
+        acp_method=MustangMethod.RUNTIME_STATUS,
+        subcommands=["status", "restart"],
+    ),
 ]
 
 

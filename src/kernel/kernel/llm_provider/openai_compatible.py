@@ -113,9 +113,10 @@ class OpenAICompatibleProvider(Provider):
                     raise PromptTooLongError(f"Prompt too long (HTTP 413): {self._chat_url}")
                 if resp.status_code >= 400:
                     raw = await resp.aread()
+                    detail = _error_detail(raw)
                     raise ProviderError(
-                        f"HTTP {resp.status_code} from {self._chat_url}: "
-                        f"{raw.decode(errors='replace')[:200]}"
+                        f"OpenAI-compatible request rejected "
+                        f"(HTTP {resp.status_code}) from {self._chat_url}: {detail}"
                     )
 
                 # index → {id, name, arguments}
@@ -267,3 +268,20 @@ class OpenAICompatibleProvider(Provider):
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+
+def _error_detail(raw: bytes) -> str:
+    """Return a compact provider error detail from an HTTP error body."""
+    try:
+        payload = orjson.loads(raw)
+    except orjson.JSONDecodeError:
+        return raw.decode(errors="replace")[:500]
+
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(error, dict):
+        message = error.get("message")
+        if isinstance(message, str) and message:
+            return message[:500]
+    if isinstance(error, str) and error:
+        return error[:500]
+    return raw.decode(errors="replace")[:500]

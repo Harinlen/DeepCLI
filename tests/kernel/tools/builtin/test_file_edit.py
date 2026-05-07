@@ -71,6 +71,12 @@ class TestValidateInput:
                 {"path": "", "old_string": "a", "new_string": "b"}, _RiskCtx(tmp_path)
             )
 
+    async def test_valid_file_path(self, tmp_path: Path) -> None:
+        await self.tool.validate_input(
+            {"file_path": "f.txt", "old_string": "a", "new_string": "b"},
+            _RiskCtx(tmp_path),
+        )
+
     async def test_non_string_old(self, tmp_path: Path) -> None:
         with pytest.raises(ToolInputError, match="old_string"):
             await self.tool.validate_input(

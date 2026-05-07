@@ -659,6 +659,42 @@ async def test_resume_session_binds_without_replay(manager: SessionManager, tmp_
     resume_ctx.sender.notify.assert_not_called()
 
 
+async def test_resume_session_restores_mode_into_new_orchestrator(
+    manager: SessionManager,
+    tmp_path: Path,
+) -> None:
+    first_orch = MagicMock()
+    first_orch.close = AsyncMock()
+    first_orch.query = MagicMock(side_effect=_empty_query)
+    first_orch.last_turn_usage = (0, 0)
+    first_orch.stop_reason = MagicMock()
+    first_orch.stop_reason.value = "end_turn"
+
+    reloaded_orch = MagicMock()
+    reloaded_orch.close = AsyncMock()
+    reloaded_orch.query = MagicMock(side_effect=_empty_query)
+    reloaded_orch.last_turn_usage = (0, 0)
+    reloaded_orch.stop_reason = MagicMock()
+    reloaded_orch.stop_reason.value = "end_turn"
+    manager._make_orchestrator = MagicMock(side_effect=[(first_orch, None), (reloaded_orch, None)])
+
+    result = await manager.new(_make_ctx(), NewSessionParams(cwd=str(tmp_path)))
+    await manager.set_mode(
+        _make_ctx(),
+        SetModeParams(session_id=result.session_id, mode_id="bypass"),
+    )
+    manager._sessions.pop(result.session_id)
+
+    resume_result = await manager.resume_session(
+        _make_ctx("conn-resume"),
+        ResumeSessionParams(session_id=result.session_id, cwd=str(tmp_path)),
+    )
+
+    assert resume_result.modes.current_mode_id == "bypass"
+    assert manager._sessions[result.session_id].mode_id == "bypass"
+    reloaded_orch.set_mode.assert_called_once_with("bypass")
+
+
 async def test_close_session_releases_runtime_but_keeps_record(
     manager: SessionManager, tmp_path: Path
 ) -> None:

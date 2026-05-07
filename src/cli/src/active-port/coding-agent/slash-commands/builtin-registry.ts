@@ -38,6 +38,8 @@ export async function executeBuiltinSlashCommand(
 			case "memory":
 				await ctx.handleMemoryCommand?.(`/memory ${parsed.args ?? ""}`.trim());
 				return true;
+			case "kernel":
+				return await executeKernelCommand(ctx, parsed.args ?? "");
 			case "plan":
 				await ctx.handlePlanModeCommand?.(parsed.args ?? "");
 				return true;
@@ -65,6 +67,41 @@ export async function executeBuiltinSlashCommand(
 		ctx.showError?.(`/${parsed.name} failed: ${message}`);
 		return true;
 	}
+}
+
+async function executeKernelCommand(ctx: any, argsText: string): Promise<boolean> {
+	const args = splitArgs(argsText);
+	const subcommand = args[0] ?? "status";
+	if (subcommand === "status") {
+		const result = await ctx.session?.runtimeStatus?.();
+		renderKernelStatus(ctx, result?.status ?? {});
+		return true;
+	}
+	if (subcommand === "restart") {
+		const result = await ctx.session?.runtimeRestart?.("CLI /kernel restart");
+		ctx.showStatus?.("Kernel runtime restarted.");
+		renderKernelStatus(ctx, result?.status ?? {});
+		return true;
+	}
+	ctx.showWarning?.("Usage: /kernel [status|restart]");
+	return true;
+}
+
+function renderKernelStatus(ctx: any, status: Record<string, unknown>): void {
+	const runtimeStatus = String(status.status ?? (status.ready ? "ready" : "unknown"));
+	const children = status.children && typeof status.children === "object"
+		? Object.entries(status.children as Record<string, any>).map(([name, child]) => {
+			const pid = child?.pid ?? "?";
+			const running = child?.running === false ? "stopped" : "running";
+			return `${theme.fg("muted", name.padEnd(8))} pid=${pid} ${running}`;
+		})
+		: [];
+	ctx.chatContainer?.addChild?.(new Text(theme.fg("accent", "Kernel runtime"), 1, 0));
+	ctx.chatContainer?.addChild?.(new Text(`status: ${runtimeStatus}`, 1, 0));
+	for (const line of children) {
+		ctx.chatContainer?.addChild?.(new Text(line, 1, 0));
+	}
+	ctx.ui?.requestRender?.();
 }
 
 function parseBuiltinSlashCommand(input: string): ParsedBuiltinSlashCommand | undefined {

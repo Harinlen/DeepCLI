@@ -82,7 +82,17 @@ async def test_command_manager_startup_registers_builtins(
     cmds = mgr.list_commands()
     names = [c.name for c in cmds]
     # All documented built-in commands must be present.
-    for expected in ("help", "model", "plan", "compact", "session", "cost", "memory", "auth"):
+    for expected in (
+        "help",
+        "model",
+        "plan",
+        "compact",
+        "session",
+        "cost",
+        "memory",
+        "auth",
+        "kernel",
+    ):
         assert expected in names, f"Expected built-in command {expected!r} missing"
     assert "cron" not in names
 
@@ -103,6 +113,15 @@ async def test_command_manager_cost_uses_namespaced_method(module_table: MagicMo
     cmd = mgr.lookup("cost")
     assert cmd is not None
     assert cmd.acp_method == MustangMethod.SESSION_GET_USAGE
+
+
+async def test_command_manager_kernel_uses_runtime_status_method(module_table: MagicMock) -> None:
+    mgr = CommandManager(module_table)
+    await mgr.startup()
+
+    cmd = mgr.lookup("kernel")
+    assert cmd is not None
+    assert cmd.acp_method == MustangMethod.RUNTIME_STATUS
 
 
 async def test_command_manager_lookup_miss(module_table: MagicMock) -> None:

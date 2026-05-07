@@ -40,7 +40,18 @@ async def test_startup_registers_all_six_builtins(
     mgr = ToolManager(module_table)
     await mgr.startup()
 
-    for name in ("Bash", "FileRead", "FileEdit", "FileWrite", "Glob", "Grep", "ToolSearch"):
+    for name in (
+        "Bash",
+        "Read",
+        "FileRead",
+        "Edit",
+        "FileEdit",
+        "Write",
+        "FileWrite",
+        "Glob",
+        "Grep",
+        "ToolSearch",
+    ):
         assert mgr.lookup(name) is not None, f"missing {name}"
 
 
@@ -54,9 +65,21 @@ async def test_snapshot_for_session_emits_schemas(
     snap = mgr.snapshot_for_session(session_id="s-1")
     names = [s.name for s in snap.schemas]
     assert sorted(names) == [
-        "Agent", "Bash", "FileEdit", "FileRead", "FileWrite",
-        "Glob", "Grep", "Python", "SendMessage", "Skill", "TaskOutput", "TaskStop",
-        "TodoWrite", "ToolSearch",
+        "Agent",
+        "Bash",
+        "Edit",
+        "Glob",
+        "Grep",
+        "Python",
+        "Read",
+        "RestartSelf",
+        "SendMessage",
+        "Skill",
+        "TaskOutput",
+        "TaskStop",
+        "TodoWrite",
+        "ToolSearch",
+        "Write",
     ]
 
 
@@ -70,12 +93,12 @@ async def test_snapshot_excludes_mutating_in_plan_mode(
     snap = mgr.snapshot_for_session(session_id="s-1", plan_mode=True)
     names = {s.name for s in snap.schemas}
     # Read / search tools pass through
-    assert "FileRead" in names
+    assert "Read" in names
     assert "Glob" in names
     # Mutating / execute tools are filtered
     assert "Bash" not in names
-    assert "FileEdit" not in names
-    assert "FileWrite" not in names
+    assert "Edit" not in names
+    assert "Write" not in names
 
 
 @pytest.mark.anyio
@@ -146,9 +169,7 @@ async def test_startup_injects_prompt_manager_into_every_tool(
     await mgr.startup()
 
     for tool, _layer in mgr._registry.all_tools():
-        assert tool._prompt_manager is pm, (
-            f"tool {tool.name} did not receive PromptManager"
-        )
+        assert tool._prompt_manager is pm, f"tool {tool.name} did not receive PromptManager"
 
 
 @pytest.mark.anyio

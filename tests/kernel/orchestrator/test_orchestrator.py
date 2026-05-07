@@ -397,6 +397,167 @@ async def test_provider_error_yields_query_error(
     assert orc.stop_reason == StopReason.error
 
 
+async def test_new_query_seals_orphan_tool_use_before_provider_call(
+    make_orchestrator, fake_provider: FakeLLMProvider
+) -> None:
+    from kernel.llm.types import AssistantMessage, ToolResultContent, ToolUseContent, UserMessage
+
+    fake_provider.add_text_response("ok")
+    orc = make_orchestrator()
+    orc._history.messages.extend(
+        [
+            AssistantMessage(
+                [
+                    ToolUseContent(
+                        id="tc_orphan",
+                        name="Read",
+                        input={"file_path": "/tmp/missing"},
+                    )
+                ]
+            )
+        ]
+    )
+
+    await collect(orc.query([TextContent(text="continue")], on_permission=no_permission))
+
+    provider_messages = fake_provider.calls[0]["messages"]
+    assert provider_messages is not orc._history.messages
+    assert len(provider_messages) >= 3
+    assert isinstance(provider_messages[0], AssistantMessage)
+    assert isinstance(provider_messages[1], UserMessage)
+    assert isinstance(provider_messages[2], UserMessage)
+
+    sealed_blocks = [b for b in provider_messages[1].content if isinstance(b, ToolResultContent)]
+    assert len(sealed_blocks) == 1
+    assert sealed_blocks[0].tool_use_id == "tc_orphan"
+    assert sealed_blocks[0].is_error is True
+    assert "Interrupted" in sealed_blocks[0].content
+    assert orc._history.pending_tool_use_ids() == []
+
+
+async def test_provider_missing_tool_result_error_repairs_history_and_retries(
+    make_orchestrator, fake_provider: FakeLLMProvider
+) -> None:
+    from kernel.llm.types import AssistantMessage, ToolResultContent, ToolUseContent, UserMessage
+
+    call_count = 0
+    orc = make_orchestrator()
+
+    async def first_rejects_then_ok(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        fake_provider.calls.append(kwargs)
+        if call_count == 1:
+            orc._history.messages.append(
+                AssistantMessage(
+                    [
+                        ToolUseContent(
+                            id="tc_orphan",
+                            name="Bash",
+                            input={"command": "kill 1"},
+                        )
+                    ]
+                )
+            )
+            raise ProviderError(
+                "OpenAI-compatible request rejected (HTTP 400): An assistant message with "
+                "'tool_calls' must be followed by tool messages responding to each "
+                "'tool_call_id'. (insufficient tool messages following tool_calls message)"
+            )
+
+        from kernel.llm.types import TextChunk, UsageChunk
+
+        async def gen():
+            yield TextChunk(content="recovered")
+            yield UsageChunk(input_tokens=10, output_tokens=2)
+
+        return gen()
+
+    fake_provider.stream = first_rejects_then_ok
+
+    events = await collect(
+        orc.query([TextContent(text="continue again")], on_permission=no_permission)
+    )
+
+    assert not [event for event in events if isinstance(event, QueryError)]
+    assert len(fake_provider.calls) == 2
+    retry_messages = fake_provider.calls[1]["messages"]
+    assert isinstance(retry_messages[1], AssistantMessage)
+    assert isinstance(retry_messages[2], UserMessage)
+    repair_blocks = [
+        block for block in retry_messages[2].content if isinstance(block, ToolResultContent)
+    ]
+    assert [block.tool_use_id for block in repair_blocks] == ["tc_orphan"]
+    assert repair_blocks[0].is_error is True
+    assert orc.stop_reason == StopReason.end_turn
+
+
+async def test_provider_orphan_tool_message_error_repairs_history_and_retries(
+    make_orchestrator, fake_provider: FakeLLMProvider
+) -> None:
+    from kernel.llm.types import AssistantMessage, ToolResultContent, ToolUseContent, UserMessage
+
+    call_count = 0
+    orc = make_orchestrator()
+    orc._history.messages.extend(
+        [
+            AssistantMessage(
+                [ToolUseContent(id="tc_done", name="Bash", input={"command": "echo ok"})]
+            ),
+            UserMessage([ToolResultContent(tool_use_id="tc_done", content="ok")]),
+            UserMessage([TextContent(text="continue")]),
+        ]
+    )
+
+    async def first_rejects_then_ok(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        fake_provider.calls.append(kwargs)
+        if call_count == 1:
+            orc._history.messages.append(
+                UserMessage(
+                    [
+                        ToolResultContent(
+                            tool_use_id="tc_done",
+                            content="duplicate",
+                            is_error=True,
+                        )
+                    ]
+                )
+            )
+            raise ProviderError(
+                "OpenAI-compatible request rejected (HTTP 400): Messages with role "
+                "'tool' must be a response to a preceding message with 'tool_calls'."
+            )
+
+        from kernel.llm.types import TextChunk, UsageChunk
+
+        async def gen():
+            yield TextChunk(content="recovered")
+            yield UsageChunk(input_tokens=10, output_tokens=2)
+
+        return gen()
+
+    fake_provider.stream = first_rejects_then_ok
+
+    events = await collect(
+        orc.query([TextContent(text="continue again")], on_permission=no_permission)
+    )
+
+    assert not [event for event in events if isinstance(event, QueryError)]
+    assert len(fake_provider.calls) == 2
+    retry_messages = fake_provider.calls[1]["messages"]
+    tool_result_count = sum(
+        1
+        for message in retry_messages
+        if isinstance(message, UserMessage)
+        for block in message.content
+        if isinstance(block, ToolResultContent) and block.tool_use_id == "tc_done"
+    )
+    assert tool_result_count == 1
+    assert orc.stop_reason == StopReason.end_turn
+
+
 # ---------------------------------------------------------------------------
 # PromptTooLongError → reactive compaction
 # ---------------------------------------------------------------------------

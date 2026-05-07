@@ -168,6 +168,18 @@ class PromptBuilder:
                         f"{listing}"
                     )
                 )
+            else:
+                sections.append(
+                    system_reminder_section(
+                        "# Available skills\n\n"
+                        "No model-invocable skills are currently available through "
+                        "the Skill tool.\n\n"
+                        "Ignore earlier available-skill listings in this conversation; "
+                        "they may be stale after skill files were removed. Do not claim "
+                        "a skill can be used unless it appears in this current "
+                        "Available skills section."
+                    )
+                )
 
         # 12. Git commit/PR instructions (static, cacheable)
         if prompts is not None and prompts.has("orchestrator/git_commit_pr"):

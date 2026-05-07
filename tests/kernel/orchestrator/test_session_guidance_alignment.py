@@ -213,13 +213,13 @@ class TestConditionalAssembly:
         """
         orch = make_orch()
         # Mirrors {s.name for s in snapshot.schemas} when plan_mode=True:
-        # mutating tools (Bash, FileEdit, FileWrite) are absent from schemas;
+        # mutating tools (Bash, Edit, Write) are absent from schemas;
         # Agent (orchestrate) and ExitPlanMode (other) survive into schemas.
         plan_mode_tool_names = {
             "Agent",
             "AskUserQuestion",
             "ExitPlanMode",
-            "FileRead",
+            "Read",
             "Glob",
             "Grep",
             "TodoWrite",

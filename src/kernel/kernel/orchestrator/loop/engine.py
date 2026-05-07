@@ -24,6 +24,7 @@ from kernel.orchestrator.events import (
     CancelledEvent,
     CompactionEvent,
     HistoryAppend,
+    HistorySnapshot,
     OrchestratorEvent,
     QueryError,
     TextDelta,
@@ -48,6 +49,7 @@ logger = logging.getLogger(__name__)
 
 MAX_TRANSIENT_STREAM_RETRIES = 2
 TRANSIENT_STREAM_ERROR_CODES = frozenset({"transient_transport"})
+INTERRUPTED_TOOL_RESULT = "Interrupted before tool result was recorded"
 
 
 @dataclass
@@ -59,6 +61,7 @@ class TurnState:
     max_tokens_override: int | None = None
     max_tokens_retries: int = 0
     transient_stream_retries: int = 0
+    protocol_repair_retries: int = 0
 
     def start_next_iteration(self) -> None:
         """Advance to the next LLM/tool loop iteration.
@@ -133,6 +136,14 @@ async def run_query(
         if blocked:
             yield UserPromptBlocked(reason="user_prompt_submit hook blocked")
             return
+        repaired_ids = orchestrator._history.repair_orphan_tool_results(INTERRUPTED_TOOL_RESULT)
+        if repaired_ids:
+            logger.info(
+                "Orchestrator[%s]: repaired %d pending tool result(s) before new turn",
+                orchestrator._session_id,
+                len(repaired_ids),
+            )
+            yield HistorySnapshot(messages=list(orchestrator._history.messages))
         orchestrator._history.append_user(
             to_text_content(prompt, reminders=reminders, prompts=orchestrator._deps.prompts)
         )
@@ -242,6 +253,20 @@ async def run_query(
                 turn.rewind_retry_iteration()
                 continue
             except ProviderError as exc:
+                if (
+                    _is_tool_protocol_error(exc)
+                    and turn.protocol_repair_retries < 1
+                    and orchestrator._history.repair_orphan_tool_results(INTERRUPTED_TOOL_RESULT)
+                ):
+                    turn.protocol_repair_retries += 1
+                    turn.rewind_retry_iteration()
+                    logger.info(
+                        "Orchestrator[%s]: repaired orphan tool result(s) after provider "
+                        "protocol rejection; retrying turn",
+                        orchestrator._session_id,
+                    )
+                    yield HistorySnapshot(messages=list(orchestrator._history.messages))
+                    continue
                 yield QueryError(message=str(exc))
                 orchestrator._stop_reason = StopReason.error
                 return
@@ -303,13 +328,8 @@ async def run_query(
                 yield HistoryAppend(message=orchestrator._history.messages[-1])
     except asyncio.CancelledError:
         orchestrator._stop_reason = StopReason.cancelled
-        orphan_ids = orchestrator._history.pending_tool_use_ids()
+        orphan_ids = orchestrator._history.append_interrupted_tool_results("Interrupted by user")
         if orphan_ids:
-            synthetic = [
-                ToolResultContent(tool_use_id=tool_id, content="Interrupted by user", is_error=True)
-                for tool_id in orphan_ids
-            ]
-            orchestrator._history.append_tool_results(synthetic)
             yield HistoryAppend(message=orchestrator._history.messages[-1])
         yield CancelledEvent()
 
@@ -330,3 +350,16 @@ def _tool_permission_mode(
     if orchestrator._mode == "bypass":
         return "bypass"
     return "default"
+
+
+def _is_tool_protocol_error(exc: ProviderError) -> bool:
+    message = str(exc).lower()
+    missing_result = (
+        "tool_calls" in message
+        and "tool messages" in message
+        and ("must be followed" in message or "insufficient tool messages" in message)
+    )
+    orphan_tool = (
+        "role 'tool'" in message and "preceding message" in message and "tool_calls" in message
+    )
+    return missing_result or orphan_tool

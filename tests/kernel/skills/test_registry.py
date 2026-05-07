@@ -8,7 +8,9 @@ from kernel.skills.registry import SkillRegistry
 from kernel.skills.types import LoadedSkill, SkillManifest, SkillSource
 
 
-def _skill(name: str, source: SkillSource = SkillSource.USER, priority: int = 2, **kw) -> LoadedSkill:
+def _skill(
+    name: str, source: SkillSource = SkillSource.USER, priority: int = 2, **kw
+) -> LoadedSkill:
     manifest = SkillManifest(
         name=name,
         description=f"{name} skill",
@@ -74,6 +76,33 @@ def test_user_invocable() -> None:
     reg.register(_skill("private", user_invocable=False))
     names = {s.manifest.name for s in reg.user_invocable()}
     assert names == {"public"}
+
+
+def test_prune_missing_files_removes_file_backed_skills(tmp_path: Path) -> None:
+    reg = SkillRegistry()
+    skill_dir = tmp_path / "gone"
+    skill_dir.mkdir()
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text("---\nname: gone\n---\nbody", encoding="utf-8")
+    manifest = SkillManifest(
+        name="gone",
+        description="gone skill",
+        has_user_specified_description=True,
+        base_dir=skill_dir,
+    )
+    reg.register(
+        LoadedSkill(
+            manifest=manifest,
+            source=SkillSource.USER,
+            layer_priority=2,
+            file_path=skill_file,
+        )
+    )
+
+    skill_file.unlink()
+
+    assert reg.prune_missing_files() == {"gone"}
+    assert reg.all_skills() == []
 
 
 def test_conditional_activation() -> None:

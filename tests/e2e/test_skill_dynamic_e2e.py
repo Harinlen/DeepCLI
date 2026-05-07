@@ -31,9 +31,9 @@ def _has_model(kernel: tuple[int, str]) -> bool:
 
 
 def test_file_write_does_not_crash_skill_discovery(kernel: tuple[int, str]) -> None:
-    """FileWrite triggering on_file_touched doesn't crash the kernel.
+    """Write triggering on_file_touched doesn't crash the kernel.
 
-    The ToolExecutor calls skills.on_file_touched() after FileWrite.
+    The ToolExecutor calls skills.on_file_touched() after Write.
     If SkillManager is broken, this would crash the tool execution
     pipeline.  This test verifies the integration is safe.
     """
@@ -60,9 +60,9 @@ def test_file_write_does_not_crash_skill_discovery(kernel: tuple[int, str]) -> N
 
 
 def test_file_edit_does_not_crash_skill_discovery(kernel: tuple[int, str]) -> None:
-    """FileEdit triggering on_file_touched doesn't crash the kernel.
+    """Edit triggering on_file_touched doesn't crash the kernel.
 
-    Same as above but for the FileEdit tool path.
+    Same as above but for the Edit tool path.
     """
     if not _has_model(kernel):
         pytest.skip("No LLM configured")

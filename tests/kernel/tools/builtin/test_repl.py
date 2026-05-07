@@ -48,9 +48,10 @@ class _FakeReadTool(Tool[dict[str, Any], str]):
 
 
 class _FakeEditTool(Tool[dict[str, Any], str]):
-    """Simulates a mutating tool (like FileEdit)."""
+    """Simulates a mutating tool (like Edit)."""
 
-    name = "FileEdit"
+    name = "Edit"
+    aliases = ("FileEdit",)
     description = "fake edit"
     kind = ToolKind.edit
 
@@ -84,9 +85,10 @@ class _FakeBashTool(Tool[dict[str, Any], str]):
 
 
 class _FakeFileReadTool(Tool[dict[str, Any], str]):
-    """Simulates FileRead tool."""
+    """Simulates Read tool."""
 
-    name = "FileRead"
+    name = "Read"
+    aliases = ("FileRead",)
     description = "fake file read"
     kind = ToolKind.read
 
@@ -247,6 +249,16 @@ class TestValidateInput:
             {"calls": [{"tool_name": "Glob", "input": {"pattern": "*.py"}}]}, risk
         )
 
+    @pytest.mark.asyncio
+    async def test_legacy_file_tool_name_passes(self, tmp_path: Path) -> None:
+        reg = _make_registry(_FakeFileReadTool())
+        tool = ReplTool(reg)
+        risk = _RiskCtx(tmp_path)
+        await tool.validate_input(
+            {"calls": [{"tool_name": "FileRead", "input": {"file_path": "/tmp/x.py"}}]},
+            risk,
+        )
+
 
 # ---------------------------------------------------------------------------
 # call() — single tool
@@ -312,7 +324,7 @@ class TestCallBatch:
             {
                 "calls": [
                     {"tool_name": "Glob", "input": {"pattern": "*.py"}},
-                    {"tool_name": "FileRead", "input": {"file_path": "/tmp/x.py"}},
+                    {"tool_name": "Read", "input": {"file_path": "/tmp/x.py"}},
                 ]
             },
             ctx,
@@ -337,7 +349,7 @@ class TestCallBatch:
             {
                 "calls": [
                     {"tool_name": "Glob", "input": {"pattern": "*.py"}},
-                    {"tool_name": "FileEdit", "input": {"file_path": "foo.py"}},
+                    {"tool_name": "Edit", "input": {"file_path": "foo.py"}},
                 ]
             },
             ctx,
@@ -442,7 +454,7 @@ class TestDefaultRisk:
             {
                 "calls": [
                     {"tool_name": "Glob", "input": {}},
-                    {"tool_name": "FileEdit", "input": {}},
+                    {"tool_name": "Edit", "input": {}},
                 ]
             },
             risk,
@@ -483,7 +495,18 @@ class TestActivityDescription:
 
 class TestHiddenTools:
     def test_expected_tools_in_set(self) -> None:
-        expected = {"Bash", "FileRead", "FileEdit", "FileWrite", "Glob", "Grep", "Agent"}
+        expected = {
+            "Bash",
+            "Read",
+            "FileRead",
+            "Edit",
+            "FileEdit",
+            "Write",
+            "FileWrite",
+            "Glob",
+            "Grep",
+            "Agent",
+        }
         assert expected.issubset(REPL_HIDDEN_TOOLS)
 
     def test_control_tools_not_in_set(self) -> None:
@@ -549,8 +572,8 @@ class TestSnapshotReplMode:
 
         # Glob: hidden by REPL
         assert "Glob" not in schema_names
-        # FileEdit: hidden by REPL (and would also be excluded by plan_mode)
-        assert "FileEdit" not in schema_names
+        # Edit: hidden by REPL (and would also be excluded by plan_mode)
+        assert "Edit" not in schema_names
         # AskUserQuestion: visible (not hidden, not mutating)
         assert "AskUserQuestion" in schema_names
         # REPL itself: execute kind, excluded by plan_mode

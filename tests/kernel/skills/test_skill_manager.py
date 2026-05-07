@@ -101,13 +101,29 @@ async def test_listing_excludes_disabled(
     assert "hidden" not in listing
 
 
+@pytest.mark.asyncio
+async def test_listing_prunes_skills_deleted_after_startup(
+    skills_dir: tuple[Path, Path], manager: SkillManager
+) -> None:
+    project, _ = skills_dir
+    skill_dir = _write_skill(project, "deleted-skill")
+    changed = MagicMock()
+    manager.on_skills_changed(changed)
+    await manager.startup()
+    assert "deleted-skill" in manager.get_skill_listing()
+
+    (skill_dir / "SKILL.md").unlink()
+
+    assert manager.get_skill_listing() == ""
+    assert manager.lookup("deleted-skill") is None
+    changed.assert_called_once()
+
+
 # -- Activation --
 
 
 @pytest.mark.asyncio
-async def test_activate_returns_body(
-    skills_dir: tuple[Path, Path], manager: SkillManager
-) -> None:
+async def test_activate_returns_body(skills_dir: tuple[Path, Path], manager: SkillManager) -> None:
     project, _ = skills_dir
     _write_skill(project, "test-skill")
     await manager.startup()
@@ -138,6 +154,20 @@ async def test_activate_tracks_invoked(
 
 
 @pytest.mark.asyncio
+async def test_invoked_skill_removed_when_backing_file_deleted(
+    skills_dir: tuple[Path, Path], manager: SkillManager
+) -> None:
+    project, _ = skills_dir
+    skill_dir = _write_skill(project, "tracked")
+    await manager.startup()
+    manager.activate("tracked")
+
+    (skill_dir / "SKILL.md").unlink()
+
+    assert manager.get_invoked_for_agent() == []
+
+
+@pytest.mark.asyncio
 async def test_activate_supporting_files(
     skills_dir: tuple[Path, Path], manager: SkillManager
 ) -> None:
@@ -156,9 +186,7 @@ async def test_activate_supporting_files(
 
 
 @pytest.mark.asyncio
-async def test_clear_invoked(
-    skills_dir: tuple[Path, Path], manager: SkillManager
-) -> None:
+async def test_clear_invoked(skills_dir: tuple[Path, Path], manager: SkillManager) -> None:
     project, _ = skills_dir
     _write_skill(project, "s1")
     await manager.startup()
@@ -173,9 +201,7 @@ async def test_clear_invoked(
 
 
 @pytest.mark.asyncio
-async def test_lookup(
-    skills_dir: tuple[Path, Path], manager: SkillManager
-) -> None:
+async def test_lookup(skills_dir: tuple[Path, Path], manager: SkillManager) -> None:
     project, _ = skills_dir
     _write_skill(project, "findme")
     await manager.startup()
@@ -184,9 +210,7 @@ async def test_lookup(
 
 
 @pytest.mark.asyncio
-async def test_user_invocable_skills(
-    skills_dir: tuple[Path, Path], manager: SkillManager
-) -> None:
+async def test_user_invocable_skills(skills_dir: tuple[Path, Path], manager: SkillManager) -> None:
     project, _ = skills_dir
     _write_skill(project, "public")
     _write_skill(project, "private", **{"user-invocable": "false"})

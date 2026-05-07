@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 class FileWriteTool(Tool[dict[str, Any], str]):
     """Create a new file or overwrite an existing one."""
 
-    name = "FileWrite"
+    name = "Write"
+    aliases = ("FileWrite",)
     description_key = "tools/file_write"
     description = "Write a file to the local filesystem."
     kind = ToolKind.edit
@@ -35,14 +36,14 @@ class FileWriteTool(Tool[dict[str, Any], str]):
     input_schema = {
         "type": "object",
         "properties": {
-            "path": {"type": "string"},
+            "file_path": {"type": "string"},
             "content": {"type": "string"},
         },
-        "required": ["path", "content"],
+        "required": ["file_path", "content"],
     }
 
     def default_risk(self, input: dict[str, Any], ctx: RiskContext) -> PermissionSuggestion:
-        path_str = str(input.get("path", ""))
+        path_str = _input_path(input)
         try:
             resolved = Path(path_str).resolve() if path_str else None
         except OSError:
@@ -68,12 +69,12 @@ class FileWriteTool(Tool[dict[str, Any], str]):
         )
 
     def prepare_permission_matcher(self, input: dict[str, Any]):  # noqa: ANN201
-        path = str(input.get("path", ""))
+        path = _input_path(input)
         return lambda pattern: fnmatch(path, pattern)
 
     def is_destructive(self, input: dict[str, Any]) -> bool:
         """True when overwriting an existing file."""
-        path_str = str(input.get("path", ""))
+        path_str = _input_path(input)
         if not path_str:
             return False
         try:
@@ -82,9 +83,9 @@ class FileWriteTool(Tool[dict[str, Any], str]):
             return False
 
     async def validate_input(self, input: dict[str, Any], ctx: RiskContext) -> None:
-        path = input.get("path")
+        path = _input_path(input)
         if not isinstance(path, str) or not path:
-            raise ToolInputError("path must be a non-empty string")
+            raise ToolInputError("file_path must be a non-empty string")
         content = input.get("content")
         if not isinstance(content, str):
             raise ToolInputError("content must be a string")
@@ -94,7 +95,7 @@ class FileWriteTool(Tool[dict[str, Any], str]):
         input: dict[str, Any],
         ctx: ToolContext,
     ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
-        path = _resolve(Path(input["path"]), ctx.cwd)
+        path = _resolve(Path(_input_path(input)), ctx.cwd)
         content = input["content"]
 
         existing: str | None = None
@@ -133,6 +134,11 @@ def _is_within(path: Path, cwd: Path) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _input_path(input: dict[str, Any]) -> str:
+    """Return canonical ``file_path`` while accepting legacy ``path``."""
+    return str(input.get("file_path") or input.get("path") or "")
 
 
 __all__ = ["FileWriteTool"]

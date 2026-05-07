@@ -9,6 +9,11 @@ from kernel.prompts.manager import PromptManager
 from tests.kernel.orchestrator.conftest import FakeLLMProvider
 
 
+class _EmptySkills:
+    def get_skill_listing(self) -> str:
+        return ""
+
+
 def test_first_principles_prompt_loads() -> None:
     pm = PromptManager()
     pm.load()
@@ -36,3 +41,18 @@ async def test_first_principles_prompt_is_in_static_prefix() -> None:
     assert "# Doing tasks" in static_text
     assert static_text.index("# System") < static_text.index("# First principles")
     assert static_text.index("# First principles") < static_text.index("# Doing tasks")
+
+
+async def test_empty_skill_listing_overrides_stale_skill_context() -> None:
+    pm = PromptManager()
+    pm.load()
+    deps = OrchestratorDeps(provider=FakeLLMProvider(), prompts=pm, skills=_EmptySkills())
+    builder = PromptBuilder(session_id="empty-skills", deps=deps)
+
+    sections = await builder.build()
+    text = "\n\n".join(section.text for section in sections)
+
+    assert "# Available skills" in text
+    assert "No model-invocable skills are currently available" in text
+    assert "Ignore earlier available-skill listings in this conversation" in text
+    assert "unless it appears in this current Available skills section" in text

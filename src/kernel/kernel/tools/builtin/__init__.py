@@ -27,6 +27,7 @@ from kernel.tools.builtin.list_mcp_resources import ListMcpResourcesTool
 from kernel.tools.builtin.monitor import MonitorTool
 from kernel.tools.builtin.python_tool import PythonTool
 from kernel.tools.builtin.read_mcp_resource import ReadMcpResourceTool
+from kernel.tools.builtin.restart_self import RestartSelfTool
 from kernel.tools.builtin.send_message import SendMessageTool
 from kernel.tools.builtin.skill_tool import SkillTool
 from kernel.tools.builtin.task_output import TaskOutputTool
@@ -70,6 +71,7 @@ BUILTIN_TOOLS: list[type[Tool]] = [
     MonitorTool,
     PythonTool,
     ReadMcpResourceTool,
+    RestartSelfTool,
     SkillTool,
     AgentTool,
     SendMessageTool,
@@ -102,6 +104,7 @@ __all__ = [
     "MonitorTool",
     "PythonTool",
     "ReadMcpResourceTool",
+    "RestartSelfTool",
     "SendMessageTool",
     "SkillTool",
     "TaskOutputTool",

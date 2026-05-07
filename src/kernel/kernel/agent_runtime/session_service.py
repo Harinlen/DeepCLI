@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -233,6 +235,7 @@ class AgentSessionRuntimeService:
             )
         finally:
             sender.client_peer = None
+        await self._maybe_restart_self(sender)
         return {
             "stopReason": result.stop_reason,
             "_meta": result.meta,
@@ -262,6 +265,7 @@ class AgentSessionRuntimeService:
             )
         finally:
             sender.client_peer = None
+        await self._maybe_restart_self(sender)
         return {
             "stopReason": result.stop_reason,
             "_meta": result.meta,
@@ -403,6 +407,24 @@ class AgentSessionRuntimeService:
             raise RuntimeError("session runtime service is not started")
         return self._session_manager
 
+    async def _maybe_restart_self(self, sender: CollectingRuntimeSender) -> None:
+        request = _restart_self_request(sender.notifications)
+        if request is None:
+            return
+        socket_path = os.getenv("MUSTANG_SUPERVISOR_CONTROL_SOCKET", "")
+        token = os.getenv("MUSTANG_SUPERVISOR_CONTROL_TOKEN", "")
+        if not socket_path or not token:
+            logger.warning("RestartSelf requested but Supervisor control is unavailable")
+            return
+        asyncio.create_task(
+            _restart_self_after_ack(
+                socket_path,
+                token,
+                str(request.get("agentId") or self.agent_id),
+                str(request.get("reason") or "agent requested self-restart"),
+            )
+        )
+
     def _connection_for(self, session_id: str) -> tuple[ConnectionContext, CollectingRuntimeSender]:
         entry = self._connections.get(session_id)
         if entry is not None:
@@ -517,6 +539,49 @@ def _to_contract_close(params: CloseSessionRequest) -> Any:
     from kernel.protocol.interfaces.contracts.close_session_params import CloseSessionParams
 
     return CloseSessionParams.model_validate(params.model_dump())
+
+
+def _restart_self_request(
+    notifications: list[tuple[str, BaseModel]],
+) -> dict[str, Any] | None:
+    for _method, params in notifications:
+        raw = params.model_dump(by_alias=True)
+        meta = raw.get("meta") or raw.get("_meta")
+        if not isinstance(meta, dict):
+            continue
+        request = meta.get("mustang.agent/restartSelf")
+        if isinstance(request, dict):
+            return request
+    return None
+
+
+async def request_control_async(
+    socket_path: str,
+    token: str,
+    method: str,
+    params: dict[str, object],
+) -> dict[str, object]:
+    from kernel.supervisor.control import request_control
+
+    return await asyncio.to_thread(request_control, socket_path, token, method, params)
+
+
+async def _restart_self_after_ack(
+    socket_path: str,
+    token: str,
+    agent_id: str,
+    reason: str,
+) -> None:
+    await asyncio.sleep(0.5)
+    try:
+        await request_control_async(
+            socket_path,
+            token,
+            "restart_agent",
+            {"agent_id": agent_id, "reason": reason},
+        )
+    except Exception:
+        logger.exception("RestartSelf control request failed")
 
 
 __all__ = ["AgentSessionRuntimeService", "CollectingRuntimeSender"]

@@ -1,15 +1,15 @@
-"""E2E tests for FileRead image and PDF support.
+"""E2E tests for Read image and PDF support.
 
-Verifies that the FileRead tool correctly handles image and PDF files
+Verifies that the Read tool correctly handles image and PDF files
 through the real kernel ACP interface.  The LLM is prompted to read
 specific test files, and we assert that the tool call events appear
 in the event stream.
 
 Coverage map
 ------------
-test_read_image_e2e    → FileReadTool image branch, ImageContent in tool result
-test_read_pdf_e2e      → FileReadTool PDF branch, PyMuPDF rendering, pages param
-test_read_pdf_pages    → FileReadTool PDF branch with explicit page range
+test_read_image_e2e    → Read tool image branch, ImageContent in tool result
+test_read_pdf_e2e      → Read tool PDF branch, PyMuPDF rendering, pages param
+test_read_pdf_pages    → Read tool PDF branch with explicit page range
 """
 
 from __future__ import annotations
@@ -112,7 +112,7 @@ def _create_test_pdf(directory: Path, *, pages: int = 3) -> Path:
 
 
 def test_read_image_e2e(kernel: tuple[int, str]) -> None:
-    """LLM reads an image file → FileRead emits a tool_call event.
+    """LLM reads an image file → Read emits a tool_call event.
 
     Happy path: a valid PNG is read and the turn completes.
     """
@@ -132,7 +132,7 @@ def test_read_image_e2e(kernel: tuple[int, str]) -> None:
                 await c.initialize()
                 sid = await c.new_session()
                 prompt = (
-                    f"Use the FileRead tool to read this image file: {img_path}\n"
+                    f"Use the Read tool to read this image file: {img_path}\n"
                     "After reading it, describe what you see."
                 )
                 async for event in c.prompt(sid, prompt):
@@ -149,16 +149,16 @@ def test_read_image_e2e(kernel: tuple[int, str]) -> None:
 
         tool_events, text, stop_reason = _run(_run_test(), timeout=_LLM_TIMEOUT)
 
-    # The LLM should have called FileRead.
-    assert any(e.title == "FileRead" for e in tool_events), (
-        f"Expected a FileRead tool call, got: {[e.title for e in tool_events]}"
+    # The LLM should have called Read.
+    assert any(e.title == "Read" for e in tool_events), (
+        f"Expected a Read tool call, got: {[e.title for e in tool_events]}"
     )
     assert stop_reason == "end_turn", f"stop_reason={stop_reason!r}"
     assert len(text) > 0, "Expected non-empty agent response"
 
 
 def test_read_pdf_e2e(kernel: tuple[int, str]) -> None:
-    """LLM reads a small PDF → FileRead emits a tool_call event.
+    """LLM reads a small PDF → Read emits a tool_call event.
 
     Happy path: a 3-page PDF is auto-rendered (within the 10-page limit).
     """
@@ -179,7 +179,7 @@ def test_read_pdf_e2e(kernel: tuple[int, str]) -> None:
                 await c.initialize()
                 sid = await c.new_session()
                 prompt = (
-                    f"Use the FileRead tool to read this PDF: {pdf_path}\n"
+                    f"Use the Read tool to read this PDF: {pdf_path}\n"
                     "Tell me how many pages it has and what text is on the first page."
                 )
                 async for event in c.prompt(sid, prompt):
@@ -196,8 +196,8 @@ def test_read_pdf_e2e(kernel: tuple[int, str]) -> None:
 
         tool_events, text, stop_reason = _run(_run_test(), timeout=_LLM_TIMEOUT)
 
-    assert any(e.title == "FileRead" for e in tool_events), (
-        f"Expected a FileRead tool call, got: {[e.title for e in tool_events]}"
+    assert any(e.title == "Read" for e in tool_events), (
+        f"Expected a Read tool call, got: {[e.title for e in tool_events]}"
     )
     assert stop_reason == "end_turn", f"stop_reason={stop_reason!r}"
     assert len(text) > 0, "Expected non-empty agent response"
@@ -226,7 +226,7 @@ def test_read_pdf_pages_e2e(kernel: tuple[int, str]) -> None:
                 await c.initialize()
                 sid = await c.new_session()
                 prompt = (
-                    f"Use the FileRead tool to read pages 1-3 of this PDF: {pdf_path}\n"
+                    f"Use the Read tool to read pages 1-3 of this PDF: {pdf_path}\n"
                     'Make sure to pass pages="1-3" since the PDF has 15 pages.\n'
                     "Describe the content of the pages."
                 )
@@ -244,8 +244,8 @@ def test_read_pdf_pages_e2e(kernel: tuple[int, str]) -> None:
 
         tool_events, text, stop_reason = _run(_run_test(), timeout=_LLM_TIMEOUT)
 
-    assert any(e.title == "FileRead" for e in tool_events), (
-        f"Expected a FileRead tool call, got: {[e.title for e in tool_events]}"
+    assert any(e.title == "Read" for e in tool_events), (
+        f"Expected a Read tool call, got: {[e.title for e in tool_events]}"
     )
     assert stop_reason == "end_turn", f"stop_reason={stop_reason!r}"
     assert len(text) > 0, "Expected non-empty agent response"

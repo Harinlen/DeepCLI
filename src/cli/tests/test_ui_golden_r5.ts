@@ -69,6 +69,18 @@ const assistant = new AssistantMessageComponent({
 	timestamp: 0,
 } as never);
 assistant.setUsageInfo({ input: 13594, output: 87, cacheRead: 0, cacheWrite: 0 }, 1500);
+const assistantErrorText = new AssistantMessageComponent({
+	role: "assistant",
+	content: [{ type: "text", text: "Error: provider rejected the request" }],
+	stopReason: "error",
+	timestamp: 0,
+} as never);
+const assistantErrorEmpty = new AssistantMessageComponent({
+	role: "assistant",
+	content: [],
+	stopReason: "error",
+	timestamp: 0,
+} as never);
 const userMessage = new UserMessageComponent("不是这么做的吧，应该就是打个 tag");
 
 const bashRunning = new BashExecutionComponent("echo ok", ui as never);
@@ -152,6 +164,16 @@ const frames: GoldenFrame[] = [
 		mustInclude: ["Thinking...", "Hello world", "const ok = true", "13,594", "87", "2s"],
 	},
 	{
+		name: "assistant error text does not add unknown fallback",
+		lines: assistantErrorText.render(80),
+		mustInclude: ["Error: provider rejected the request"],
+	},
+	{
+		name: "assistant empty error keeps fallback",
+		lines: assistantErrorEmpty.render(80),
+		mustInclude: ["Error: Unknown error"],
+	},
+	{
 		name: "user message highlighted block",
 		lines: userMessage.render(80),
 		mustInclude: ["> 不是这么做的吧，应该就是打个 tag"],
@@ -193,6 +215,9 @@ for (const frame of frames) {
 	assert(rendered.trim().length > 0, `${frame.name} should render non-empty output`);
 	for (const expected of frame.mustInclude) {
 		assert(rendered.includes(expected), `${frame.name} golden frame should include ${JSON.stringify(expected)}\n${rendered}`);
+	}
+	if (frame.name === "assistant error text does not add unknown fallback") {
+		assert(!rendered.includes("Unknown error"), `${frame.name} should not include fallback text\n${rendered}`);
 	}
 	assertNoOverflow(frame.name, frame.lines, 90);
 }

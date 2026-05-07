@@ -123,6 +123,96 @@ class ConversationHistory:
         self._messages.append(msg)
         self._token_count += estimate_tokens_for([msg])
 
+    def append_interrupted_tool_results(self, reason: str) -> list[str]:
+        """Append synthetic error results for pending tool uses.
+
+        Args:
+            reason: Error text stored in each synthetic tool result.
+
+        Returns:
+            Tool-use ids that were sealed.
+        """
+        orphan_ids = self.pending_tool_use_ids()
+        if not orphan_ids:
+            return []
+        self.append_tool_results(
+            [
+                ToolResultContent(tool_use_id=tool_id, content=reason, is_error=True)
+                for tool_id in orphan_ids
+            ]
+        )
+        return orphan_ids
+
+    def repair_orphan_tool_results(self, reason: str) -> list[str]:
+        """Normalise tool-use/tool-result adjacency for provider protocols.
+
+        Args:
+            reason: Error text stored in each synthetic tool result.
+
+        Returns:
+            Tool-use ids that were inserted or removed.
+
+        OpenAI-compatible providers require assistant ``tool_calls`` to be
+        followed immediately by matching ``tool`` messages, and reject stray
+        tool messages elsewhere.  This pass repairs both sides: missing results
+        are inserted before the next non-tool message, and duplicate/orphan
+        results are removed.
+        """
+        repaired: list[str] = []
+        repaired_messages: list[Message] = []
+        pending: list[str] = []
+
+        for msg in self._messages:
+            if isinstance(msg, AssistantMessage):
+                _append_synthetic_results(repaired_messages, pending, reason)
+                repaired.extend(pending)
+                repaired_messages.append(msg)
+                pending = [block.id for block in msg.content if isinstance(block, ToolUseContent)]
+                continue
+
+            if not isinstance(msg, UserMessage):
+                _append_synthetic_results(repaired_messages, pending, reason)
+                repaired.extend(pending)
+                pending = []
+                repaired_messages.append(msg)
+                continue
+
+            result_blocks = [block for block in msg.content if isinstance(block, ToolResultContent)]
+            other_blocks: list[UserContent] = [
+                block for block in msg.content if not isinstance(block, ToolResultContent)
+            ]
+
+            if pending:
+                valid_results: list[ToolResultContent] = []
+                for block in result_blocks:
+                    if block.tool_use_id in pending:
+                        valid_results.append(block)
+                        pending.remove(block.tool_use_id)
+                    else:
+                        repaired.append(block.tool_use_id)
+                if valid_results:
+                    valid_content: list[UserContent] = list(valid_results)
+                    repaired_messages.append(UserMessage(content=valid_content))
+                if other_blocks:
+                    _append_synthetic_results(repaired_messages, pending, reason)
+                    repaired.extend(pending)
+                    pending = []
+                    repaired_messages.append(UserMessage(content=other_blocks))
+                continue
+
+            if result_blocks:
+                repaired.extend(block.tool_use_id for block in result_blocks)
+            if other_blocks:
+                repaired_messages.append(UserMessage(content=other_blocks))
+
+        _append_synthetic_results(repaired_messages, pending, reason)
+        repaired.extend(pending)
+
+        if repaired:
+            self._messages = repaired_messages
+            self._token_count = estimate_tokens_for(self._messages)
+        return repaired
+
     def record_tool_kind(self, tool_use_id: str, kind: ToolKind) -> None:
         """Record the ToolKind for a tool_use_id.
 
@@ -226,3 +316,20 @@ class ConversationHistory:
             Rough token estimate for ``messages``.
         """
         return estimate_tokens_for(messages)
+
+
+def _append_synthetic_results(
+    messages: list[Message],
+    tool_use_ids: list[str],
+    reason: str,
+) -> None:
+    if not tool_use_ids:
+        return
+    messages.append(
+        UserMessage(
+            content=[
+                ToolResultContent(tool_use_id=tool_id, content=reason, is_error=True)
+                for tool_id in tool_use_ids
+            ]
+        )
+    )

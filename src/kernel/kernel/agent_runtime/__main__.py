@@ -47,7 +47,15 @@ async def _amain() -> None:
     parser.add_argument("--session-store-path", required=True)
     parser.add_argument("--workspace", default=str(Path.cwd()))
     parser.add_argument("--runtime-file", required=True)
+    parser.add_argument("--supervisor-control-socket")
+    parser.add_argument("--supervisor-control-token")
     args = parser.parse_args()
+
+    if args.supervisor_control_socket:
+        os.environ["MUSTANG_SUPERVISOR_CONTROL_SOCKET"] = args.supervisor_control_socket
+    if args.supervisor_control_token:
+        os.environ["MUSTANG_SUPERVISOR_CONTROL_TOKEN"] = args.supervisor_control_token
+    os.environ["MUSTANG_AGENT_ID"] = args.agent_id
 
     session_service = AgentSessionRuntimeService(
         agent_id=args.agent_id,

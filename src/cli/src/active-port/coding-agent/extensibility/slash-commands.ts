@@ -30,6 +30,11 @@ const THEME_ACTIONS: Item[] = [
 	{ value: "set", label: "set", description: "Set theme" },
 ];
 
+const KERNEL_ACTIONS: Item[] = [
+	{ value: "status", label: "status", description: "Show runtime status" },
+	{ value: "restart", label: "restart", description: "Restart the supervised runtime" },
+];
+
 export const BUILTIN_SLASH_COMMANDS: SlashCommand[] = [
 	{ name: "auth", description: "Manage secrets and auth values" },
 	{ name: "clear", description: "Clear the current conversation view" },
@@ -38,6 +43,7 @@ export const BUILTIN_SLASH_COMMANDS: SlashCommand[] = [
 	{ name: "exit", description: "Exit DeepCLI" },
 	{ name: "help", description: "Show available commands" },
 	{ name: "memory", description: "List, show, or delete memories" },
+	{ name: "kernel", description: "Inspect or restart the local runtime", getArgumentCompletions: completeKernelArguments },
 	{ name: "model", description: "Manage models", getArgumentCompletions: completeModelArguments },
 	{ name: "plan", description: "Enter, exit, or inspect plan mode", getArgumentCompletions: completePlanArguments },
 	{ name: "quit", description: "Exit DeepCLI" },
@@ -80,6 +86,12 @@ function completeThemeArguments(argumentPrefix: string): Item[] | null {
 	}
 	if (argumentPrefix.includes(" ")) return null;
 	return filterCompletions(subcommand, THEME_ACTIONS);
+}
+
+function completeKernelArguments(argumentPrefix: string): Item[] | null {
+	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
+	if (argumentPrefix.includes(" ")) return null;
+	return filterCompletions(subcommand, KERNEL_ACTIONS);
 }
 
 function filterCompletions(prefix: string, items: Item[]): Item[] | null {

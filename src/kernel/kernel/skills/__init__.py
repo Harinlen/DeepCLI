@@ -213,6 +213,7 @@ class SkillManager(Subsystem):
         - ``is_visible()`` (dynamic tool availability).
         - ``disabled`` / ``gateway_disabled`` config lists.
         """
+        self._prune_missing_file_backed_skills()
         skills = self._registry.model_invocable()
 
         # Dynamic visibility filter.
@@ -247,6 +248,7 @@ class SkillManager(Subsystem):
         Returns ``ActivationResult`` with ``setup_needed=True`` when
         required environment variables are missing.
         """
+        self._prune_missing_file_backed_skills()
         skill = self._registry.lookup(name)
         if skill is None:
             return None
@@ -334,6 +336,7 @@ class SkillManager(Subsystem):
     ) -> list[InvokedSkillInfo]:
         """Return invoked skills for the given agent, sorted by
         invoked_at descending (most recent first)."""
+        self._prune_missing_file_backed_skills()
         return sorted(
             [s for s in self._invoked.values() if s.agent_id == agent_id],
             key=lambda s: s.invoked_at,
@@ -395,10 +398,12 @@ class SkillManager(Subsystem):
 
     def lookup(self, name: str) -> LoadedSkill | None:
         """Look up a skill by name."""
+        self._prune_missing_file_backed_skills()
         return self._registry.lookup(name)
 
     def user_invocable_skills(self) -> list[LoadedSkill]:
         """Skills the user can invoke via ``/skill-name``."""
+        self._prune_missing_file_backed_skills()
         return self._registry.user_invocable()
 
     # ------------------------------------------------------------------
@@ -443,6 +448,19 @@ class SkillManager(Subsystem):
 
     def _invalidate_listing_cache(self) -> None:
         self._listing_cache = None
+
+    def _prune_missing_file_backed_skills(self) -> set[str]:
+        """Drop skills whose backing ``SKILL.md`` has been deleted."""
+        removed = self._registry.prune_missing_files()
+        if not removed:
+            return set()
+        for key, info in list(self._invoked.items()):
+            if info.skill_name in removed:
+                del self._invoked[key]
+        self._invalidate_listing_cache()
+        self._emit_skills_changed()
+        logger.info("SkillManager: pruned deleted skills: %s", ", ".join(sorted(removed)))
+        return removed
 
     # ------------------------------------------------------------------
     # Private helpers

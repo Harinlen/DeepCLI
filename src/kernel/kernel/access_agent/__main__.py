@@ -16,10 +16,16 @@ def main() -> None:
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--hub-endpoint", required=True)
     parser.add_argument("--prompt-backend", choices=("compat", "router"), default="router")
+    parser.add_argument("--supervisor-control-socket")
+    parser.add_argument("--supervisor-control-token")
     parser.add_argument("--dev", action="store_true")
     args = parser.parse_args()
 
     os.environ["MUSTANG_AGENT_HUB_ENDPOINT"] = args.hub_endpoint
+    if args.supervisor_control_socket:
+        os.environ["MUSTANG_SUPERVISOR_CONTROL_SOCKET"] = args.supervisor_control_socket
+    if args.supervisor_control_token:
+        os.environ["MUSTANG_SUPERVISOR_CONTROL_TOKEN"] = args.supervisor_control_token
     if args.prompt_backend == "router":
         os.environ["MUSTANG_AGENT_PROMPT_BACKEND"] = "router"
     else:

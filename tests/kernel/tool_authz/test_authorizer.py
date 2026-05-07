@@ -24,6 +24,7 @@ from kernel.tool_authz.types import (
     RuleSource,
 )
 from kernel.tools.tool import Tool
+from kernel.tools.builtin.bash import BashTool
 from kernel.tools.types import (
     PermissionSuggestion,
     ToolCallProgress,
@@ -192,6 +193,23 @@ async def test_bypass_mode_allows_everything(
         tool=FakeTool(), tool_input={"text": "x"}, ctx=_ctx(fake_auth, mode="bypass")
     )
     assert isinstance(decision, PermissionAllow)
+
+
+@pytest.mark.anyio
+async def test_runtime_guard_denies_runtime_kill_even_in_bypass(
+    authorizer: ToolAuthorizer,
+    fake_auth: AuthContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("os.getpid", lambda: 12345)
+    decision = await authorizer.authorize(
+        tool=BashTool(),
+        tool_input={"command": "kill 12345"},
+        ctx=_ctx(fake_auth, mode="bypass"),
+    )
+
+    assert isinstance(decision, PermissionDeny)
+    assert "RestartSelf" in decision.message
 
 
 @pytest.mark.anyio

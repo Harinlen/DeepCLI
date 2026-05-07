@@ -102,7 +102,7 @@ def test_enter_plan_mode(kernel: tuple[int, str]) -> None:
 
 
 def test_plan_mode_blocks_mutation(kernel: tuple[int, str]) -> None:
-    """In plan mode, FileEdit on a non-plan file should be denied."""
+    """In plan mode, Edit on a non-plan file should be denied."""
     port, token = kernel
     _skip_if_no_llm(port, token)
 
@@ -116,7 +116,7 @@ def test_plan_mode_blocks_mutation(kernel: tuple[int, str]) -> None:
             # Enter plan mode first.
             setup = (
                 'Call ToolSearch with query "select:EnterPlanMode" then call EnterPlanMode. '
-                "After entering plan mode, try to use FileWrite to create /tmp/test_plan_block.txt "
+                "After entering plan mode, try to use Write to create /tmp/test_plan_block.txt "
                 "with content 'hello'. Report what happened — did it succeed or fail?"
             )
             async for event in client.prompt(sid, setup):

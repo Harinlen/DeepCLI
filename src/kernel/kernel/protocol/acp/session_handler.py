@@ -85,6 +85,12 @@ from kernel.protocol.acp.schemas.session import (
     SetSessionModeRequest,
     SetSessionModeResponse,
 )
+from kernel.protocol.acp.schemas.runtime import (
+    RuntimeRestartRequest,
+    RuntimeRestartResponse,
+    RuntimeStatusRequest,
+    RuntimeStatusResponse,
+)
 from kernel.protocol.acp.schemas.updates import (
     MustangExecutionUpdateNotification,
     SessionUpdateNotification,
@@ -356,6 +362,9 @@ class AcpSessionHandler:
                 raise _make_invalid_params(exc)
             return await self._handshake.authenticate(conn, auth_params)
 
+        if method in {MustangMethod.RUNTIME_STATUS, MustangMethod.RUNTIME_RESTART}:
+            return await self._route_runtime_control(method, msg)
+
         # --- session/* and model/* methods ---
         if os.getenv("MUSTANG_AGENT_PROMPT_BACKEND") == "router" and method in {
             MustangMethod.COMMANDS_LIST,
@@ -495,6 +504,37 @@ class AcpSessionHandler:
         session_id = str(payload["sessionId"])
         conn.bound_session_id = session_id
         return NewSessionResponse(session_id=session_id)
+
+    async def _route_runtime_control(
+        self,
+        method: str,
+        msg: AcpInboundRequest,
+    ) -> pydantic.BaseModel:
+        socket_path = os.getenv("MUSTANG_SUPERVISOR_CONTROL_SOCKET", "")
+        token = os.getenv("MUSTANG_SUPERVISOR_CONTROL_TOKEN", "")
+        if not socket_path or not token:
+            raise InternalError("Supervisor control is not available")
+        from kernel.supervisor.control import request_control
+
+        if method == MustangMethod.RUNTIME_STATUS:
+            try:
+                RuntimeStatusRequest.model_validate(msg.params)
+            except pydantic.ValidationError as exc:
+                raise _make_invalid_params(exc)
+            status = await asyncio.to_thread(request_control, socket_path, token, "status", {})
+            return RuntimeStatusResponse(status=dict(status))
+        try:
+            params = RuntimeRestartRequest.model_validate(msg.params)
+        except pydantic.ValidationError as exc:
+            raise _make_invalid_params(exc)
+        status = await asyncio.to_thread(
+            request_control,
+            socket_path,
+            token,
+            "restart_runtime",
+            {"reason": params.reason},
+        )
+        return RuntimeRestartResponse(status=dict(status))
 
     async def _route_list_sessions_through_hub(
         self,

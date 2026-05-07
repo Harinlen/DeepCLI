@@ -69,6 +69,10 @@ export interface ListCommandsResponse {
   commands: CommandEntry[];
 }
 
+export interface RuntimeStatusReport {
+  status: Record<string, unknown>;
+}
+
 const RESUME_RETRY_ATTEMPTS = 24;
 const RESUME_RETRY_DELAY_MS = 250;
 
@@ -206,6 +210,14 @@ export class MustangSession {
       sessionId: this.sessionId,
       session_id: this.sessionId,
     });
+  }
+
+  async runtimeStatus(): Promise<RuntimeStatusReport> {
+    return await this.client.request<RuntimeStatusReport>(MustangMethod.runtimeStatus, {});
+  }
+
+  async runtimeRestart(reason = "user requested runtime restart"): Promise<RuntimeStatusReport> {
+    return await this.client.request<RuntimeStatusReport>(MustangMethod.runtimeRestart, { reason });
   }
 
   private async resumeWithRetry(): Promise<SessionModeState> {

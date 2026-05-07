@@ -111,6 +111,20 @@ class SkillRegistry:
         """Skills the user can invoke via ``/skill-name``."""
         return [s for s in self.all_skills() if s.manifest.user_invocable]
 
+    def prune_missing_files(self) -> set[str]:
+        """Remove file-backed skills whose ``SKILL.md`` no longer exists.
+
+        Returns:
+            Skill names removed from any registry pool.
+        """
+        removed: set[str] = set()
+        for pool in (self._skills, self._conditional, self._dynamic):
+            for name, skill in list(pool.items()):
+                if _is_file_backed(skill) and not skill.file_path.is_file():
+                    removed.add(name)
+                    del pool[name]
+        return removed
+
     def conditional_count(self) -> int:
         """Number of skills waiting for file-operation activation."""
         return len(self._conditional)
@@ -130,6 +144,10 @@ class SkillRegistry:
     def clear_dynamic(self) -> None:
         """Drop only dynamic skills (for testing)."""
         self._dynamic.clear()
+
+
+def _is_file_backed(skill: LoadedSkill) -> bool:
+    return skill.source.value in {"project", "external", "user"}
 
 
 __all__ = ["SkillRegistry"]

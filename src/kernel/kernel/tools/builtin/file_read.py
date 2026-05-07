@@ -67,7 +67,8 @@ class FileReadTool(Tool[dict[str, Any], str]):
     LLM can process them visually.
     """
 
-    name = "FileRead"
+    name = "Read"
+    aliases = ("FileRead",)
     description_key = "tools/file_read"
     description = "Read a file from the local filesystem."
     kind = ToolKind.read
@@ -75,11 +76,11 @@ class FileReadTool(Tool[dict[str, Any], str]):
     input_schema = {
         "type": "object",
         "properties": {
-            "path": {
+            "file_path": {
                 "type": "string",
-                "description": "Absolute or cwd-relative path.",
+                "description": "Absolute path to the file to read.",
             },
-            "start_line": {
+            "offset": {
                 "type": "integer",
                 "description": "1-indexed start line; defaults to 1.  Text files only.",
             },
@@ -96,7 +97,7 @@ class FileReadTool(Tool[dict[str, Any], str]):
                 ),
             },
         },
-        "required": ["path"],
+        "required": ["file_path"],
     }
 
     # -- Risk / permission ------------------------------------------------
@@ -110,7 +111,7 @@ class FileReadTool(Tool[dict[str, Any], str]):
         )
 
     def prepare_permission_matcher(self, input: dict[str, Any]):  # noqa: ANN201
-        path = str(input.get("path", ""))
+        path = _input_path(input)
         return lambda pattern: fnmatch(path, pattern)
 
     def is_destructive(self, _input: dict[str, Any]) -> bool:
@@ -119,9 +120,9 @@ class FileReadTool(Tool[dict[str, Any], str]):
     # -- Validation -------------------------------------------------------
 
     async def validate_input(self, input: dict[str, Any], ctx: RiskContext) -> None:
-        raw = input.get("path")
+        raw = _input_path(input)
         if not isinstance(raw, str) or not raw:
-            raise ToolInputError("path must be a non-empty string")
+            raise ToolInputError("file_path must be a non-empty string")
 
     # -- Main dispatch ----------------------------------------------------
 
@@ -130,7 +131,7 @@ class FileReadTool(Tool[dict[str, Any], str]):
         input: dict[str, Any],
         ctx: ToolContext,
     ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
-        path = _resolve(Path(input["path"]), ctx.cwd)
+        path = _resolve(Path(_input_path(input)), ctx.cwd)
 
         # Common pre-checks.
         if not path.exists():
@@ -161,7 +162,7 @@ class FileReadTool(Tool[dict[str, Any], str]):
         ctx: ToolContext,
     ) -> AsyncGenerator[ToolCallResult, None]:
         """Read a text file with line-range slicing and state caching."""
-        start_line = max(1, int(input.get("start_line") or 1))
+        start_line = max(1, int(input.get("offset") or input.get("start_line") or 1))
         limit = int(input.get("limit") or _MAX_LINES_DEFAULT)
 
         try:
@@ -322,6 +323,11 @@ class FileReadTool(Tool[dict[str, Any], str]):
 def _resolve(path: Path, cwd: Path) -> Path:
     """Return an absolute path, resolving relative to ``cwd`` if needed."""
     return path if path.is_absolute() else (cwd / path)
+
+
+def _input_path(input: dict[str, Any]) -> str:
+    """Return canonical ``file_path`` while accepting legacy ``path``."""
+    return str(input.get("file_path") or input.get("path") or "")
 
 
 def _error(message: str, path: Path) -> ToolCallResult:

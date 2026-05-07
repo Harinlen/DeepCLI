@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 class FileEditTool(Tool[dict[str, Any], str]):
     """Replace the first (or every) occurrence of a string in a file."""
 
-    name = "FileEdit"
+    name = "Edit"
+    aliases = ("FileEdit",)
     description_key = "tools/file_edit"
     description = "Perform exact string replacements in files."
     kind = ToolKind.edit
@@ -35,16 +36,16 @@ class FileEditTool(Tool[dict[str, Any], str]):
     input_schema = {
         "type": "object",
         "properties": {
-            "path": {"type": "string"},
+            "file_path": {"type": "string"},
             "old_string": {"type": "string"},
             "new_string": {"type": "string"},
             "replace_all": {"type": "boolean", "default": False},
         },
-        "required": ["path", "old_string", "new_string"],
+        "required": ["file_path", "old_string", "new_string"],
     }
 
     def default_risk(self, input: dict[str, Any], ctx: RiskContext) -> PermissionSuggestion:
-        path_str = str(input.get("path", ""))
+        path_str = _input_path(input)
         try:
             resolved = Path(path_str).resolve() if path_str else None
         except OSError:
@@ -64,7 +65,7 @@ class FileEditTool(Tool[dict[str, Any], str]):
         )
 
     def prepare_permission_matcher(self, input: dict[str, Any]):  # noqa: ANN201
-        path = str(input.get("path", ""))
+        path = _input_path(input)
         return lambda pattern: fnmatch(path, pattern)
 
     def is_destructive(self, _input: dict[str, Any]) -> bool:
@@ -74,9 +75,9 @@ class FileEditTool(Tool[dict[str, Any], str]):
         return False
 
     async def validate_input(self, input: dict[str, Any], ctx: RiskContext) -> None:
-        path = input.get("path")
+        path = _input_path(input)
         if not isinstance(path, str) or not path:
-            raise ToolInputError("path must be a non-empty string")
+            raise ToolInputError("file_path must be a non-empty string")
         old = input.get("old_string")
         if not isinstance(old, str):
             raise ToolInputError("old_string must be a string")
@@ -91,7 +92,7 @@ class FileEditTool(Tool[dict[str, Any], str]):
         input: dict[str, Any],
         ctx: ToolContext,
     ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
-        path = _resolve(Path(input["path"]), ctx.cwd)
+        path = _resolve(Path(_input_path(input)), ctx.cwd)
         old = input["old_string"]
         new = input["new_string"]
         replace_all = bool(input.get("replace_all", False))
@@ -142,6 +143,11 @@ def _is_within(path: Path, cwd: Path) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _input_path(input: dict[str, Any]) -> str:
+    """Return canonical ``file_path`` while accepting legacy ``path``."""
+    return str(input.get("file_path") or input.get("path") or "")
 
 
 def _error_result(path: Path, err: str) -> ToolCallResult:

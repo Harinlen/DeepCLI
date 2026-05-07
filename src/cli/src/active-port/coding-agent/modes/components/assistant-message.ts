@@ -153,7 +153,7 @@ export class AssistantMessageComponent extends Container {
 					this.#contentContainer.addChild(new Spacer(1));
 				}
 				this.#contentContainer.addChild(new Text(theme.fg("error", abortMessage), 1, 0));
-			} else if (message.stopReason === "error") {
+			} else if (message.stopReason === "error" && (message.errorMessage || !hasVisibleContent)) {
 				const errorMsg = message.errorMessage || "Unknown error";
 				this.#contentContainer.addChild(new Spacer(1));
 				this.#contentContainer.addChild(new Text(theme.fg("error", `Error: ${errorMsg}`), 1, 0));

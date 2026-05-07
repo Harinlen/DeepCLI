@@ -1,4 +1,4 @@
-Execute one or more tool calls in a single batch. When REPL mode is active, primitive tools (Bash, FileRead, FileEdit, FileWrite, Glob, Grep, Agent, etc.) are only accessible through this tool.
+Execute one or more tool calls in a single batch. When REPL mode is active, primitive tools (Bash, Read, Edit, Write, Glob, Grep, Agent, etc.) are only accessible through this tool.
 
 Submit an array of tool calls. Each call specifies the tool name and its input parameters. Results are returned per-call in indexed <repl_result> blocks.
 

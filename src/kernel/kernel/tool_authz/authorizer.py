@@ -24,6 +24,7 @@ from kernel.tool_authz.config_section import PermissionsSection
 from kernel.tool_authz.constants import SHELL_TOOL_NAMES
 from kernel.tool_authz.rule_engine import EngineOutcome, RuleEngine
 from kernel.tool_authz.rule_store import RuleStore
+from kernel.tool_authz.runtime_guard import runtime_kill_denial
 from kernel.tool_authz.session_grant_cache import SessionGrantCache
 from kernel.tool_authz.types import (
     AuthorizeContext,
@@ -41,6 +42,7 @@ from kernel.tool_authz.types import (
     ReasonRuleMatched,
     ReasonSessionGrant,
 )
+from kernel.tools.matching import matches_name
 
 if TYPE_CHECKING:
     from kernel.hooks import HookManager
@@ -225,6 +227,17 @@ class ToolAuthorizer(Subsystem):
         tool_input: dict[str, Any],
         ctx: AuthorizeContext,
     ) -> PermissionDecision:
+        runtime_denial = runtime_kill_denial(tool, tool_input)
+        if runtime_denial is not None:
+            return PermissionDeny(
+                message=runtime_denial,
+                decision_reason=ReasonDefaultRisk(
+                    risk="high",
+                    reason="protected DeepCLI runtime lifecycle",
+                    tool_name=tool.name,
+                ),
+            )
+
         # -- Short-circuit 1: session grant cache --------------------
         cached_grant = self._grant_cache.check(
             session_id=ctx.session_id, tool=tool, tool_input=tool_input
@@ -512,15 +525,15 @@ def _rule_reason(rule: PermissionRule) -> ReasonRuleMatched:
 def _is_plan_file_write(tool: Tool, tool_input: dict[str, Any], ctx: Any) -> bool:
     """True if this tool call is writing to the session's plan file.
 
-    Only FileEdit and FileWrite target a ``file_path`` parameter.
+    Only Edit/Write target a ``file_path`` parameter.
     We check if that path resolves to the session's plan file.
     """
     from kernel.plans import is_session_plan_file
 
-    file_path = tool_input.get("file_path")
+    file_path = tool_input.get("file_path") or tool_input.get("path")
     if not file_path or not isinstance(file_path, str):
         return False
-    if tool.name not in ("FileEdit", "FileWrite"):
+    if not (matches_name(tool, "Edit") or matches_name(tool, "Write")):
         return False
     return is_session_plan_file(file_path, ctx.session_id)
 

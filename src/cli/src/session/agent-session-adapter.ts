@@ -373,6 +373,16 @@ export class MustangAgentSessionAdapter {
 		return this.modelService.listProviders();
 	}
 
+	async runtimeStatus(): Promise<unknown> {
+		const session = this.options.session ?? new MustangSession(this.options.sessionService.clientForSession(), "runtime-probe");
+		return session.runtimeStatus();
+	}
+
+	async runtimeRestart(reason?: string): Promise<unknown> {
+		const session = this.options.session ?? new MustangSession(this.options.sessionService.clientForSession(), "runtime-probe");
+		return session.runtimeRestart(reason);
+	}
+
 	async setCurrentModelRole(role: string, provider: string, model: string): Promise<boolean> {
 		const result = await this.modelService.setCurrent(role, provider, model);
 		await this.refreshModelProfiles().catch(() => {});

@@ -24,4 +24,6 @@ export const MustangMethod = {
   modelSetCurrent: "_mustang.agent/model/set_current",
   modelAdd: "_mustang.agent/model/add",
   modelUpdate: "_mustang.agent/model/update",
+  runtimeStatus: "_mustang.agent/runtime/status",
+  runtimeRestart: "_mustang.agent/runtime/restart",
 } as const;

@@ -323,7 +323,7 @@ class BashTool(Tool[dict[str, Any], str]):
                 "type": "boolean",
                 "description": (
                     "Set to true to run this command in the background. "
-                    "Use FileRead to read the output later."
+                    "Use Read to read the output later."
                 ),
             },
         },

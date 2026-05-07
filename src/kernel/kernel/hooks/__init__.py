@@ -37,6 +37,7 @@ from kernel.hooks.types import (
     HookEventSpec,
     HookHandler,
 )
+from kernel.paths import user_path
 from kernel.subsystem import Subsystem
 
 if TYPE_CHECKING:
@@ -47,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 # Default discovery roots.  Overridable in tests via ``HookManager``
 # constructor params; production always uses these via ``Subsystem.load``.
-_DEFAULT_USER_HOOKS_DIR = Path.home() / ".mustang" / "hooks"
+_DEFAULT_USER_HOOKS_DIR = user_path("hooks")
 _DEFAULT_PROJECT_HOOKS_SUBDIR = Path(".mustang") / "hooks"
 
 

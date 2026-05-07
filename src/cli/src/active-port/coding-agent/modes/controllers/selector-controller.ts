@@ -23,13 +23,16 @@ import { type SessionInfo, SessionManager } from "../../session/session-manager"
 import { FileSessionStorage } from "../../session/session-storage";
 import { isSearchProviderPreference, setPreferredImageProvider, setPreferredSearchProvider } from "../../tools";
 import { setSessionTerminalTitle } from "@/terminal-title.js";
+import { configureDeepSeekPreset } from "@/startup/oobe.js";
 import { AgentDashboard } from "../components/agent-dashboard";
 import { AssistantMessageComponent } from "../components/assistant-message";
+import { DeepSeekOobeSetupComponent } from "../components/deepseek-oobe-setup";
 import { ExtensionDashboard } from "../components/extensions";
 import { HistorySearchComponent } from "../components/history-search";
 import { ModelConfigEditorComponent } from "../components/model-config-editor";
 import { ModelSelectorComponent } from "../components/model-selector";
 import { OAuthSelectorComponent } from "../components/oauth-selector";
+import { OobeWelcomeComponent } from "../components/oobe-welcome";
 import { SessionObserverOverlayComponent } from "../components/session-observer-overlay";
 import { SessionSelectorComponent } from "../components/session-selector";
 import { SettingsSelectorComponent } from "../components/settings-selector";
@@ -505,6 +508,54 @@ export class SelectorController {
 				done();
 				this.showModelSelector();
 			};
+			const openOobeAdd = () => {
+				const welcome = new OobeWelcomeComponent(
+					choice => {
+						if (choice === "deepseek") {
+							openDeepSeekPreset();
+							return;
+						}
+						if (choice === "others") {
+							openNewProviderEditor();
+							return;
+						}
+						close();
+					},
+					{
+						title: "Set up a model",
+						lines: [
+							"No providers are configured yet.",
+							"Set up DeepSeek quickly, or add another model provider.",
+						],
+						skipLabel: "Cancel",
+					},
+				);
+				this.ctx.editorContainer.clear();
+				this.ctx.editorContainer.addChild(welcome);
+				this.ctx.ui.setFocus(welcome);
+				this.ctx.ui.requestRender();
+			};
+			const openDeepSeekPreset = () => {
+				const typeOption = modelState?.providerTypeOptions.find(option => option.providerType === "deepseek");
+				const editor = new DeepSeekOobeSetupComponent(
+					this.ctx.ui,
+					"",
+					typeOption?.effectiveBaseUrl ?? "https://api.deepseek.com",
+					async apiKey => {
+						await configureDeepSeekPreset(this.ctx.session, apiKey);
+						this.ctx.statusLine.invalidate();
+						this.ctx.updateEditorBorderColor();
+						this.ctx.updateEditorTopBorder();
+						this.ctx.showStatus("Model configured. You can change it later with /model.");
+						openList();
+					},
+					openOobeAdd,
+				);
+				this.ctx.editorContainer.clear();
+				this.ctx.editorContainer.addChild(editor);
+				this.ctx.ui.setFocus(editor);
+				this.ctx.ui.requestRender();
+			};
 			const saveAdded = async update => {
 				const added = await this.ctx.session.addProviderModel?.({
 					providerName: update.providerName,
@@ -560,7 +611,7 @@ export class SelectorController {
 			const openProviderSelector = () => {
 				const providers = modelState?.providers ?? [];
 				if (providers.length === 0) {
-					openNewProviderEditor();
+					openOobeAdd();
 					return;
 				}
 				const selector = new SimpleOptionSelectorComponent(
@@ -577,25 +628,42 @@ export class SelectorController {
 				this.ctx.ui.setFocus(selector);
 				this.ctx.ui.requestRender();
 			};
-			const modeSelector = new SimpleOptionSelectorComponent(
+			const openModeSelector = () => {
+				const modeSelector = new SimpleOptionSelectorComponent(
+					"Add model",
+					[
+						{ label: "Existing provider", description: "Add a model under a configured provider" },
+						{ label: "New provider", description: "Create a provider with one model" },
+					],
+					index => {
+						if (index === 0) openProviderSelector();
+						else openNewProviderEditor();
+					},
+					close,
+				);
+				this.ctx.editorContainer.clear();
+				this.ctx.editorContainer.addChild(modeSelector);
+				this.ctx.ui.setFocus(modeSelector);
+				this.ctx.ui.requestRender();
+			};
+			const loadingSelector = new SimpleOptionSelectorComponent(
 				"Add model",
-				[
-					{ label: "Existing provider", description: "Add a model under a configured provider" },
-					{ label: "New provider", description: "Create a provider with one model" },
-				],
-				index => {
-					if (index === 0) openProviderSelector();
-					else openNewProviderEditor();
-				},
+				[{ label: "Loading providers..." }],
+				() => {},
 				close,
 			);
 			this.ctx.session.listProviderModels?.().then(state => {
 				modelState = state;
+				if ((state.providers ?? []).length === 0) {
+					openOobeAdd();
+				} else {
+					openModeSelector();
+				}
 				this.ctx.ui.requestRender();
 			}).catch(error => {
 				this.ctx.showError(`Failed to load models: ${error instanceof Error ? error.message : String(error)}`);
 			});
-			return { component: modeSelector, focus: modeSelector };
+			return { component: loadingSelector, focus: loadingSelector };
 		});
 	}
 

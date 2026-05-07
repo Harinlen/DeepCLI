@@ -66,4 +66,25 @@ assert(!afterSelect.includes("sk-..."), "provider type selection should not carr
 editor.handleInput("\n");
 assert(updates[0]?.providerType === "nvidia", "save should use the selected provider type");
 
+const pasteEditor = new ModelConfigEditorComponent(
+	tui,
+	{ ...model, displayName: "", modelId: "" },
+	1,
+	[
+		{ type: "deepseek", settingFields: ["api_key", "base_url"], effectiveBaseUrl: "https://api.deepseek.com" },
+	],
+	{ providerEditable: false, initialFieldIndex: 6 },
+	() => {},
+	() => {},
+);
+
+pasteEditor.focused = true;
+pasteEditor.handleInput("\x1b[200~minimaxai/minimax-m2.7\x1b[201~");
+const afterPaste = Bun.stripANSI(pasteEditor.render(100).join("\n"));
+assert(afterPaste.includes("Model ID:       minimaxai/minimax-m2.7"), "model id field should accept bracketed paste");
+
+pasteEditor.handleInput("\x1b[200~-fp8\n-v2\x1b[201~");
+const afterMultilinePaste = Bun.stripANSI(pasteEditor.render(100).join("\n"));
+assert(afterMultilinePaste.includes("Model ID:       minimaxai/minimax-m2.7-fp8-v2"), "model id paste should collapse newlines");
+
 console.log("PASS: model config editor");

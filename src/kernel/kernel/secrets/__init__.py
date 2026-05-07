@@ -30,10 +30,11 @@ from kernel.secrets.types import (
     SecretDatabaseError,
     SecretNotFoundError,
 )
+from kernel.paths import user_path
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_DB_PATH = Path.home() / ".mustang" / "secrets.db"
+_DEFAULT_DB_PATH = user_path("secrets.db")
 
 _SECRET_RE = re.compile(r"\$\{secret:([^}]+)\}")
 

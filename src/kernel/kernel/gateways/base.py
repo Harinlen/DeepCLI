@@ -47,6 +47,7 @@ from kernel.orchestrator.types import (
     PermissionRequest,
     PermissionResponse,
 )
+from kernel.paths import user_path
 from kernel.protocol.acp.schemas.permission import (
     PermissionOutcomeCancelled,
     PermissionOutcomeSelected,
@@ -607,7 +608,7 @@ class GatewayAdapter(ABC):
 
     def _peer_sessions_path(self) -> Path:
         """Return the path for this adapter's peer-session mapping file."""
-        return Path.home() / ".mustang" / "gateways" / self._instance_id / "peer_sessions.json"
+        return user_path("gateways", self._instance_id, "peer_sessions.json")
 
     async def _load_peer_sessions(self) -> None:
         """Restore ``_peer_sessions`` from disk (called during ``start``)."""

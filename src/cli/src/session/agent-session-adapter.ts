@@ -71,6 +71,7 @@ export class MustangAgentSessionAdapter {
 	#activeAssistant: AssistantMessage | undefined;
 	#activeAssistantSegment: AssistantMessage | undefined;
 	#toolNames = new Map<string, string>();
+	#skillCommandNames = new Set<string>();
 	#eventTail: Promise<void> = Promise.resolve();
 	#subagentDepth = 0;
 
@@ -117,6 +118,7 @@ export class MustangAgentSessionAdapter {
 
 	async prompt(text: string, _options: Record<string, unknown> = {}): Promise<unknown> {
 		const session = await this.#ensureSessionForPrompt();
+		const skillInvocation = this.#parseSkillInvocation(text);
 		const userMessage = {
 			role: "user",
 			content: [{ type: "text", text }],
@@ -134,9 +136,16 @@ export class MustangAgentSessionAdapter {
 		this.#emit({ type: "agent_start" });
 
 		try {
-			const result = await session.prompt(text, update => this.#handleUpdate(update), {
-				mode: this.currentPermissionMode,
-			});
+			const result = skillInvocation
+				? await session.activateSkill(
+					skillInvocation.name,
+					skillInvocation.args,
+					update => this.#handleUpdate(update),
+					{ mode: this.currentPermissionMode },
+				)
+				: await session.prompt(text, update => this.#handleUpdate(update), {
+					mode: this.currentPermissionMode,
+				});
 			await this.#flushEvents();
 			this.#activeAssistant.stopReason = String((result as { stopReason?: string })?.stopReason ?? "stop");
 			this.#endAssistantSegment(this.#activeAssistant.stopReason);
@@ -320,7 +329,7 @@ export class MustangAgentSessionAdapter {
 		}
 		this.configWarnings.length = 0;
 		if (state.profiles.length === 0 && !providerModel) {
-			this.configWarnings.push("No models available. Use /login or set an API key environment variable, then use /model to select a model.");
+			this.configWarnings.push("No models available. Use /model add to add a model.");
 		}
 		this.model = {
 			id: profile?.modelId ?? providerModel?.modelId ?? state.defaultModel ?? "no-model",
@@ -330,6 +339,25 @@ export class MustangAgentSessionAdapter {
 		};
 		this.agent.model = this.model;
 		this.state.model = this.model;
+	}
+
+	async refreshCommandCatalog(): Promise<void> {
+		const session = this.options.session ?? new MustangSession(this.options.sessionService.clientForSession(), "catalog-probe");
+		const commands = await session.listCommands();
+		this.customCommands.length = 0;
+		this.#skillCommandNames.clear();
+		for (const command of commands) {
+			if (command.source !== "skill") continue;
+			this.#skillCommandNames.add(command.name);
+			this.customCommands.push({
+				source: "skill",
+				command: {
+					name: command.name,
+					description: command.description,
+					usage: command.usage,
+				},
+			});
+		}
 	}
 
 	async setDefaultModelProfile(profileName: string): Promise<boolean> {
@@ -472,6 +500,16 @@ export class MustangAgentSessionAdapter {
 	#requireSession(message: string): MustangSession {
 		if (!this.options.session) throw new Error(message);
 		return this.options.session;
+	}
+
+	#parseSkillInvocation(text: string): { name: string; args: string } | undefined {
+		const trimmed = text.trimStart();
+		if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return undefined;
+		const match = /^\/([^\s/]+)(?:\s+([\s\S]*))?$/.exec(trimmed);
+		if (!match) return undefined;
+		const name = match[1] ?? "";
+		if (!this.#skillCommandNames.has(name)) return undefined;
+		return { name, args: match[2] ?? "" };
 	}
 
 	#applySessionSetupMode(result: unknown): void {

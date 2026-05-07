@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { WebSocketServer, WebSocket } from "ws";
 import { assert } from "./helpers.js";
 
@@ -324,6 +327,7 @@ await main();
 
 async function main(): Promise<void> {
 	const server = new FakeAcpKernel();
+	const configDir = mkdtempSync(join(tmpdir(), "deepcli-pty-config-"));
 	await server.start();
 
 	try {
@@ -334,6 +338,7 @@ async function main(): Promise<void> {
 			TERM: "xterm-256color",
 			COLUMNS: "100",
 			LINES: "32",
+			DEEPCLI_CONFIG_DIR: configDir,
 		});
 
 		assert(result.status === 0, `PTY probe failed with exit ${result.status}\n${result.output}`);
@@ -379,6 +384,7 @@ async function main(): Promise<void> {
 		console.log("PASS: Phase B real CLI PTY/TUI probe");
 	} finally {
 		await server.stop();
+		rmSync(configDir, { recursive: true, force: true });
 	}
 }
 

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { AcpClient, KernelNotRunning } from "@/acp/client.js";
 import type { CliConfig } from "@/config/schema.js";
-import { LEGACY_TOKEN_FILE, defaultTokenFilePath, expandHome } from "@/config/paths.js";
+import { tokenFileCandidates } from "@/config/paths.js";
 import { maybeAutostartKernel, type KernelProcessHandle } from "@/startup/autostart.js";
 
 export interface ConnectResult {
@@ -23,15 +23,6 @@ export function resolveToken(config: CliConfig, env = process.env): string {
     "No DeepCLI auth token found. Set DEEPCLI_TOKEN, set MUSTANG_TOKEN, "
     + "or configure kernel.token_file in the DeepCLI client config.",
   );
-}
-
-function tokenFileCandidates(configuredPath: string | null, env: NodeJS.ProcessEnv): string[] {
-  const candidates = [
-    configuredPath ? expandHome(configuredPath) : null,
-    defaultTokenFilePath(env),
-    expandHome(LEGACY_TOKEN_FILE),
-  ].filter((path): path is string => Boolean(path));
-  return [...new Set(candidates)];
 }
 
 export async function connectKernel(config: CliConfig, options: {

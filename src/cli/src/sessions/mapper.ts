@@ -7,7 +7,7 @@ export function mapAcpSessionInfo(raw: AcpSessionInfo): CliSessionInfo {
   const createdAt = stringOrNull(raw.createdAt ?? metadata?.createdAt);
   const updatedAt = stringOrNull(raw.updatedAt ?? metadata?.updatedAt ?? createdAt);
   const cwd = stringOrNull(raw.cwd) ?? "";
-  const title = stringOrNull(raw.title) ?? fallbackTitle(sessionId, cwd);
+  const title = displayTitle(raw.title) ?? fallbackTitle(sessionId, cwd);
 
   return {
     sessionId,
@@ -35,6 +35,16 @@ function stringOrNull(value: unknown): string | null {
 
 function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function displayTitle(value: unknown): string | null {
+  if (typeof value !== "string" || value.length === 0) return null;
+  const withoutAnsi = value.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, " ");
+  const withoutClosedReminder = withoutAnsi.replace(/<system-reminder\b[^>]*>[\s\S]*?<\/system-reminder>/g, " ");
+  const withoutReminder = withoutClosedReminder.replace(/<system-reminder\b[^>]*>[\s\S]*$/g, " ");
+  const withoutControls = withoutReminder.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, " ");
+  const collapsed = withoutControls.split(/\s+/).filter(Boolean).join(" ");
+  return collapsed.length > 0 ? collapsed : null;
 }
 
 function fallbackTitle(sessionId: string, cwd: string): string {

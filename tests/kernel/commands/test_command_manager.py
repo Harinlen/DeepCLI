@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -115,3 +116,83 @@ async def test_command_manager_shutdown_is_noop(module_table: MagicMock) -> None
     await mgr.startup()
     # shutdown must not raise
     await mgr.shutdown()
+
+
+def _skill(name: str, description: str = "Skill description", argument_hint: str | None = None):
+    return SimpleNamespace(
+        manifest=SimpleNamespace(
+            name=name,
+            description=description,
+            argument_hint=argument_hint,
+        )
+    )
+
+
+class _FakeSkillManager:
+    def __init__(self, skills: list[object]) -> None:
+        self.skills = skills
+        self.callbacks = []
+
+    def user_invocable_skills(self) -> list[object]:
+        return self.skills
+
+    def on_skills_changed(self, callback):
+        self.callbacks.append(callback)
+
+
+class _FakeModuleTable:
+    def __init__(self, skills: _FakeSkillManager) -> None:
+        self.skills = skills
+
+    def has(self, cls: object) -> bool:
+        from kernel.skills import SkillManager
+
+        return cls is SkillManager
+
+    def get(self, cls: object) -> object:
+        from kernel.skills import SkillManager
+
+        if cls is SkillManager:
+            return self.skills
+        raise KeyError(cls)
+
+
+async def test_command_manager_projects_user_invocable_skills_as_commands() -> None:
+    skills = _FakeSkillManager([_skill("debug", "Debug workflow", "<target>")])
+    mgr = CommandManager(_FakeModuleTable(skills))  # type: ignore[arg-type]
+
+    await mgr.startup()
+
+    cmd = mgr.lookup("debug")
+    assert cmd is not None
+    assert cmd.source == "skill"
+    assert cmd.description == "Debug workflow"
+    assert cmd.usage == "/debug <target>"
+    assert cmd.acp_method is None
+
+
+async def test_command_manager_does_not_let_skills_shadow_builtins() -> None:
+    skills = _FakeSkillManager([_skill("model", "Should not replace builtin")])
+    mgr = CommandManager(_FakeModuleTable(skills))  # type: ignore[arg-type]
+
+    await mgr.startup()
+
+    cmd = mgr.lookup("model")
+    assert cmd is not None
+    assert cmd.source == "builtin"
+    assert cmd.description != "Should not replace builtin"
+
+
+async def test_command_manager_refreshes_when_skills_change() -> None:
+    skills = _FakeSkillManager([_skill("alpha")])
+    mgr = CommandManager(_FakeModuleTable(skills))  # type: ignore[arg-type]
+    seen: list[list[dict]] = []
+
+    await mgr.startup()
+    mgr.on_commands_changed(lambda commands: seen.append(commands))
+    skills.skills = [_skill("beta")]
+    skills.callbacks[0]()
+
+    assert mgr.lookup("alpha") is None
+    assert mgr.lookup("beta") is not None
+    assert seen

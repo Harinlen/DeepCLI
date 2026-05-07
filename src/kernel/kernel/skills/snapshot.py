@@ -21,11 +21,12 @@ from typing import Any
 from kernel.skills.types import (
     LoadedSkill,
 )
+from kernel.paths import user_path
 
 logger = logging.getLogger(__name__)
 
 _SNAPSHOT_VERSION = 1
-_DEFAULT_SNAPSHOT_PATH = Path.home() / ".mustang" / ".skills_snapshot.json"
+_DEFAULT_SNAPSHOT_PATH = user_path(".skills_snapshot.json")
 
 
 def load_snapshot(

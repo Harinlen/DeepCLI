@@ -58,6 +58,8 @@ from kernel.protocol.acp.schemas.initialize import (
     InitializeRequest,
 )
 from kernel.protocol.acp.schemas.session import (
+    ActivateSkillRequest,
+    ActivateSkillResponse,
     CancelNotification,
     CancelRequestNotification,
     CloseSessionRequest,
@@ -356,11 +358,13 @@ class AcpSessionHandler:
 
         # --- session/* and model/* methods ---
         if os.getenv("MUSTANG_AGENT_PROMPT_BACKEND") == "router" and method in {
+            MustangMethod.COMMANDS_LIST,
             "session/new",
             "session/list",
             "session/load",
             "session/resume",
             "session/prompt",
+            MustangMethod.SESSION_ACTIVATE_SKILL,
             "session/close",
             "session/set_mode",
             MustangMethod.SESSION_EXECUTE_SHELL,
@@ -369,6 +373,8 @@ class AcpSessionHandler:
             MustangMethod.SESSION_GET_USAGE,
             *_ROUTER_MODEL_METHODS,
         }:
+            if method == MustangMethod.COMMANDS_LIST:
+                return await self._route_commands_list_through_hub(conn)
             if method in _ROUTER_MODEL_METHODS:
                 return await self._route_model_request_through_hub(method, msg, conn)
             if method == "session/new":
@@ -446,6 +452,16 @@ class AcpSessionHandler:
                 except pydantic.ValidationError as exc:
                     raise _make_invalid_params(exc)
                 return await self._route_get_usage_through_hub(usage_params, conn)
+            if method == MustangMethod.SESSION_ACTIVATE_SKILL:
+                try:
+                    activate_params = ActivateSkillRequest.model_validate(msg.params)
+                except pydantic.ValidationError as exc:
+                    raise _make_invalid_params(exc)
+                return await self._route_activate_skill_through_hub(
+                    activate_params,
+                    conn,
+                    sender,
+                )
             try:
                 prompt_params = PromptRequest.model_validate(msg.params)
             except pydantic.ValidationError as exc:
@@ -622,6 +638,43 @@ class AcpSessionHandler:
         )
         return GetUsageResponse.model_validate(payload)
 
+    async def _route_commands_list_through_hub(
+        self,
+        conn: ConnectionContext,
+    ) -> Any:
+        from kernel.protocol.acp.schemas.commands import ListCommandsResponse
+
+        payload = await self._route_agent_contract_through_hub(
+            contract="agent.commands_list",
+            params={},
+            session_id=None,
+            conn=conn,
+        )
+        return ListCommandsResponse.model_validate(payload)
+
+    async def _route_activate_skill_through_hub(
+        self,
+        params: ActivateSkillRequest,
+        conn: ConnectionContext,
+        sender: _AcpClientSender,
+    ) -> ActivateSkillResponse:
+        payload = await self._route_agent_prompt_through_hub(
+            params=params.model_dump(by_alias=True),
+            session_id=params.session_id,
+            conn=conn,
+            sender=sender,
+            contract="agent.activate_skill",
+        )
+        updates = payload.get("updates", [])
+        if isinstance(updates, list):
+            for raw_update in updates:
+                notification = SessionUpdateNotification.model_validate(raw_update)
+                await sender.notify("session/update", notification)
+        return ActivateSkillResponse(
+            stop_reason=cast(AcpStopReason, str(payload.get("stopReason", "end_turn"))),
+            meta=payload.get("_meta") or payload.get("meta"),
+        )
+
     async def _emit_execution_updates(
         self,
         payload: dict[str, Any],
@@ -641,6 +694,7 @@ class AcpSessionHandler:
         session_id: str,
         conn: ConnectionContext,
         sender: _AcpClientSender,
+        contract: str = "agent.prompt",
     ) -> dict[str, Any]:
         hub_endpoint = getattr(self._module_table, "agent_hub_endpoint", None)
         if not hub_endpoint:
@@ -669,12 +723,12 @@ class AcpSessionHandler:
                 connection_id=conn.auth.connection_id,
             ),
             session_id=session_id,
-            payload={"method": "agent.prompt"},
+            payload={"method": contract},
         )
         request = HubFrame(
             frame_id=f"access-agent-{uuid.uuid4().hex}",
             frame_type=HubFrameType.REQUEST,
-            contract="agent.prompt",
+            contract=contract,
             payload={
                 "routerFrame": router_frame.model_dump(),
                 "params": params,
@@ -690,7 +744,7 @@ class AcpSessionHandler:
                     await ws.send(response.to_json_bytes())
                     continue
                 if frame.payload.get("ok") is not True:
-                    error = frame.payload.get("error", "agent.prompt failed")
+                    error = frame.payload.get("error", f"{contract} failed")
                     message = frame.payload.get("message")
                     detail = f"{error}: {message}" if message else str(error)
                     raise InternalError(detail)
@@ -986,6 +1040,8 @@ class AcpSessionHandler:
             return self._get_model_handler()
         if target == "secrets":
             return self._get_secrets_handler()
+        if target == "commands":
+            return self._get_commands_handler()
         raise InternalError(f"Unknown routing target: {target!r}")
 
     def _get_session_handler(self) -> SessionHandler:
@@ -1026,6 +1082,15 @@ class AcpSessionHandler:
         if sm is None:
             raise InternalError("SecretManager is not available")
         return sm
+
+    def _get_commands_handler(self) -> Any:
+        """Retrieve the CommandManager slash-command catalog provider."""
+        try:
+            from kernel.commands import CommandManager
+
+            return self._module_table.get(CommandManager)
+        except KeyError:
+            raise InternalError("CommandManager subsystem is not available")
 
     def _make_error_response(self, req_id: str | int, exc: Exception) -> AcpOutboundError:
         code = getattr(exc, "code", INTERNAL_ERROR)

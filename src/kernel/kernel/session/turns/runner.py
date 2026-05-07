@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -39,6 +40,9 @@ from kernel.session.runtime.state import QueuedTurn, Session, TurnState
 
 UTC = timezone.utc
 logger = logging.getLogger("kernel.session")
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_SYSTEM_REMINDER_RE = re.compile(r"<system-reminder\b[^>]*>.*?</system-reminder>", re.DOTALL)
+_SKILL_BLOCK_RE = re.compile(r'<skill\s+name="(?P<name>[^"]+)"[^>]*>.*?</skill>', re.DOTALL)
 
 
 class SessionTurnRunnerMixin(_SessionMixinBase):
@@ -136,7 +140,9 @@ class SessionTurnRunnerMixin(_SessionMixinBase):
         for block in content_raw:
             if block.get("type") != "text":
                 continue
-            first_text = str(block["text"])[:200]
+            first_text = _auto_title_from_text(str(block["text"]))
+            if first_text is None:
+                continue
             session.title = first_text
             asyncio.create_task(
                 self._store.update_title(session.session_id, first_text, title_source="auto")
@@ -413,3 +419,48 @@ def _turn_result_meta(client_turn_id: str | None, *, replayed: bool) -> dict[str
         "mustang.agent/clientTurnId": client_turn_id,
         "mustang.agent/replayedTurnResult": replayed,
     }
+
+
+def _auto_title_from_text(text: str) -> str | None:
+    """Return a safe one-line auto title from user-visible prompt text."""
+
+    skill_title = _auto_title_from_skill_prompt(text)
+    if skill_title is not None:
+        return skill_title
+
+    visible_text = _SYSTEM_REMINDER_RE.sub(" ", text)
+    visible_text = _SKILL_BLOCK_RE.sub(" ", visible_text)
+    return _collapse_title_text(visible_text)
+
+
+def _auto_title_from_skill_prompt(text: str) -> str | None:
+    """Summarise Kernel skill activation wrapper prompts as ``/skill args``."""
+
+    match = _SKILL_BLOCK_RE.search(text)
+    if match is None:
+        return None
+
+    name = match.group("name").strip()
+    if not name:
+        return None
+
+    args_match = re.search(
+        rf"User arguments for /{re.escape(name)}:\s*(?P<args>.*)\Z",
+        text,
+        re.DOTALL,
+    )
+    args = _collapse_title_text(args_match.group("args")) if args_match else None
+    if args and args != "(none)":
+        return _collapse_title_text(f"/{name} {args}")
+    return _collapse_title_text(f"/{name}")
+
+
+def _collapse_title_text(text: str) -> str | None:
+    """Collapse prompt text to a display-safe title, or ``None`` if empty."""
+
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = _CONTROL_CHARS_RE.sub(" ", normalized)
+    collapsed = " ".join(normalized.split())
+    if not collapsed:
+        return None
+    return collapsed[:200]

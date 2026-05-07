@@ -32,9 +32,9 @@ def test_default_primary_agent_definition_uses_seed_state_path(
 
     assert definition.id == "primary"
     assert definition.bindings.native_default is True
-    assert definition.state_dir == str(tmp_path / ".mustang" / "agents" / "primary")
+    assert definition.state_dir == str(tmp_path / "agents" / "primary")
     assert definition.session_store_path == str(
-        tmp_path / ".mustang" / "agents" / "primary" / "sessions" / "sessions.db"
+        tmp_path / "agents" / "primary" / "sessions" / "sessions.db"
     )
     assert ManagementCapability.AGENT_CREATE in definition.policy.management_capabilities
 

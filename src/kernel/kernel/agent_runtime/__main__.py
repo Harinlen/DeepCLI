@@ -20,6 +20,7 @@ from kernel.agents import (
     RegistrationToken,
 )
 from kernel.protocol.acp.schemas.session import (
+    ActivateSkillRequest,
     CancelExecutionRequest,
     CancelNotification,
     CloseSessionRequest,
@@ -189,6 +190,15 @@ async def _dispatch_runtime_contract(
             PromptRequest.model_validate(frame.payload["params"]),
             client_peer=peer,
         )
+        return {"ok": True, **result}
+    if frame.contract == "agent.activate_skill":
+        result = await session_service.activate_skill(
+            ActivateSkillRequest.model_validate(frame.payload["params"]),
+            client_peer=peer,
+        )
+        return {"ok": True, **result}
+    if frame.contract == "agent.commands_list":
+        result = await session_service.commands_list()
         return {"ok": True, **result}
     if frame.contract == "agent.resume":
         result = await session_service.resume_session(

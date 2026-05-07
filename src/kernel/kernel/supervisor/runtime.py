@@ -13,6 +13,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from kernel.paths import user_path
+
 
 @dataclass(frozen=True)
 class SupervisorConfig:
@@ -62,7 +64,7 @@ class SupervisorRuntime:
         access_file = self.config.runtime_dir / "access-agent.json"
         primary_file = self.config.runtime_dir / "primary-agent.json"
         hub_endpoint = f"ws://{self.config.host}:{hub_port}"
-        state_dir = Path.home() / ".mustang" / "agents" / "primary"
+        state_dir = user_path("agents", "primary")
         session_store = state_dir / "sessions" / "sessions.db"
 
         python = sys.executable

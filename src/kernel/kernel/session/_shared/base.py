@@ -110,8 +110,22 @@ if TYPE_CHECKING:
             sender_session_id: str | None = None,
         ) -> bool: ...
 
+        def _explicit_replay_keys(
+            self, events: list[SessionEvent]
+        ) -> tuple[set[str], set[str], set[str], set[str]]: ...
+
         async def _replay_event(
-            self, ctx: HandlerContext, session: Session, event: SessionEvent
+            self,
+            ctx: HandlerContext,
+            session: Session,
+            event: SessionEvent,
+            *,
+            skip_conversation_users: bool = False,
+            skip_conversation_tools: bool = False,
+            skip_conversation_user_texts: set[str] | None = None,
+            skip_conversation_agent_texts: set[str] | None = None,
+            skip_conversation_thought_texts: set[str] | None = None,
+            skip_conversation_tool_ids: set[str] | None = None,
         ) -> None: ...
 
         async def _replay_events(

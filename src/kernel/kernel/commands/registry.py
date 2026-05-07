@@ -8,9 +8,9 @@ from kernel.commands.types import CommandDef
 class CommandRegistry:
     """Thread-safe (asyncio-safe) registry of :class:`CommandDef` objects.
 
-    Commands are keyed by name.  The registry is append-only during
-    startup; no runtime mutation after ``CommandManager.startup()``
-    completes.
+    Commands are keyed by name.  Built-ins are stable, while skill
+    commands are a projection that CommandManager may rebuild when
+    SkillManager reports discovery changes.
 
     Raises:
         ValueError: If a command with the same name is registered twice.
@@ -43,3 +43,7 @@ class CommandRegistry:
     def list_commands(self) -> list[CommandDef]:
         """Return all registered commands in registration order."""
         return list(self._commands.values())
+
+    def clear(self) -> None:
+        """Remove all command definitions."""
+        self._commands.clear()

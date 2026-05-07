@@ -17,7 +17,7 @@ from kernel.agents.control_plane import AgentRuntimeKind, AgentStatus
 
 
 PRIMARY_AGENT_ID = "primary"
-DEFAULT_AGENT_ROOT = ".mustang/agents"
+DEFAULT_AGENT_ROOT = "agents"
 AGENT_CONTRACT_SCHEMA_VERSION = "agent-control-plane.b0"
 
 

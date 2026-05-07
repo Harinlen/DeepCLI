@@ -1,8 +1,7 @@
 import { homedir } from "node:os";
 import { join, resolve, win32 } from "node:path";
 
-export const LEGACY_CLIENT_CONFIG_PATH = "~/.mustang/client.yaml";
-export const LEGACY_TOKEN_FILE = "~/.mustang/state/auth_token";
+export const DEEPCLI_HOME_DIRNAME = ".deepcli";
 
 export const CLIENT_CONFIG_PATH = defaultClientConfigPath();
 export const DEFAULT_TOKEN_FILE = defaultTokenFilePath();
@@ -12,6 +11,7 @@ export interface PathEnvironment {
   APPDATA?: string;
   DEEPCLI_CONFIG_DIR?: string;
   DEEPCLI_DATA_DIR?: string;
+  DEEPCLI_HOME?: string;
   DEEPCLI_STATE_DIR?: string;
   LOCALAPPDATA?: string;
   XDG_CONFIG_HOME?: string;
@@ -26,15 +26,17 @@ export function expandHome(path: string): string {
   return path;
 }
 
+export function defaultDeepCliHome(env: PathEnvironment = process.env): string {
+  if (env.DEEPCLI_HOME) return expandHome(env.DEEPCLI_HOME);
+  return join(homedir(), DEEPCLI_HOME_DIRNAME);
+}
+
 export function defaultConfigDir(
   env: PathEnvironment = process.env,
   platform: NodeJS.Platform = process.platform,
 ): string {
   if (env.DEEPCLI_CONFIG_DIR) return expandHome(env.DEEPCLI_CONFIG_DIR);
-  if (platform === "win32") {
-    return win32.join(env.APPDATA ?? win32.join(homedir(), "AppData", "Roaming"), "DeepCLI");
-  }
-  return join(env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "deepcli");
+  return defaultDeepCliHome(env);
 }
 
 export function defaultStateDir(
@@ -42,10 +44,8 @@ export function defaultStateDir(
   platform: NodeJS.Platform = process.platform,
 ): string {
   if (env.DEEPCLI_STATE_DIR) return expandHome(env.DEEPCLI_STATE_DIR);
-  if (platform === "win32") {
-    return win32.join(env.LOCALAPPDATA ?? win32.join(homedir(), "AppData", "Local"), "DeepCLI", "State");
-  }
-  return join(env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "deepcli");
+  const joinPath = platform === "win32" ? win32.join : join;
+  return joinPath(defaultDeepCliHome(env), "state");
 }
 
 export function defaultDataDir(
@@ -53,10 +53,8 @@ export function defaultDataDir(
   platform: NodeJS.Platform = process.platform,
 ): string {
   if (env.DEEPCLI_DATA_DIR) return expandHome(env.DEEPCLI_DATA_DIR);
-  if (platform === "win32") {
-    return win32.join(env.LOCALAPPDATA ?? win32.join(homedir(), "AppData", "Local"), "DeepCLI");
-  }
-  return join(env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"), "deepcli");
+  const joinPath = platform === "win32" ? win32.join : join;
+  return joinPath(defaultDeepCliHome(env), "data");
 }
 
 export function defaultClientConfigPath(
@@ -67,10 +65,23 @@ export function defaultClientConfigPath(
   return joinPath(defaultConfigDir(env, platform), "client.yaml");
 }
 
+export function resolveClientConfigPath(path: string | undefined, env: PathEnvironment = process.env): string {
+  if (path) return expandHome(path);
+  return defaultClientConfigPath(env);
+}
+
 export function defaultTokenFilePath(
   env: PathEnvironment = process.env,
   platform: NodeJS.Platform = process.platform,
 ): string {
   const joinPath = platform === "win32" ? win32.join : join;
   return joinPath(defaultStateDir(env, platform), "auth_token");
+}
+
+export function tokenFileCandidates(configuredPath: string | null = null, env: PathEnvironment = process.env): string[] {
+  const candidates = [
+    configuredPath ? expandHome(configuredPath) : null,
+    defaultTokenFilePath(env),
+  ].filter((path): path is string => Boolean(path));
+  return [...new Set(candidates)];
 }

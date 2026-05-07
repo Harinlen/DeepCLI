@@ -45,6 +45,7 @@ import { popTerminalTitle, pushTerminalTitle, setSessionTerminalTitle } from "@/
 import type { AssistantMessageComponent } from "./components/assistant-message";
 import type { BashExecutionComponent } from "./components/bash-execution";
 import { CustomEditor } from "./components/custom-editor";
+import { DeepSeekOobeSetupComponent } from "./components/deepseek-oobe-setup";
 import { DynamicBorder } from "./components/dynamic-border";
 import type { HookEditorComponent } from "./components/hook-editor";
 import type { HookInputComponent } from "./components/hook-input";
@@ -52,6 +53,7 @@ import type { HookSelectorComponent } from "./components/hook-selector";
 import type { PythonExecutionComponent } from "./components/python-execution";
 import { StatusLineComponent } from "./components/status-line";
 import type { ToolExecutionHandle } from "./components/tool-execution";
+import { OobeWelcomeComponent, type OobeWelcomeChoice } from "./components/oobe-welcome";
 import { WelcomeComponent, type LspServerInfo as WelcomeLspServerInfo } from "./components/welcome";
 import { BtwController } from "./controllers/btw-controller";
 import { CommandController } from "./controllers/command-controller";
@@ -293,7 +295,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#observerRegistry = new SessionObserverRegistry();
 	}
 
-	async init(): Promise<void> {
+	async init(options: { skipStartupWelcome?: boolean; suppressConfigWarnings?: boolean } = {}): Promise<void> {
 		if (this.isInitialized) return;
 
 		logger.time("InteractiveMode.init:keybindings");
@@ -322,12 +324,14 @@ export class InteractiveMode implements InteractiveModeContext {
 			),
 		);
 
-		const startupQuiet = settings.get("startup.quiet");
+		const startupQuiet = settings.get("startup.quiet") || options.skipStartupWelcome === true;
 		this.#welcomeComponent = undefined;
 
-		for (const warning of this.session.configWarnings) {
-			this.ui.addChild(new Text(theme.fg("warning", `Warning: ${warning}`), 1, 0));
-			this.ui.addChild(new Spacer(1));
+		if (!options.suppressConfigWarnings) {
+			for (const warning of this.session.configWarnings) {
+				this.ui.addChild(new Text(theme.fg("warning", `Warning: ${warning}`), 1, 0));
+				this.ui.addChild(new Spacer(1));
+			}
 		}
 
 		if (!startupQuiet) {
@@ -434,6 +438,40 @@ export class InteractiveMode implements InteractiveModeContext {
 
 		// Initial top border update
 		this.updateEditorTopBorder();
+	}
+
+	async showStartupWelcome(): Promise<void> {
+		if (settings.get("startup.quiet")) return;
+		const modelName = this.session.model?.name ?? "Unknown";
+		const providerName = this.session.model?.provider ?? "Unknown";
+		const recentSessions = await getRecentSessions(this.sessionManager.getSessionDir()).then(sessions =>
+			sessions.map(s => ({
+				name: s.name,
+				timeAgo: s.timeAgo,
+			})),
+		);
+		if (this.#welcomeComponent) {
+			this.#welcomeComponent.setModel(modelName, providerName);
+			this.#welcomeComponent.setRecentSessions(recentSessions);
+			this.#welcomeComponent.setLspServers(this.#getWelcomeLspServers());
+			this.ui.requestRender(true);
+			return;
+		}
+		this.#welcomeComponent = new WelcomeComponent(
+			this.#version,
+			modelName,
+			providerName,
+			recentSessions,
+			this.#getWelcomeLspServers(),
+		);
+		const insertAt = this.ui.children.indexOf(this.statusLine);
+		const children = [new Spacer(1), this.#welcomeComponent, new Spacer(1)];
+		if (insertAt >= 0) {
+			this.ui.children.splice(insertAt, 0, ...children);
+		} else {
+			for (const child of children) this.ui.addChild(child);
+		}
+		this.ui.requestRender(true);
 	}
 
 	/** Reload slash commands and autocomplete for the provided working directory. */
@@ -1486,6 +1524,84 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	showModelAdd(): void {
 		this.#selectorController.showModelAdd();
+	}
+
+	async runOobeFlow(handlers: {
+		setupDeepSeek(apiKey: string): Promise<void>;
+		setupOthers(): void;
+		skip(): Promise<void>;
+	}): Promise<"configured" | "others" | "skipped"> {
+		const restoreEditor = () => {
+			this.editorContainer.clear();
+			this.editorContainer.addChild(this.editor);
+			this.ui.setFocus(this.editor);
+			this.ui.requestRender();
+		};
+		const showWelcome = (resolve: (value: "configured" | "others" | "skipped") => void) => {
+			const welcome = new OobeWelcomeComponent(async (choice: OobeWelcomeChoice) => {
+				if (choice === "deepseek") {
+					await showDeepSeek(resolve);
+					return;
+				}
+				if (choice === "others") {
+					restoreEditor();
+					handlers.setupOthers();
+					resolve("others");
+					return;
+				}
+				if (choice === "exit") {
+					resolve("skipped");
+					void this.shutdown();
+					return;
+				}
+				await handlers.skip();
+				restoreEditor();
+				await this.showStartupWelcome();
+				resolve("skipped");
+			}, { ctrlCChoice: "exit" });
+			this.editorContainer.clear();
+			this.editorContainer.addChild(welcome);
+			this.ui.setFocus(welcome);
+			this.ui.requestRender();
+		};
+		const showDeepSeek = async (resolve: (value: "configured" | "others" | "skipped") => void) => {
+			let initialApiKey = "";
+			let baseUrl = "https://api.deepseek.com";
+			try {
+				const state = await this.session.listProviderModels?.();
+				const provider = state?.providers.find(item => item.name === "deepseek");
+				const typeOption = state?.providerTypeOptions.find(item => item.providerType === "deepseek");
+				initialApiKey = provider?.apiKeyDisplay ?? "";
+				baseUrl = provider?.effectiveBaseUrl ?? typeOption?.effectiveBaseUrl ?? baseUrl;
+			} catch {
+				// OOBE remains useful with known DeepSeek defaults if state refresh fails.
+			}
+			const editor = new DeepSeekOobeSetupComponent(
+				this.ui,
+				initialApiKey,
+				baseUrl,
+				async apiKey => {
+					await handlers.setupDeepSeek(apiKey);
+					restoreEditor();
+					this.statusLine.invalidate();
+					this.updateEditorBorderColor();
+					this.updateEditorTopBorder();
+					await this.showStartupWelcome();
+					this.showStatus("Model configured. You can change it later with /model.");
+					resolve("configured");
+				},
+				() => showWelcome(resolve),
+				() => {
+					resolve("skipped");
+					void this.shutdown();
+				},
+			);
+			this.editorContainer.clear();
+			this.editorContainer.addChild(editor);
+			this.ui.setFocus(editor);
+			this.ui.requestRender();
+		};
+		return new Promise(resolve => showWelcome(resolve));
 	}
 
 	showPluginSelector(mode?: "install" | "uninstall"): void {

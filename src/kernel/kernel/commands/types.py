@@ -21,6 +21,9 @@ class CommandDef:
         acp_method: ACP method the WS client calls, or ``None`` for
             purely local commands (e.g. ``/help``).
         subcommands: Optional list of subcommand names for autocomplete.
+        source: Where the command came from.  ``"skill"`` commands are
+            projections of user-invocable skills and execute through the
+            Kernel skill activation path, not local CLI file reads.
     """
 
     name: str
@@ -28,3 +31,4 @@ class CommandDef:
     usage: str
     acp_method: str | None
     subcommands: list[str] = field(default_factory=list)
+    source: str = "builtin"

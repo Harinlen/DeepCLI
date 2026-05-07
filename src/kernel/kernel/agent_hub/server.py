@@ -108,9 +108,10 @@ class AgentHubWebSocketServer:
                 "ok": True,
                 "targetAgentId": self.hub.router.resolve_target(router_frame),
             }
-        if frame.contract == "agent.prompt":
-            return await self._forward_agent_contract(frame, "agent.prompt", access_ws=access_ws)
+        if frame.contract in {"agent.prompt", "agent.activate_skill"}:
+            return await self._forward_agent_contract(frame, frame.contract, access_ws=access_ws)
         if frame.contract in {
+            "agent.commands_list",
             "agent.session_new",
             "agent.session_list",
             "agent.session_load",
@@ -180,7 +181,7 @@ class AgentHubWebSocketServer:
                     "params": frame.payload.get("params", {}),
                 },
             ),
-            timeout=None if contract == "agent.prompt" else 5,
+            timeout=None if contract in {"agent.prompt", "agent.activate_skill"} else 5,
             client_request_handler=(
                 (lambda request: _proxy_client_request(access_ws, request))
                 if access_ws is not None

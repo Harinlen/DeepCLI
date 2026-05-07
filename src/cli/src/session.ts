@@ -13,7 +13,7 @@ import { cwd } from "process";
 
 type MustangSessionClient = Pick<
   AcpClient,
-  "request" | "notify" | "promptRequest" | "executeShellRequest" | "executePythonRequest" | "onUpdate"
+  "request" | "notify" | "promptRequest" | "activateSkillRequest" | "executeShellRequest" | "executePythonRequest" | "onUpdate"
 >;
 
 export type PermissionMode = "default" | "accept_edits" | "plan" | "auto" | "dont_ask" | "bypass";
@@ -53,6 +53,20 @@ export interface CostUsageReport {
   environment: { lspServers: string[]; mcpServers: string[] };
   costUsd?: number | null;
   costNote?: string | null;
+}
+
+export interface CommandEntry {
+  name: string;
+  description: string;
+  usage: string;
+  acpMethod?: string | null;
+  acp_method?: string | null;
+  subcommands?: string[];
+  source?: string;
+}
+
+export interface ListCommandsResponse {
+  commands: CommandEntry[];
 }
 
 const RESUME_RETRY_ATTEMPTS = 24;
@@ -110,6 +124,38 @@ export class MustangSession {
     } finally {
       unsub();
     }
+  }
+
+  async activateSkill(
+    skill: string,
+    args: string,
+    onUpdate: (update: SessionUpdateParams) => void,
+    options: { mode?: PermissionMode } = {},
+  ): Promise<PromptResult> {
+    const unsub = this.client.onUpdate(onUpdate);
+    const clientTurnId = randomUUID();
+    try {
+      let resumeState = await this.resumeWithRetry();
+      await this.syncModeAfterResume(options.mode, resumeState);
+      try {
+        return await this.client.activateSkillRequest(this.sessionId, skill, args, { clientTurnId });
+      } catch (error) {
+        if (!(error instanceof KernelDisconnected)) throw error;
+        resumeState = await this.resumeWithRetry();
+        await this.syncModeAfterResume(options.mode, resumeState);
+        return await this.client.activateSkillRequest(this.sessionId, skill, args, { clientTurnId });
+      }
+    } finally {
+      unsub();
+    }
+  }
+
+  async listCommands(): Promise<CommandEntry[]> {
+    const result = await this.client.request<ListCommandsResponse>(
+      MustangMethod.commandsList,
+      {},
+    );
+    return result.commands ?? [];
   }
 
   async executeShell(

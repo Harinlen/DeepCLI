@@ -17,6 +17,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from kernel.paths import user_path
 from kernel.subsystem import Subsystem
 
 from . import store
@@ -82,7 +83,7 @@ class MemoryManager(Subsystem):
             logger.info("LLMManager not available — memory scoring disabled")
 
         # 2. Directory trees
-        self._global_root = Path.home() / ".mustang" / "memory"
+        self._global_root = user_path("memory")
         store.ensure_directory_tree(self._global_root)
 
         # Project scope: look for .mustang/memory/ in cwd or git root

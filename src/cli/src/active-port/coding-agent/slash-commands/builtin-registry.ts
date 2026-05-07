@@ -158,8 +158,13 @@ async function resolveSessionTarget(ctx: any, rawTarget: string | undefined): Pr
 
 async function executeModelCommand(ctx: any, argsText: string): Promise<boolean> {
 	const args = splitArgs(argsText);
-	const subcommand = args[0] ?? "list";
+	const subcommand = args[0] ?? await defaultModelSubcommand(ctx);
 	if (subcommand === "list") {
+		const state = await ctx.session?.listProviderModels?.().catch(() => undefined);
+		if (!state?.models?.length) {
+			ctx.showWarning?.("No models available. Use /model add to add a model.");
+			return true;
+		}
 		ctx.showModelSelector?.();
 		return true;
 	}
@@ -194,6 +199,11 @@ async function executeModelCommand(ctx: any, argsText: string): Promise<boolean>
 	}
 	ctx.showWarning?.("Usage: /model [list|add|current|use]");
 	return true;
+}
+
+async function defaultModelSubcommand(ctx: any): Promise<"list" | "add"> {
+	const state = await ctx.session?.listProviderModels?.().catch(() => undefined);
+	return state?.models?.length ? "list" : "add";
 }
 
 function parseModelRef(value: string | undefined): { provider: string; model: string } | undefined {

@@ -13,6 +13,8 @@ import os
 import random
 from pathlib import Path
 
+from kernel.paths import user_path
+
 logger = logging.getLogger(__name__)
 
 # Word lists for slug generation (adjective + noun, CC-style).
@@ -124,7 +126,7 @@ _MAX_SLUG_RETRIES = 10
 _slug_cache: dict[str, str] = {}
 
 # Default plans directory.
-_DEFAULT_PLANS_DIR = Path.home() / ".mustang" / "plans"
+_DEFAULT_PLANS_DIR = user_path("plans")
 
 
 def get_plans_directory() -> Path:

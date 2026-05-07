@@ -49,11 +49,11 @@ def mustang_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
       that one we still need the monkeypatch.
 
     With all three redirected the test run can never touch the
-    developer's real ``~/.mustang`` tree even accidentally.
+    developer's real ``~/.deepcli`` tree even accidentally.
     """
-    global_dir = tmp_path / ".mustang" / "config"
+    global_dir = tmp_path / ".deepcli" / "config"
     project_dir = tmp_path / "project-config"
-    flags_path = tmp_path / ".mustang" / "flags.yaml"
+    flags_path = tmp_path / ".deepcli" / "flags.yaml"
     global_dir.mkdir(parents=True, exist_ok=True)
     project_dir.mkdir(parents=True, exist_ok=True)
 
@@ -63,7 +63,7 @@ def mustang_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     monkeypatch.setattr(
         app_module, "SecretManager",
-        lambda: SecretManager(db_path=tmp_path / ".mustang" / "secrets.db"),
+        lambda: SecretManager(db_path=tmp_path / ".deepcli" / "secrets.db"),
     )
     monkeypatch.setattr(
         app_module,
@@ -88,13 +88,13 @@ def client(mustang_home: Path) -> TestClient:
 
 def _read_token(mustang_home: Path) -> str:
     """Return the token ConnectionAuthenticator created during startup."""
-    token_path = mustang_home / ".mustang" / "state" / "auth_token"
+    token_path = mustang_home / ".deepcli" / "state" / "auth_token"
     return token_path.read_text(encoding="utf-8").strip()
 
 
 def _install_password(mustang_home: Path, plaintext: str) -> None:
     """Pre-seed the password hash so ConnectionAuthenticator picks it up on startup."""
-    state_dir = mustang_home / ".mustang" / "state"
+    state_dir = mustang_home / ".deepcli" / "state"
     state_dir.mkdir(parents=True, exist_ok=True)
     (state_dir / "auth_password.hash").write_text(hash_password(plaintext), encoding="utf-8")
 
@@ -250,7 +250,7 @@ def test_unknown_stack_name_aborts_boot(
     ``FlagManager.register``, which the lifespan converts into a
     fatal error.
     """
-    flags_path = mustang_home / ".mustang" / "flags.yaml"
+    flags_path = mustang_home / ".deepcli" / "flags.yaml"
     flags_path.parent.mkdir(parents=True, exist_ok=True)
     flags_path.write_text(yaml.safe_dump({"transport": {"stack": "definitely-not-a-stack"}}))
 

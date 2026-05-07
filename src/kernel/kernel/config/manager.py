@@ -37,12 +37,13 @@ from kernel.config.section import (
     ReadOnlySection,
     _Section,
 )
+from kernel.paths import user_config_dir
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
-_DEFAULT_GLOBAL_DIR = Path.home() / ".mustang" / "config"
+_DEFAULT_GLOBAL_DIR = user_config_dir()
 _DEFAULT_PROJECT_SUBDIR = Path(".mustang") / "config"
 
 

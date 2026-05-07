@@ -49,6 +49,7 @@ from kernel.skills.types import (
     SkillSetupEnvVar,
     SkillSource,
 )
+from kernel.paths import user_path
 from kernel.subsystem import Subsystem
 
 if TYPE_CHECKING:
@@ -58,7 +59,7 @@ logger = logging.getLogger(__name__)
 
 
 # Default discovery roots.
-_DEFAULT_USER_SKILLS_DIR = Path.home() / ".mustang" / "skills"
+_DEFAULT_USER_SKILLS_DIR = user_path("skills")
 _DEFAULT_PROJECT_SKILLS_SUBDIR = Path(".mustang") / "skills"
 
 # Claude Code compatibility paths.

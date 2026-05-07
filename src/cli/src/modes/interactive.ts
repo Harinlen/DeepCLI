@@ -6,6 +6,9 @@ import { SessionService } from "@/sessions/service.js";
 import type { CliSessionInfo } from "@/sessions/types.js";
 import { MustangAgentSessionAdapter } from "@/session/agent-session-adapter.js";
 import { PermissionController } from "@/permissions/controller.js";
+import type { CliConfig } from "@/config/schema.js";
+import { saveCliOobeState } from "@/config/loader.js";
+import { checkOobe, configureDeepSeekPreset, markOobeSatisfied, markOobeSkipped } from "@/startup/oobe.js";
 import { InteractiveMode as ActivePortInteractiveMode } from "./active-port-loader.js";
 
 export const BUILTIN_COMMANDS: AutocompleteItem[] = [
@@ -145,6 +148,8 @@ export class InteractiveMode {
       recentSessions?: CliSessionInfo[];
       theme?: { theme: string; auto_theme: boolean; symbols: string; status_line: boolean; welcome_recent: number };
       version?: string;
+      config?: CliConfig;
+      configPath?: string;
     } = {},
   ) {
     const sessionService = options.sessionService ?? new SessionService(client);
@@ -159,6 +164,14 @@ export class InteractiveMode {
 
   async run(): Promise<void> {
     await this.adapter.refreshModelProfiles().catch(() => {});
+    await this.adapter.refreshCommandCatalog().catch(() => {});
+    const oobeCheck = this.options.config && this.options.configPath
+      ? await checkOobe(this.adapter, this.options.config).catch(error => ({ shouldShow: false as const, reason: "satisfied" as const, warning: error instanceof Error ? error.message : String(error) }))
+      : { shouldShow: false as const, reason: "current-revision-state" as const };
+    if (!oobeCheck.shouldShow && "stateToSave" in oobeCheck && oobeCheck.stateToSave && this.options.config && this.options.configPath) {
+      this.options.config.oobe = oobeCheck.stateToSave;
+      saveCliOobeState(this.options.configPath, oobeCheck.stateToSave);
+    }
     this.mode = new ActivePortInteractiveMode(this.adapter as never, this.options.version ?? "0.1.0");
     this.applyConnectionState(this.client.getConnectionState());
     this.client.onConnectionStateChange((state) => this.applyConnectionState(state));
@@ -180,7 +193,28 @@ export class InteractiveMode {
       }
       this.mode.showStatus("Kernel connection restored.");
     });
-    await this.mode.init();
+    await this.mode.init({
+      skipStartupWelcome: oobeCheck.shouldShow,
+      suppressConfigWarnings: oobeCheck.shouldShow,
+    });
+    if ("warning" in oobeCheck && oobeCheck.warning) {
+      this.mode.showWarning(`OOBE check failed: ${oobeCheck.warning}`);
+    }
+    if (oobeCheck.shouldShow && this.options.config && this.options.configPath) {
+      await this.mode.runOobeFlow({
+        setupDeepSeek: async (apiKey: string) => {
+          await configureDeepSeekPreset(this.adapter, apiKey);
+          await this.adapter.refreshModelProfiles().catch(() => {});
+          markOobeSatisfied(this.options.configPath!, this.options.config!);
+        },
+        setupOthers: () => {
+          this.mode.showModelAdd();
+        },
+        skip: async () => {
+          markOobeSkipped(this.options.configPath!, this.options.config!);
+        },
+      });
+    }
     void this.inputLoop();
     await new Promise<void>((resolve) => {
       this.resolveDone = resolve;

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadCliConfig, parseClientConfig } from "../src/config/loader.js";
-import { defaultClientConfigPath, defaultTokenFilePath, expandHome } from "../src/config/paths.js";
+import { defaultClientConfigPath, defaultConfigDir, defaultDataDir, defaultStateDir, defaultTokenFilePath, expandHome } from "../src/config/paths.js";
 import { assert } from "./helpers.js";
 
 const missing = join(tmpdir(), `deepcli-missing-${Date.now()}.yaml`);
@@ -66,16 +66,12 @@ try {
   assert(nativeLoaded.config.kernel.token === "deepcli-token", "DEEPCLI_TOKEN should override legacy token env");
   assert(nativeLoaded.config.kernel.token_file === join(nativeStateDir, "auth_token"), "native state dir should be default token file");
 
-  assert(
-    defaultClientConfigPath({ APPDATA: "C:\\Users\\saki\\AppData\\Roaming" }, "win32")
-      === "C:\\Users\\saki\\AppData\\Roaming\\DeepCLI\\client.yaml",
-    "Windows config path should use APPDATA",
-  );
-  assert(
-    defaultTokenFilePath({ LOCALAPPDATA: "C:\\Users\\saki\\AppData\\Local" }, "win32")
-      === "C:\\Users\\saki\\AppData\\Local\\DeepCLI\\State\\auth_token",
-    "Windows token path should use LOCALAPPDATA",
-  );
+  const homeDir = join(dir, ".deepcli-home");
+  assert(defaultConfigDir({ DEEPCLI_HOME: homeDir }) === homeDir, "DeepCLI home should be the default config dir");
+  assert(defaultStateDir({ DEEPCLI_HOME: homeDir }) === join(homeDir, "state"), "DeepCLI state should live under home/state");
+  assert(defaultDataDir({ DEEPCLI_HOME: homeDir }) === join(homeDir, "data"), "DeepCLI data should live under home/data");
+  assert(defaultClientConfigPath({ DEEPCLI_HOME: "C:\\Users\\saki\\.deepcli" }, "win32") === "C:\\Users\\saki\\.deepcli\\client.yaml", "Windows config path should use DEEPCLI_HOME when set");
+  assert(defaultTokenFilePath({ DEEPCLI_HOME: "C:\\Users\\saki\\.deepcli" }, "win32") === "C:\\Users\\saki\\.deepcli\\state\\auth_token", "Windows token path should use DEEPCLI_HOME/state when set");
   assert(expandHome("~\\AppData").includes("AppData"), "Windows-style home expansion should work");
 	} finally {
 	  rmSync(dir, { recursive: true, force: true });

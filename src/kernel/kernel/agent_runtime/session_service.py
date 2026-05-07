@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from kernel.agent_runtime.websocket_runtime import RuntimeClientPeer
+from kernel.commands import CommandManager
 from kernel.config import ConfigManager
 from kernel.connection_auth import AuthContext
 from kernel.flags import FlagManager, KernelFlags
@@ -22,8 +23,10 @@ from kernel.llm_provider import LLMProviderManager
 from kernel.mcp import MCPManager
 from kernel.memory import MemoryManager
 from kernel.module_table import KernelModuleTable
+from kernel.paths import user_path
 from kernel.prompts import PromptManager
 from kernel.protocol.acp.schemas.session import (
+    ActivateSkillRequest,
     CancelExecutionRequest,
     CancelNotification,
     CloseSessionRequest,
@@ -66,6 +69,7 @@ _OPTIONAL_SUBSYSTEMS: tuple[tuple[str, type[Subsystem]], ...] = (
     ("git", GitManager),
 )
 _TRAILING_SUBSYSTEMS: tuple[tuple[str, type[Subsystem]], ...] = (
+    ("commands", CommandManager),
     ("gateways", GatewayManager),
     ("schedule", ScheduleManager),
 )
@@ -241,6 +245,41 @@ class AgentSessionRuntimeService:
             ],
         }
 
+    async def activate_skill(
+        self,
+        params: ActivateSkillRequest,
+        *,
+        client_peer: RuntimeClientPeer | None = None,
+    ) -> dict[str, Any]:
+        manager = self._manager()
+        conn, sender = self._connection_for(params.session_id)
+        sender.notifications.clear()
+        sender.client_peer = client_peer
+        try:
+            result = await manager.activate_skill(
+                HandlerContext(conn=conn, sender=sender, request_id=None),
+                _to_contract_activate_skill(params),
+            )
+        finally:
+            sender.client_peer = None
+        return {
+            "stopReason": result.stop_reason,
+            "_meta": result.meta,
+            "updates": []
+            if client_peer is not None
+            else [
+                params.model_dump(by_alias=True)
+                for method, params in sender.notifications
+                if method == "session/update"
+            ],
+        }
+
+    async def commands_list(self) -> dict[str, Any]:
+        if self.module_table is None:
+            raise RuntimeError("session runtime service is not started")
+        commands = self.module_table.get(CommandManager)
+        return {"commands": commands.list_command_dicts()}
+
     async def resume_session(self, params: ResumeSessionRequest) -> dict[str, Any]:
         manager = self._manager()
         sender = CollectingRuntimeSender()
@@ -383,7 +422,7 @@ async def _load(module_table: KernelModuleTable, name: str, factory: type[Subsys
 
 def _prompt_user_dirs(workspace: Path) -> list[Path] | None:
     dirs = [
-        Path.home() / ".mustang" / "prompts",
+        user_path("prompts"),
         workspace / ".mustang" / "prompts",
     ]
     existing = [path for path in dirs if path.is_dir()]
@@ -424,6 +463,12 @@ def _to_contract_prompt(params: PromptRequest) -> Any:
     from kernel.protocol.interfaces.contracts.prompt_params import PromptParams
 
     return PromptParams.model_validate(params.model_dump())
+
+
+def _to_contract_activate_skill(params: ActivateSkillRequest) -> Any:
+    from kernel.protocol.interfaces.contracts.activate_skill_params import ActivateSkillParams
+
+    return ActivateSkillParams.model_validate(params.model_dump())
 
 
 def _to_contract_resume(params: ResumeSessionRequest) -> Any:

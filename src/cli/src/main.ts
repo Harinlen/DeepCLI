@@ -14,6 +14,7 @@ import { ArgError, parseCliArgs, usage } from "@/startup/args.js";
 import { fetchKernelVersion } from "@/startup/health.js";
 import { resolveStartupSession } from "@/startup/session-startup.js";
 import { applyThemeConfig } from "@/startup/theme.js";
+import type { MustangSession } from "@/session.js";
 
 async function main(): Promise<void> {
   let args;
@@ -79,19 +80,42 @@ async function main(): Promise<void> {
     recentSessions: startup.recentSessions.slice(0, loaded.config.ui.welcome_recent),
     theme: loaded.config.ui,
     version: kernelVersion ?? undefined,
+    config: loaded.config,
+    configPath: loaded.path,
   }).run();
 
   connection.autostarted?.stop();
 }
 
-async function runPrintPrompt(session: { prompt(text: string, onUpdate: (update: any) => void): Promise<unknown> }, prompt: string): Promise<void> {
+async function runPrintPrompt(session: MustangSession, prompt: string): Promise<void> {
   if (!prompt.trim()) return;
-  await session.prompt(prompt, (update) => {
+  const skillInvocation = await resolvePrintSkillInvocation(session, prompt);
+  const onUpdate = (update: any) => {
     if (update.sessionUpdate === "agent_message_chunk" && typeof update.content?.text === "string") {
       process.stdout.write(update.content.text);
     }
-  });
+  };
+  if (skillInvocation) {
+    await session.activateSkill(skillInvocation.name, skillInvocation.args, onUpdate);
+  } else {
+    await session.prompt(prompt, onUpdate);
+  }
   process.stdout.write("\n");
+}
+
+async function resolvePrintSkillInvocation(
+  session: MustangSession,
+  prompt: string,
+): Promise<{ name: string; args: string } | undefined> {
+  const trimmed = prompt.trimStart();
+  const match = /^\/([^\s/]+)(?:\s+([\s\S]*))?$/.exec(trimmed);
+  if (!match) return undefined;
+  const name = match[1] ?? "";
+  const commands = await session.listCommands().catch(() => []);
+  if (!commands.some(command => command.name === name && command.source === "skill")) {
+    return undefined;
+  }
+  return { name, args: match[2] ?? "" };
 }
 
 main().catch((error) => {

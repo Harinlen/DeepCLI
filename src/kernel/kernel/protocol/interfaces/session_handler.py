@@ -18,6 +18,7 @@ from typing import Protocol, runtime_checkable
 
 from kernel.protocol.interfaces.contracts.archive_session_params import ArchiveSessionParams
 from kernel.protocol.interfaces.contracts.archive_session_result import ArchiveSessionResult
+from kernel.protocol.interfaces.contracts.activate_skill_params import ActivateSkillParams
 from kernel.protocol.interfaces.contracts.cancel_params import CancelParams
 from kernel.protocol.interfaces.contracts.cancel_execution_params import CancelExecutionParams
 from kernel.protocol.interfaces.contracts.close_session_params import CloseSessionParams
@@ -97,6 +98,12 @@ class SessionHandler(Protocol):
         ``PromptResult(stop_reason="cancelled")`` — never let the
         exception propagate as a JSON-RPC error.
         """
+        ...
+
+    async def activate_skill(
+        self, ctx: HandlerContext, params: ActivateSkillParams
+    ) -> PromptResult:
+        """Activate a user-invocable skill, then process the resulting prompt turn."""
         ...
 
     async def execute_shell(

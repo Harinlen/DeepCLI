@@ -3,6 +3,14 @@ import { DEFAULT_TOKEN_FILE } from "@/config/paths.js";
 export type SessionStartupMode = "picker" | "last" | "new";
 export type SessionListScope = "cwd" | "all";
 export type SymbolPresetName = "unicode" | "nerd" | "ascii";
+export type OobeStatus = "satisfied" | "skipped";
+
+export interface OobeConfig {
+  revision: number;
+  status: OobeStatus;
+  checked_at: string | null;
+  skipped_at: string | null;
+}
 
 export interface CliConfig {
   kernel: {
@@ -27,6 +35,7 @@ export interface CliConfig {
     status_line: boolean;
     welcome_recent: number;
   };
+  oobe: OobeConfig | null;
 }
 
 export const DEFAULT_CONFIG: CliConfig = {
@@ -52,6 +61,7 @@ export const DEFAULT_CONFIG: CliConfig = {
     status_line: true,
     welcome_recent: 3,
   },
+  oobe: null,
 };
 
 export function cloneDefaultConfig(): CliConfig {
@@ -59,5 +69,6 @@ export function cloneDefaultConfig(): CliConfig {
     kernel: { ...DEFAULT_CONFIG.kernel },
     session: { ...DEFAULT_CONFIG.session },
     ui: { ...DEFAULT_CONFIG.ui },
+    oobe: DEFAULT_CONFIG.oobe ? { ...DEFAULT_CONFIG.oobe } : null,
   };
 }

@@ -101,8 +101,9 @@ export class WelcomeComponent implements Component {
 			sessionLines.push(` ${theme.fg("dim", "No recent sessions")}`);
 		} else {
 			for (const session of this.recentSessions.slice(0, 3)) {
+				const name = displayRecentSessionName(session.name);
 				sessionLines.push(
-					` ${theme.fg("dim", `${theme.md.bullet} `)}${theme.fg("muted", session.name)}${theme.fg("dim", ` (${session.timeAgo})`)}`,
+					` ${theme.fg("dim", `${theme.md.bullet} `)}${theme.fg("muted", name)}${theme.fg("dim", ` (${session.timeAgo})`)}`,
 				);
 			}
 		}
@@ -267,4 +268,16 @@ function welcomeLogoCandidates(): string[] {
 		join(configDir, "ui", "welcome-logo.txt"),
 		join(dataDir, "assets", "welcome-logo.txt"),
 	].filter((path): path is string => Boolean(path));
+}
+
+function displayRecentSessionName(name: string): string {
+	return (
+		name
+			.replace(/<system-reminder\b[^>]*>[\s\S]*?<\/system-reminder>/g, " ")
+			.replace(/<system-reminder\b[^>]*>[\s\S]*$/g, " ")
+			.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, " ")
+			.split(/\s+/)
+			.filter(Boolean)
+			.join(" ") || "Untitled session"
+	);
 }

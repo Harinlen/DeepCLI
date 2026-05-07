@@ -1,6 +1,7 @@
 # CommandManager — Design
 
-Status: **landed** — 全部实装。8 个内置命令（`/help`、`/model`、`/plan`、`/compact`、`/session`、`/cost`、`/memory`、`/auth`）。
+Status: **landed** — 全部实装。内置命令加上 `user-invocable`
+Skills 的 `/skill-name` 投影共同组成 Kernel-owned command catalog。
 
 ---
 
@@ -11,6 +12,8 @@ CommandManager 是**命令目录提供者**，不是执行者。
 - 维护一份 `CommandDef` 注册表（名称、描述、用法、映射关系）
 - WS 客户端在 initialize 握手后拉取目录，自己解析命令并调用对应 ACP 方法
 - kernel-side 客户端（DiscordBackend）查目录，直接调对应的 SessionManager / LLMManager 方法
+- `user-invocable` Skills 投影为 `source="skill"` 命令；执行走
+  `_mustang.agent/session/activate_skill`，CLI 不读本地 Skill 文件
 - **没有 `session/command` ACP 方法**，不新建执行通道，执行永远走现有机制
 
 这与 Claude Code 一致：命令是客户端解析的 convenience wrapper，执行走现有协议原语。
@@ -63,6 +66,7 @@ class CommandDef:
     acp_method: str | None    # WS 客户端用 ("session/set_config_option")
                               # None = 本地命令（/help）
     subcommands: list[str] = field(default_factory=list)
+    source: str = "builtin"   # "skill" = SkillManager projection
 ```
 
 ---
@@ -77,25 +81,29 @@ class CommandManager(Subsystem):
         self._registry = CommandRegistry()
         for cmd in _BUILTIN_COMMANDS:
             self._registry.register(cmd)
+        self._register_skill_commands()
 
     def list_commands(self) -> list[CommandDef]: ...
+    def list_command_dicts(self) -> list[dict[str, Any]]: ...
     def lookup(self, name: str) -> CommandDef | None: ...
 ```
 
-无 `dispatch()`，无执行逻辑，无 shutdown 清理。
+无 `dispatch()`，无执行逻辑。CommandManager 订阅 SkillManager 的
+skills-changed signal，动态 skill 出现/消失时重建目录。
 
 ---
 
 ## ACP 集成
 
-客户端获取命令目录的时机：在 `initialize` 握手的 response 里，或通过一个轻量的 `commands/list` 请求。
+客户端通过一个轻量的 commands list 请求获取命令目录。
 
 ```
-Client → { method: "commands/list" }
-Kernel → { result: [ { name, description, usage, acp_method }, ... ] }
+Client → { method: "_mustang.agent/commands/list" }
+Kernel → { result: { commands: [ { name, description, usage, acpMethod, source }, ... ] } }
 ```
 
-这是 DeepCLI 扩展方法，加入 `protocol.md` 采纳表。
+这是 DeepCLI 扩展方法。router backend 下该请求通过 Access -> Hub ->
+Primary Runtime，避免 CLI 看到 Access-local 的 stale catalog。
 
 ---
 
@@ -107,6 +115,11 @@ Kernel → { result: [ { name, description, usage, acp_method }, ... ] }
    - 直接发 `{ method: "model/set_current", params: { role: "default", provider: "provider", model: "model" } }`
    - 从 ACP response / broadcast 中渲染结果
 3. 用户输入 `/help`：本地渲染目录，不发任何网络请求
+4. 用户输入 `/skill-name args`：
+   - 只在本地确认 catalog 中 `source="skill"`
+   - 发 `_mustang.agent/session/activate_skill`
+   - Kernel 校验 `user_invocable`，激活 SkillManager，记录 invoked skill，
+     再进入普通 prompt queue
 
 ---
 

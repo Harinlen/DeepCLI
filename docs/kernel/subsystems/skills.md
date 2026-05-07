@@ -25,6 +25,20 @@ Skill ≠ 可执行代码（和 Hook 的本质区别）。Skill 通过两条路�
 - `prompt.ts` 的 `formatCommandsWithinBudget()` → listing
 - `SkillTool.ts` 的 `call()` → activation（inline 或 fork）
 
+DeepCLI 的用户 slash path 是 Kernel-owned：
+
+- `SkillManager.user_invocable_skills()` 是 truth
+- `CommandManager` 把这些 skills 投影为 `source="skill"` 命令
+- CLI 从 `_mustang.agent/commands/list` 拉取目录用于 autocomplete
+- 输入 `/skill-name args` 时，CLI 调
+  `_mustang.agent/session/activate_skill`
+- `SessionManager.activate_skill()` 校验 `user_invocable`，调用
+  `SkillManager.activate()`，记录 invoked skill 用于 compaction，然后把
+  skill body 作为本轮 prompt 的 active instructions
+
+CLI 不扫描 `~/.mustang/skills` 或 `.mustang/skills`；避免 Access/CLI 与
+Primary Runtime 在 router mode 下看到不同 Skill 状态。
+
 ---
 
 ## 文件格式

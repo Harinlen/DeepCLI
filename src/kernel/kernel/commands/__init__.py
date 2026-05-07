@@ -13,12 +13,18 @@ direct kernel API calls for gateway adapters).
 
 from __future__ import annotations
 
+import logging
+from dataclasses import asdict
+from typing import Any
+
 from kernel.commands.registry import CommandRegistry
 from kernel.commands.types import CommandDef
 from kernel.protocol.acp.namespaces import AcpMethod, MustangMethod
 from kernel.subsystem import Subsystem
 
 __all__ = ["CommandManager", "CommandDef", "CommandRegistry"]
+
+logger = logging.getLogger(__name__)
 
 # Built-in slash commands.  ``acp_method`` is the ACP method a WS client
 # calls; ``None`` means the command is handled client-side (e.g. /help).
@@ -97,14 +103,16 @@ class CommandManager(Subsystem):
     async def startup(self) -> None:
         """Populate the command registry with built-in + skill commands."""
         self._registry = CommandRegistry()
-        for cmd in _BUILTIN_COMMANDS:
-            self._registry.register(cmd)
-
-        # Register user-invocable skills as slash commands.
-        self._register_skill_commands()
+        self._commands_changed_callbacks: list[Any] = []
+        self._skill_command_names: set[str] = set()
+        self._rebuild_registry()
+        self._subscribe_to_skill_changes()
 
     async def shutdown(self) -> None:
-        """No-op — CommandManager holds no external resources."""
+        """Clear in-memory registry and callbacks."""
+        self._registry.clear()
+        self._commands_changed_callbacks.clear()
+        self._skill_command_names.clear()
 
     def lookup(self, name: str) -> CommandDef | None:
         """Return the :class:`CommandDef` for ``name``, or ``None``.
@@ -117,6 +125,24 @@ class CommandManager(Subsystem):
     def list_commands(self) -> list[CommandDef]:
         """Return all registered commands in registration order."""
         return self._registry.list_commands()
+
+    def list_command_dicts(self) -> list[dict[str, Any]]:
+        """Return the command catalog as JSON-serialisable dicts."""
+        return [asdict(cmd) for cmd in self.list_commands()]
+
+    def on_commands_changed(self, callback: Any) -> None:
+        """Register a callback invoked after the command catalog changes."""
+        self._commands_changed_callbacks.append(callback)
+
+    def _rebuild_registry(self) -> None:
+        """Rebuild built-in + skill command projection from current truth."""
+        registry = CommandRegistry()
+        for cmd in _BUILTIN_COMMANDS:
+            registry.register(cmd)
+
+        self._registry = registry
+        self._skill_command_names.clear()
+        self._register_skill_commands()
 
     def _register_skill_commands(self) -> None:
         """Register user-invocable skills from SkillManager as commands.
@@ -146,5 +172,33 @@ class CommandManager(Subsystem):
                     description=skill.manifest.description,
                     usage=usage,
                     acp_method=None,  # Skills execute via SkillTool, not ACP.
+                    source="skill",
                 )
             )
+            self._skill_command_names.add(name)
+
+    def _subscribe_to_skill_changes(self) -> None:
+        """Subscribe to SkillManager changes when the subsystem is present."""
+        try:
+            from kernel.skills import SkillManager
+
+            if not self._module_table.has(SkillManager):
+                return
+            skills_mgr = self._module_table.get(SkillManager)
+            skills_mgr.on_skills_changed(self._on_skills_changed)
+        except (KeyError, ImportError):
+            return
+
+    def _on_skills_changed(self) -> None:
+        """Refresh skill commands after dynamic skill discovery changes."""
+        before = self.list_command_dicts()
+        self._rebuild_registry()
+        after = self.list_command_dicts()
+        if before == after:
+            return
+        logger.info("CommandManager: command catalog changed (%d commands)", len(after))
+        for callback in list(self._commands_changed_callbacks):
+            try:
+                callback(after)
+            except Exception:
+                logger.exception("commands_changed callback failed")

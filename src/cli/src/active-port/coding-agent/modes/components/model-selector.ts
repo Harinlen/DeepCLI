@@ -144,7 +144,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 				this.#listContainer.addChild(new Text(theme.fg("error", line), 0, 0));
 			}
 		} else if (this.#filteredModels.length === 0) {
-			this.#listContainer.addChild(new Text(theme.fg("muted", "  No models configured"), 0, 0));
+			this.#listContainer.addChild(new Text(theme.fg("muted", "  No models available. Use /model add to add a model."), 0, 0));
 		} else {
 			const selected = this.#filteredModels[this.#selectedIndex];
 			this.#listContainer.addChild(new Spacer(1));

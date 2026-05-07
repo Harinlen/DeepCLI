@@ -11,7 +11,7 @@
 
 import WebSocket from "ws";
 import { AcpMethod, MustangMethod } from "@/acp/methods.js";
-import { DEFAULT_TOKEN_FILE, LEGACY_TOKEN_FILE, defaultTokenFilePath, expandHome } from "@/config/paths.js";
+import { DEFAULT_TOKEN_FILE, tokenFileCandidates } from "@/config/paths.js";
 import { readFileSync } from "fs";
 
 // ---------------------------------------------------------------------------
@@ -386,11 +386,34 @@ export class AcpClient {
       {
         sessionId,
         prompt: [{ type: "text", text }],
-        ...(meta ? { _meta: meta } : {}),
+        ...(meta ? { meta, _meta: meta } : {}),
       },
       { timeoutMs: 0 }, // no timeout
     );
     // Kernel sends response before trailing session/update chunks
+    await new Promise((r) => setTimeout(r, 50));
+    return result;
+  }
+
+  async activateSkillRequest(
+    sessionId: string,
+    skill: string,
+    args: string,
+    options: PromptRequestOptions = {},
+  ): Promise<PromptResult> {
+    const meta = options.clientTurnId
+      ? { "mustang.agent/clientTurnId": options.clientTurnId }
+      : undefined;
+    const result = await this.request<PromptResult>(
+      MustangMethod.sessionActivateSkill,
+      {
+        sessionId,
+        skill,
+        args,
+        ...(meta ? { meta, _meta: meta } : {}),
+      },
+      { timeoutMs: 0 },
+    );
     await new Promise((r) => setTimeout(r, 50));
     return result;
   }
@@ -588,7 +611,7 @@ export function readToken(): string {
   const envToken = process.env.DEEPCLI_TOKEN ?? process.env.MUSTANG_TOKEN;
   if (envToken) return envToken;
 
-  for (const path of [...new Set([defaultTokenFilePath(), expandHome(LEGACY_TOKEN_FILE)])]) {
+  for (const path of tokenFileCandidates()) {
     try {
       const token = readFileSync(path, "utf-8").trim();
       if (token) return token;

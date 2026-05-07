@@ -1,11 +1,10 @@
-import { existsSync, readFileSync } from "node:fs";
-import { cloneDefaultConfig, type CliConfig, type SessionListScope, type SessionStartupMode, type SymbolPresetName } from "@/config/schema.js";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { cloneDefaultConfig, type CliConfig, type OobeConfig, type SessionListScope, type SessionStartupMode, type SymbolPresetName } from "@/config/schema.js";
 import {
   CLIENT_CONFIG_PATH,
-  LEGACY_CLIENT_CONFIG_PATH,
-  defaultClientConfigPath,
   defaultTokenFilePath,
-  expandHome,
+  resolveClientConfigPath,
 } from "@/config/paths.js";
 import type { CliArgs } from "@/startup/args.js";
 
@@ -117,11 +116,14 @@ function parseScalar(value: string): unknown {
 }
 
 function mergeConfig(config: CliConfig, parsed: Record<string, unknown>, path: string): void {
-  const allowedSections = new Set(["kernel", "session", "ui"]);
+  const allowedSections = new Set(["kernel", "session", "ui", "oobe"]);
   for (const [sectionName, value] of Object.entries(parsed)) {
     if (!allowedSections.has(sectionName)) throw new ConfigError(`Invalid config field in ${path}: ${sectionName}`);
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       throw new ConfigError(`Invalid config section in ${path}: ${sectionName}`);
+    }
+    if (sectionName === "oobe") {
+      config.oobe = { revision: 0, status: "skipped", checked_at: null, skipped_at: null };
     }
     const section = config[sectionName as keyof CliConfig] as Record<string, unknown>;
     for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
@@ -142,12 +144,7 @@ function applyEnvironment(config: CliConfig, env: CliEnvironment): void {
 }
 
 function resolveConfigPath(path: string | undefined, env: CliEnvironment): string {
-  if (path) return expandHome(path);
-  const nativePath = defaultClientConfigPath(env);
-  if (existsSync(nativePath)) return nativePath;
-  const legacyPath = expandHome(LEGACY_CLIENT_CONFIG_PATH);
-  if (existsSync(legacyPath)) return legacyPath;
-  return nativePath;
+  return resolveClientConfigPath(path, env);
 }
 
 function applyArgs(config: CliConfig, args: Partial<CliArgs>): void {
@@ -184,6 +181,43 @@ function validateConfig(config: CliConfig, path: string): void {
   }
   assertBoolean(config.ui.status_line, `${path}: ui.status_line`);
   assertNumber(config.ui.welcome_recent, `${path}: ui.welcome_recent`);
+
+  if (config.oobe !== null) {
+    assertNumber(config.oobe.revision, `${path}: oobe.revision`);
+    if (!["satisfied", "skipped"].includes(config.oobe.status)) {
+      throw new ConfigError(`${path}: oobe.status must be satisfied or skipped`);
+    }
+    assertNullableString(config.oobe.checked_at, `${path}: oobe.checked_at`);
+    assertNullableString(config.oobe.skipped_at, `${path}: oobe.skipped_at`);
+  }
+}
+
+export function saveCliOobeState(path: string, state: OobeConfig): void {
+  const raw = existsSync(path) ? readFileSync(path, "utf8") : "";
+  const kept = removeTopLevelSection(raw, "oobe").trimEnd();
+  const block = [
+    "oobe:",
+    `  revision: ${state.revision}`,
+    `  status: ${state.status}`,
+    `  checked_at: ${state.checked_at === null ? "null" : JSON.stringify(state.checked_at)}`,
+    `  skipped_at: ${state.skipped_at === null ? "null" : JSON.stringify(state.skipped_at)}`,
+  ].join("\n");
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${kept ? `${kept}\n\n` : ""}${block}\n`);
+}
+
+function removeTopLevelSection(raw: string, sectionName: string): string {
+  const lines = raw.split(/\r?\n/);
+  const result: string[] = [];
+  let skipping = false;
+  for (const line of lines) {
+    const isTopLevel = line.trim().length > 0 && !line.startsWith(" ") && !line.startsWith("\t");
+    if (isTopLevel) {
+      skipping = line.trim() === `${sectionName}:`;
+    }
+    if (!skipping) result.push(line);
+  }
+  return result.join("\n");
 }
 
 function assertString(value: unknown, field: string): asserts value is string {

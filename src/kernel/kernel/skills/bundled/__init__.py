@@ -25,10 +25,11 @@ from kernel.skills.types import (
     SkillManifest,
     SkillSource,
 )
+from kernel.paths import user_path
 
 logger = logging.getLogger(__name__)
 
-_BUNDLED_SKILLS_ROOT = Path.home() / ".mustang" / "bundled-skills"
+_BUNDLED_SKILLS_ROOT = user_path("bundled-skills")
 
 
 @dataclass

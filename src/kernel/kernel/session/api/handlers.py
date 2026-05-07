@@ -16,9 +16,14 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from kernel.protocol.acp.schemas.updates import ConfigOptionUpdate, CurrentModeUpdate
-from kernel.protocol.acp.schemas.updates import SessionInfoUpdate, SessionUpdateNotification, UsageUpdate
+from kernel.protocol.acp.schemas.updates import (
+    SessionInfoUpdate,
+    SessionUpdateNotification,
+    UsageUpdate,
+)
 from kernel.protocol.interfaces.contracts.archive_session_params import ArchiveSessionParams
 from kernel.protocol.interfaces.contracts.archive_session_result import ArchiveSessionResult
+from kernel.protocol.interfaces.contracts.activate_skill_params import ActivateSkillParams
 from kernel.protocol.interfaces.contracts.cancel_params import CancelParams
 from kernel.protocol.interfaces.contracts.close_session_params import CloseSessionParams
 from kernel.protocol.interfaces.contracts.close_session_result import CloseSessionResult
@@ -52,7 +57,12 @@ from kernel.protocol.interfaces.contracts.set_config_option_params import (
     SetConfigOptionParams,
 )
 from kernel.protocol.interfaces.contracts.set_config_option_result import SetConfigOptionResult
-from kernel.protocol.interfaces.errors import InternalError, InvalidParams, ResourceNotFoundError
+from kernel.protocol.interfaces.errors import (
+    InternalError,
+    InvalidParams,
+    InvalidRequest,
+    ResourceNotFoundError,
+)
 from kernel.protocol.interfaces.contracts.set_mode_params import SetModeParams
 from kernel.protocol.interfaces.contracts.set_mode_result import SetModeResult
 from kernel.session._shared.base import _SessionMixinBase
@@ -84,6 +94,25 @@ UTC = timezone.utc
 logger = logging.getLogger("kernel.session")
 _CLIENT_TURN_ID_META_KEY = "mustang.agent/clientTurnId"
 _CHARS_PER_TOKEN = 4
+
+
+def _text_block(text: str) -> Any:
+    from kernel.protocol.interfaces.contracts.text_block import TextBlock
+
+    return TextBlock(text=text)
+
+
+def _format_user_invoked_skill_prompt(name: str, *, args: str, body: str) -> str:
+    args_text = args.strip() or "(none)"
+    return (
+        "<system-reminder>\n"
+        f"The user explicitly invoked the /{name} skill. Treat the skill body below "
+        "as active instructions for this turn and do not call the Skill tool again "
+        "for this same skill unless a different skill is needed.\n"
+        "</system-reminder>\n\n"
+        f'<skill name="{name}">\n{body}\n</skill>\n\n'
+        f"User arguments for /{name}:\n{args_text}"
+    )
 
 
 class SessionHandlerMixin(_SessionMixinBase):
@@ -404,9 +433,7 @@ class SessionHandlerMixin(_SessionMixinBase):
         page, next_cursor = self._list_page(records, cursor=params.cursor)
         return ListSessionsResult(sessions=self._session_summaries(page), next_cursor=next_cursor)
 
-    async def get_usage(
-        self, ctx: HandlerContext, params: GetUsageParams
-    ) -> GetUsageResult:
+    async def get_usage(self, ctx: HandlerContext, params: GetUsageParams) -> GetUsageResult:
         """Return the `/cost` usage dashboard payload for one session."""
         record = await self._store.get_session(params.session_id)
         if record is None:
@@ -506,6 +533,61 @@ class SessionHandlerMixin(_SessionMixinBase):
             client_turn_id=client_turn_id,
         )
 
+    async def activate_skill(
+        self, ctx: HandlerContext, params: ActivateSkillParams
+    ) -> PromptResult:
+        """Activate a user-invocable skill, then run it as a normal turn.
+
+        The skill manager remains the source of truth: slash commands only
+        select a skill name, while this method validates user-invocation,
+        lazy-loads the body, records the invoked skill for compaction, and
+        delegates to the ordinary prompt queue.
+        """
+        session = self._get_or_raise(params.session_id)
+        skill_name = params.skill.strip().lstrip("/")
+        if not skill_name:
+            raise InvalidParams("skill must be a non-empty skill name")
+
+        try:
+            from kernel.skills import SkillManager
+
+            skills = self._module_table.get(SkillManager)
+        except KeyError:
+            raise InternalError("SkillManager subsystem is not available")
+
+        skill = skills.lookup(skill_name)
+        if skill is None:
+            raise ResourceNotFoundError(f"Skill not found: {skill_name!r}")
+        if not skill.manifest.user_invocable:
+            raise InvalidRequest(f"Skill is not user-invocable: {skill_name!r}")
+
+        activated = skills.activate(skill_name, params.args)
+        if activated is None:
+            raise ResourceNotFoundError(f"Skill not found: {skill_name!r}")
+        if activated.setup_needed:
+            raise InvalidRequest(activated.setup_message or f"Skill setup required: {skill_name}")
+
+        meta = dict(params.meta or {})
+        meta["mustang.agent/activatedSkill"] = {
+            "name": skill_name,
+            "args": params.args,
+            "source": str(skill.source.value if hasattr(skill.source, "value") else skill.source),
+        }
+        prompt_params = PromptParams(
+            session_id=session.session_id,
+            prompt=[
+                _text_block(
+                    _format_user_invoked_skill_prompt(
+                        skill_name,
+                        args=params.args,
+                        body=activated.body,
+                    )
+                )
+            ],
+            meta=meta,
+        )
+        return await self.prompt(ctx, prompt_params)
+
     async def _resolve_duplicate_prompt(
         self,
         session: Session,
@@ -541,17 +623,34 @@ class SessionHandlerMixin(_SessionMixinBase):
         client_turn_id: str,
     ) -> None:
         events = await self._store.read_events(session.session_id)
-        in_turn = False
+        turn_events: list[SessionEvent] = []
         for event in events:
             event_client_turn_id = getattr(event, "client_turn_id", None)
             if event.type == "user_message" and event_client_turn_id == client_turn_id:
-                in_turn = True
+                turn_events = [event]
                 continue
-            if not in_turn:
+            if not turn_events:
                 continue
             if event.type == "turn_completed" and event_client_turn_id == client_turn_id:
-                return
-            await self._replay_event(ctx, session, event)
+                break
+            turn_events.append(event)
+
+        if not turn_events:
+            return
+
+        user_texts, agent_texts, thought_texts, tool_ids = self._explicit_replay_keys(turn_events)
+        for event in turn_events[1:]:
+            await self._replay_event(
+                ctx,
+                session,
+                event,
+                skip_conversation_users=True,
+                skip_conversation_tools=bool(tool_ids),
+                skip_conversation_user_texts=user_texts,
+                skip_conversation_agent_texts=agent_texts,
+                skip_conversation_thought_texts=thought_texts,
+                skip_conversation_tool_ids=tool_ids,
+            )
 
     async def _apply_mode_change(self, session: Session, mode_id: str) -> str:
         try:
@@ -745,9 +844,7 @@ class SessionHandlerMixin(_SessionMixinBase):
                     if queued.client_turn_id is not None
                     else None
                 )
-                queued.response_future.set_result(
-                    PromptResult(stop_reason="cancelled", meta=meta)
-                )
+                queued.response_future.set_result(PromptResult(stop_reason="cancelled", meta=meta))
 
         asyncio.create_task(self._maybe_evict(session))
 
@@ -815,7 +912,9 @@ def _memory_summary(module_table: object) -> MemoryUsageSummary:
 def _environment_summary(session: Session | None) -> EnvironmentUsageSummary:
     return EnvironmentUsageSummary(
         lsp_servers=[],
-        mcp_servers=[server.get("name", "") for server in (session.mcp_servers if session else []) if server],
+        mcp_servers=[
+            server.get("name", "") for server in (session.mcp_servers if session else []) if server
+        ],
     )
 
 
@@ -852,9 +951,16 @@ def _context_sections(
     system_tokens = max(0, latest_input_tokens - conversation_tokens - tool_tokens)
     total = max(1, latest_input_tokens + latest_output_tokens)
     sections = [
-        ContextUsageSection(id="system_prompt", label="System Prompt", tokens=system_tokens, percent=0.0),
+        ContextUsageSection(
+            id="system_prompt", label="System Prompt", tokens=system_tokens, percent=0.0
+        ),
         ContextUsageSection(id="memory", label="Memory", tokens=0, percent=0.0),
-        ContextUsageSection(id="conversation", label="Conversation", tokens=conversation_tokens + latest_output_tokens, percent=0.0),
+        ContextUsageSection(
+            id="conversation",
+            label="Conversation",
+            tokens=conversation_tokens + latest_output_tokens,
+            percent=0.0,
+        ),
         ContextUsageSection(id="tools", label="Tool Calls", tokens=tool_tokens, percent=0.0),
     ]
     return [

@@ -229,6 +229,14 @@ wall twice.
   method that observes or mutates session state must route to the same
   Primary Runtime session store.
 
+- **Completed-turn replay must use the same de-duplication rules as
+  session load.**  Session logs can contain both explicit UI events
+  (`AgentMessageEvent`) and conversation-history fallback rows
+  (`ConversationMessageEvent`) for the same assistant text.  `session/load`
+  already de-dupes those rows, but duplicate `clientTurnId` replay once
+  bypassed that path and emitted `pongpong`.  Any new replay surface must
+  reuse explicit replay keys before sending client-visible chunks.
+
 - **Router backend extension methods are session-state methods too.**
   `session/set_mode` and DeepCLI-owned execution methods
   (`_mustang.agent/session/execute_shell`, `execute_python`,
@@ -246,6 +254,23 @@ wall twice.
   goes to the old provider.  Route model-management ACP methods through
   Hub to Primary Runtime and probe by asserting the fake provider sees
   the switched model on an already-open session.
+
+- **Skill slash commands must be Kernel projections, not CLI filesystem
+  reads.**  Skills can be project/user/dynamic/MCP-scoped, and router mode
+  executes prompts in the Primary Runtime.  If the CLI scans local skill
+  files, autocomplete and activation can diverge from the runtime prompt.
+  Project `user_invocable` skills through CommandManager, expose them via
+  `_mustang.agent/commands/list`, and activate through
+  `_mustang.agent/session/activate_skill`.
+
+- **Session titles must come from user-visible text, not internal prompt
+  wrappers.**  Skill activation wraps the skill body in a text prompt that
+  includes `<system-reminder>` and `<skill>` blocks.  Blindly using the
+  first text block as an auto title leaks internal instructions into Recent
+  sessions and can break the TUI if the title contains newlines.  Strip
+  internal blocks in Kernel title generation, summarise skill activations
+  as `/skill args`, and keep CLI list/welcome renderers defensive against
+  old dirty titles.
 
 - **Primary Runtime needs the same trailing subsystem order as the
   kernel app.**  Cron tools looked registered but failed under Probe

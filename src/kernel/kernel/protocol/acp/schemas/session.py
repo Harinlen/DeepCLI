@@ -121,6 +121,21 @@ class PromptResponse(AcpModel):
     meta: dict[str, Any] | None = None
 
 
+# _mustang.agent/session/activate_skill
+
+
+class ActivateSkillRequest(AcpModel):
+    session_id: str
+    skill: str
+    args: str = ""
+    meta: dict[str, Any] | None = None
+
+
+class ActivateSkillResponse(AcpModel):
+    stop_reason: AcpStopReason
+    meta: dict[str, Any] | None = None
+
+
 # session/execute_shell
 
 

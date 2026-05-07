@@ -9,6 +9,8 @@ export const AcpMethod = {
 } as const;
 
 export const MustangMethod = {
+  commandsList: "_mustang.agent/commands/list",
+  sessionActivateSkill: "_mustang.agent/session/activate_skill",
   sessionExecuteShell: "_mustang.agent/session/execute_shell",
   sessionExecutePython: "_mustang.agent/session/execute_python",
   sessionCancelExecution: "_mustang.agent/session/cancel_execution",

@@ -24,7 +24,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from kernel.llm.config import ModelRef
+from kernel.llm.types import AssistantMessage, TextContent
 from kernel.orchestrator.config import OrchestratorConfig
+from kernel.orchestrator.events import HistoryAppend, TextDelta
 from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
 from kernel.protocol.interfaces.contracts.archive_session_params import ArchiveSessionParams
 from kernel.protocol.interfaces.contracts.close_session_params import CloseSessionParams
@@ -99,6 +101,21 @@ def _make_text_block(text: str) -> MagicMock:
 async def _empty_query(*_args: object, **_kwargs: object):
     if False:
         yield None
+
+
+async def _wait_for_record_title(
+    store: SessionStore,
+    session_id: str,
+    expected: str,
+) -> None:
+    for _ in range(20):
+        record = await store.get_session(session_id)
+        if record is not None and record.title == expected:
+            return
+        await asyncio.sleep(0.01)
+    record = await store.get_session(session_id)
+    assert record is not None
+    assert record.title == expected
 
 
 def _prompt_params(session_id: str, text: str, client_turn_id: str) -> PromptParams:
@@ -277,6 +294,39 @@ async def test_prompt_replays_completed_client_turn_id(
         "mustang.agent/replayedTurnResult": True,
     }
     assert len(user_events) == 1
+
+
+async def test_prompt_replay_completed_client_turn_id_deduplicates_history_fallback(
+    manager: SessionManager,
+    tmp_path: Path,
+) -> None:
+    fake_orch = manager._make_orchestrator.return_value[0]
+
+    async def _query(*_args: object, **_kwargs: object):
+        yield TextDelta(content="pong")
+        yield HistoryAppend(
+            AssistantMessage(content=[TextContent(text="pong")]),
+        )
+
+    fake_orch.query = MagicMock(side_effect=_query)
+    result = await manager.new(_make_ctx(), NewSessionParams(cwd=str(tmp_path)))
+    client_turn_id = str(uuid.uuid4())
+    params = _prompt_params(result.session_id, "hello", client_turn_id)
+
+    await manager.prompt(_make_ctx(), params)
+    replay_ctx = _make_ctx()
+    second = await manager.prompt(replay_ctx, params)
+
+    chunks = [
+        call.args[1].update.content.text
+        for call in replay_ctx.sender.notify.call_args_list
+        if call.args[1].update.session_update == "agent_message_chunk"
+    ]
+    assert second.meta == {
+        "mustang.agent/clientTurnId": client_turn_id,
+        "mustang.agent/replayedTurnResult": True,
+    }
+    assert chunks == ["pong"]
 
 
 async def test_prompt_duplicate_active_client_turn_id_waits_same_result(
@@ -710,7 +760,7 @@ async def test_default_model_change_preserves_session_specific_model(
 
 
 async def test_first_user_message_sets_title(manager: SessionManager, tmp_path: Path) -> None:
-    """Title is set to the first 200 chars of the first user message."""
+    """Title is set from the first user-visible text block."""
     ctx = _make_ctx()
     result = await manager.new(ctx, NewSessionParams(cwd=str(tmp_path)))
     sid = result.session_id
@@ -718,20 +768,38 @@ async def test_first_user_message_sets_title(manager: SessionManager, tmp_path: 
     session = manager._sessions[sid]
     content_raw = [{"type": "text", "text": "Tell me about Python."}]
 
-    # Simulate _run_turn_core title path by calling the relevant code path.
-    # Rather than running a full turn (requires real LLM), call the internal
-    # helper that sets the title from the first message.
-    if session.title is None:
-        for block in content_raw:
-            if block.get("type") == "text":
-                first_text = str(block["text"])[:200]
-                session.title = first_text
-                await manager._store.update_title(sid, first_text)
-                break
+    manager._maybe_set_title_from_user_message(session, content_raw)
 
+    await _wait_for_record_title(manager._store, sid, "Tell me about Python.")
     record = await manager._store.get_session(sid)
     assert record is not None
-    assert record.title == "Tell me about Python."
+    assert record.title_source == "auto"
+
+
+async def test_skill_activation_prompt_sets_readable_title(
+    manager: SessionManager, tmp_path: Path
+) -> None:
+    """Skill activation wrapper prompts should not leak system reminders."""
+    ctx = _make_ctx()
+    result = await manager.new(ctx, NewSessionParams(cwd=str(tmp_path)))
+    sid = result.session_id
+    session = manager._sessions[sid]
+    content_raw = [
+        {
+            "type": "text",
+            "text": (
+                "<system-reminder>\n"
+                "The user explicitly invoked the /codex-skill-command skill.\n"
+                "</system-reminder>\n\n"
+                '<skill name="codex-skill-command">\nInternal instructions\n</skill>\n\n'
+                "User arguments for /codex-skill-command:\nsmoke test"
+            ),
+        }
+    ]
+
+    manager._maybe_set_title_from_user_message(session, content_raw)
+
+    await _wait_for_record_title(manager._store, sid, "/codex-skill-command smoke test")
 
 
 async def test_ai_title_overwrites_first_message_title(

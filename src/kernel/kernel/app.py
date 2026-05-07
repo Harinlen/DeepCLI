@@ -24,6 +24,7 @@ from kernel.hooks import HookManager
 from kernel.mcp import MCPManager
 from kernel.memory import MemoryManager
 from kernel.module_table import KernelModuleTable
+from kernel.paths import user_home, user_path, user_state_dir
 from kernel.prompts import PromptManager
 from kernel.llm import LLMManager
 from kernel.llm_provider import LLMProviderManager
@@ -140,9 +141,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     # All prompt text lives in .txt files (D18).  PromptManager loads
     # built-in defaults then overlays user override layers on top.
     # Lookup order (highest priority first):
-    #   <project>/.mustang/prompts/  →  ~/.mustang/prompts/  →  default/
+    #   <project>/.mustang/prompts/  →  <DeepCLI home>/prompts/  →  default/
     _pm_user_dirs: list[Path] = []
-    for _d in [Path.home() / ".mustang" / "prompts", Path.cwd() / ".mustang" / "prompts"]:
+    for _d in [user_path("prompts"), Path.cwd() / ".mustang" / "prompts"]:
         if _d.is_dir():
             _pm_user_dirs.append(_d)
     prompts = PromptManager(user_dirs=_pm_user_dirs or None)
@@ -155,15 +156,15 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ------------------------------------------------------------------
     # Kernel-wide state directory — home for subsystem runtime
     # artifacts (auth tokens, memory indices, session metadata, ...).
-    # Separate from ``~/.mustang/config/`` (user-edited intent) and
-    # ``~/.mustang/flags.yaml`` (feature switches) so the three
+    # Separate from ``<DeepCLI home>/config/`` (user-edited intent) and
+    # ``<DeepCLI home>/flags.yaml`` (feature switches) so the three
     # categories never bleed into each other.  The directory is
     # created with 0o700 because it holds secrets (notably the auth
     # token file); the mode is only applied on creation — existing
     # directories are trusted as-is so we don't clobber an admin's
     # deliberate choice.
     # ------------------------------------------------------------------
-    state_dir = Path.home() / ".mustang" / "state"
+    state_dir = user_state_dir()
     state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     # ------------------------------------------------------------------
@@ -182,7 +183,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.module_table = module_table
     primary_definition = default_primary_agent_definition(
-        home=Path.home(),
+        home=user_home(),
         workspace=str(Path.cwd()),
     )
     agent_hub = AgentHub(

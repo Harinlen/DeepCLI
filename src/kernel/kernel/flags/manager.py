@@ -8,6 +8,7 @@ import yaml
 from pydantic import BaseModel
 
 from kernel.flags.kernel_flags import KernelFlags
+from kernel.paths import user_path
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ def _resolve_default_path() -> Path:
     env = os.environ.get("MUSTANG_FLAGS_PATH")
     if env:
         return Path(env)
-    return Path.home() / ".mustang" / "flags.yaml"
+    return user_path("flags.yaml")
 
 
 _DEFAULT_PATH = _resolve_default_path()

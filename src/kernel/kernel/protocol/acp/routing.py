@@ -14,6 +14,7 @@ kernel handler the entry routes to:
 - ``"session"`` -> ``SessionHandler`` (implemented by ``SessionManager``)
 - ``"model"``   -> ``ModelHandler``   (implemented by ``LLMManager``)
 - ``"secrets"`` -> ``SecretManager``  (bootstrap service on module table)
+- ``"commands"`` -> ``CommandManager`` (slash command catalog)
 
 ``AcpSessionHandler._route_request`` reads ``target`` to select the
 right handler object from ``KernelModuleTable``.  Adding a new target
@@ -31,6 +32,11 @@ from pydantic.alias_generators import to_camel
 
 from kernel.llm.config import ModelRef
 from kernel.protocol.acp.namespaces import AcpMethod, MustangMethod
+from kernel.protocol.acp.schemas.commands import (
+    CommandEntry,
+    ListCommandsRequest,
+    ListCommandsResponse,
+)
 from kernel.protocol.acp.schemas.model import (
     AcpProfileEntry,
     AcpProviderEntry,
@@ -53,6 +59,8 @@ from kernel.protocol.acp.schemas.model import (
 )
 from kernel.protocol.acp.schemas.session import (
     AcpSessionInfo,
+    ActivateSkillRequest,
+    ActivateSkillResponse,
     ArchiveSessionRequest,
     ArchiveSessionResponse,
     CancelExecutionRequest,
@@ -86,6 +94,7 @@ from kernel.protocol.acp.schemas.session import (
     SetSessionModeResponse,
 )
 from kernel.protocol.interfaces.contracts.archive_session_params import ArchiveSessionParams
+from kernel.protocol.interfaces.contracts.activate_skill_params import ActivateSkillParams
 from kernel.protocol.interfaces.contracts.archive_session_result import ArchiveSessionResult
 from kernel.protocol.interfaces.contracts.close_session_params import CloseSessionParams
 from kernel.protocol.interfaces.contracts.close_session_result import CloseSessionResult
@@ -159,7 +168,7 @@ from kernel.protocol.interfaces.model_handler import ModelHandler
 from kernel.protocol.interfaces.session_handler import SessionHandler
 
 # Discriminator for which kernel subsystem handles a request.
-HandlerTarget = Literal["session", "model", "secrets"]
+HandlerTarget = Literal["session", "model", "secrets", "commands"]
 
 
 @dataclass(frozen=True)
@@ -324,6 +333,22 @@ async def _handle_prompt(sh: SessionHandler, ctx: HandlerContext, p: PromptReque
     )
     meta = result.meta if isinstance(result.meta, dict) else None
     return PromptResponse(stop_reason=result.stop_reason, meta=meta)
+
+
+async def _handle_activate_skill(
+    sh: SessionHandler, ctx: HandlerContext, p: ActivateSkillRequest
+) -> BaseModel:
+    result = await sh.activate_skill(
+        ctx,
+        ActivateSkillParams(
+            session_id=p.session_id,
+            skill=p.skill,
+            args=p.args,
+            meta=p.meta,
+        ),
+    )
+    meta = result.meta if isinstance(result.meta, dict) else None
+    return ActivateSkillResponse(stop_reason=result.stop_reason, meta=meta)
 
 
 def _max_turns(p: PromptRequest) -> int:
@@ -670,10 +695,27 @@ def _mask_secret(value: str | None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# commands/* handler wrappers
+# ---------------------------------------------------------------------------
+
+
+async def _handle_commands_list(cm: Any, ctx: HandlerContext, p: ListCommandsRequest) -> BaseModel:
+    del ctx, p
+    commands = [CommandEntry.model_validate(item) for item in cm.list_command_dicts()]
+    return ListCommandsResponse(commands=commands)
+
+
+# ---------------------------------------------------------------------------
 # Dispatch tables
 # ---------------------------------------------------------------------------
 
 REQUEST_DISPATCH: dict[str, RequestSpec] = {
+    MustangMethod.COMMANDS_LIST: RequestSpec(
+        handler=_handle_commands_list,
+        params_type=ListCommandsRequest,
+        result_type=ListCommandsResponse,
+        target="commands",
+    ),
     # session/* -- routed to SessionHandler (SessionManager)
     AcpMethod.SESSION_NEW: RequestSpec(
         handler=_handle_new,
@@ -709,6 +751,12 @@ REQUEST_DISPATCH: dict[str, RequestSpec] = {
         handler=_handle_prompt,
         params_type=PromptRequest,
         result_type=PromptResult,
+        target="session",
+    ),
+    MustangMethod.SESSION_ACTIVATE_SKILL: RequestSpec(
+        handler=_handle_activate_skill,
+        params_type=ActivateSkillRequest,
+        result_type=ActivateSkillResponse,
         target="session",
     ),
     MustangMethod.SESSION_EXECUTE_SHELL: RequestSpec(

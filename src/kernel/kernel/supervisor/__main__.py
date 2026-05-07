@@ -10,13 +10,14 @@ from kernel.supervisor.runtime import (
     SupervisorRuntime,
     install_signal_handlers,
 )
+from kernel.paths import user_state_dir
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Mustang Supervisor")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--access-port", type=int, default=8200)
-    parser.add_argument("--state-dir", default=str(Path.home() / ".mustang" / "state"))
+    parser.add_argument("--state-dir", default=str(user_state_dir()))
     parser.add_argument("--workspace", default=str(Path.cwd()))
     parser.add_argument("--prompt-backend", choices=("compat", "router"), default="router")
     parser.add_argument("--dev", action="store_true")

@@ -247,6 +247,9 @@ export class InputController {
 				handleBackgroundCommand: () => this.handleBackgroundCommand(),
 			});
 			if (slashResult === true) {
+				this.ctx.editor.addToHistory(text);
+				this.ctx.editor.setText("");
+				this.ctx.pendingImages = [];
 				return;
 			}
 			if (typeof slashResult === "string") {

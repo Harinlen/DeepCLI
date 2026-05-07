@@ -26,6 +26,7 @@ export * from "./keybindings";
 export * from "./keys";
 // Mermaid diagram support
 // Input buffering for batch splitting
+export * from "./bracketed-paste";
 export * from "./stdin-buffer";
 export type * from "./symbols";
 // Terminal interface and implementations

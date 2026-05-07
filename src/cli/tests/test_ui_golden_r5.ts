@@ -87,10 +87,9 @@ toolFailed.updateResult({ content: [{ type: "text", text: "boom" }], isError: tr
 
 const hookSelector = new HookSelectorComponent("Allow command?", ["Allow once", "Deny"], () => {}, () => {}, { maxVisible: 5 });
 
-const warningLine = "Warning: No models available. Use /login or set an API key environment variable, then use /model to select a model.";
+const warningLine = "Warning: No models available. Use /model add to add a model.";
 const warningWithAutocomplete = [
-	"Warning: No models available. Use /login or set an API key environment variable,",
-	"then use /model to select a model.",
+	warningLine,
 	statusLine.getTopBorder(80).content,
 	...selectInitial,
 ];
@@ -105,6 +104,17 @@ const frames: GoldenFrame[] = [
 		name: "welcome with long model keeps right column",
 		lines: new WelcomeComponent("0.1.0", "bedrock/us.anthropic.claude-sonnet-4-6", "bedrock", [], []).render(90),
 		mustInclude: ["Welcome back!", "Tips", "No LSP servers", "Recent sessions"],
+	},
+	{
+		name: "welcome with multiline recent session",
+		lines: new WelcomeComponent(
+			"0.1.0",
+			"no-model",
+			"ACP",
+			[{ name: "The user invoked\n<system-reminder>\ninternal\n</system-reminder>", timeAgo: "1m ago" }],
+			[],
+		).render(90),
+		mustInclude: ["The user invoked"],
 	},
 	{
 		name: "empty status line",

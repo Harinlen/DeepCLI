@@ -46,6 +46,8 @@ class AcpMethod:
 
 
 class MustangMethod:
+    COMMANDS_LIST = "_mustang.agent/commands/list"
+    SESSION_ACTIVATE_SKILL = "_mustang.agent/session/activate_skill"
     SESSION_EXECUTE_SHELL = "_mustang.agent/session/execute_shell"
     SESSION_EXECUTE_PYTHON = "_mustang.agent/session/execute_python"
     SESSION_CANCEL_EXECUTION = "_mustang.agent/session/cancel_execution"
@@ -67,6 +69,8 @@ class MustangMethod:
 
 MUSTANG_EXTENSION_METHODS = frozenset(
     {
+        MustangMethod.COMMANDS_LIST,
+        MustangMethod.SESSION_ACTIVATE_SKILL,
         MustangMethod.SESSION_EXECUTE_SHELL,
         MustangMethod.SESSION_EXECUTE_PYTHON,
         MustangMethod.SESSION_CANCEL_EXECUTION,

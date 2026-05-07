@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { Container, CURSOR_MARKER, extractPrintableText, matchesKey, Spacer, Text, type Focusable, type TUI } from "@/tui/index.js";
+import { BracketedPasteHandler, Container, CURSOR_MARKER, extractPrintableText, matchesKey, replaceTabs, Spacer, Text, type Focusable, type TUI } from "@/tui/index.js";
 import type { ProviderModelItem } from "@/models/service.js";
 import { formatCompactNumber } from "@/compat/utils.js";
 import { theme } from "../theme/theme";
@@ -57,6 +57,7 @@ export class ModelConfigEditorComponent extends Container implements Focusable {
 	#modelId: string;
 	#contextWindow: string;
 	#roles: Set<string>;
+	#pasteHandler = new BracketedPasteHandler();
 
 	constructor(
 		private readonly tui: TUI,
@@ -95,6 +96,14 @@ export class ModelConfigEditorComponent extends Container implements Focusable {
 	}
 
 	handleInput(keyData: string): void {
+		const paste = this.#pasteHandler.process(keyData);
+		if (paste.handled) {
+			if (paste.pasteContent !== undefined) {
+				this.#handlePaste(paste.pasteContent);
+				if (paste.remaining.length > 0) this.handleInput(paste.remaining);
+			}
+			return;
+		}
 		if (matchesAppInterrupt(keyData)) {
 			this.onCancel();
 			return;
@@ -122,6 +131,14 @@ export class ModelConfigEditorComponent extends Container implements Focusable {
 			return;
 		}
 		this.#handleTextInput(keyData);
+	}
+
+	#handlePaste(pastedText: string): void {
+		if (this.#fieldIndex === ROLE_FIELD_INDEX || this.#fieldIndex === 1) return;
+		const cleanText = replaceTabs(pastedText.replace(/\r\n/g, "").replace(/\r/g, "").replace(/\n/g, ""));
+		if (!cleanText) return;
+		this.#setActiveText(this.#activeText() + cleanText);
+		this.#renderBody();
 	}
 
 	#renderBody(): void {

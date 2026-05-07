@@ -116,6 +116,7 @@ function makeContext() {
 		showTreeSelector: () => calls.push("tree"),
 		showUserMessageSelector: () => calls.push("user-message-selector"),
 		showModelSelector: () => calls.push("model-selector"),
+		showModelAdd: () => calls.push("model-add"),
 		showDebugSelector: () => calls.push("debug-selector"),
 		showHistorySearch: () => calls.push("history-search"),
 		toggleThinkingBlockVisibility: () => calls.push("thinking-toggle"),
@@ -299,6 +300,42 @@ assert(
 	failClosedCalls.includes("error:/session failed: missing compat"),
 	"builtin slash commands should fail through the TUI error path",
 );
+
+const modelCalls: string[] = [];
+await executeBuiltinSlashCommand("/model", {
+	ctx: {
+		session: {
+			listProviderModels: async () => ({ models: [] }),
+		},
+		showModelSelector: () => modelCalls.push("model-selector"),
+		showModelAdd: () => modelCalls.push("model-add"),
+	},
+});
+assert(modelCalls.includes("model-add"), "/model should default to add when no models exist");
+modelCalls.length = 0;
+await executeBuiltinSlashCommand("/model", {
+	ctx: {
+		session: {
+			listProviderModels: async () => ({ models: [{ providerName: "deepseek", modelId: "deepseek-v4-pro" }] }),
+		},
+		showModelSelector: () => modelCalls.push("model-selector"),
+		showModelAdd: () => modelCalls.push("model-add"),
+	},
+});
+assert(modelCalls.includes("model-selector"), "/model should default to list when models exist");
+modelCalls.length = 0;
+await executeBuiltinSlashCommand("/model list", {
+	ctx: {
+		session: {
+			listProviderModels: async () => ({ models: [] }),
+		},
+		showModelSelector: () => modelCalls.push("model-selector"),
+		showModelAdd: () => modelCalls.push("model-add"),
+		showWarning: (message: string) => modelCalls.push(`warning:${message}`),
+	},
+});
+assert(modelCalls.includes("warning:No models available. Use /model add to add a model."), "/model list should warn directly when no models exist");
+assert(!modelCalls.includes("model-selector"), "/model list should not open an empty selector");
 
 const themeCalls: string[] = [];
 const themeCtx = {

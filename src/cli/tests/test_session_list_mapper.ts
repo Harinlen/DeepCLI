@@ -28,6 +28,20 @@ assert(mapped.path === "abc123456789", "mapper should project sessionId to path 
 assert(mapped.totalInputTokens === 3, "mapper should expose token metadata");
 assert(mapped.archivedAt !== null, "mapper should expose archivedAt");
 
+const sanitized = mapAcpSessionInfo({
+  sessionId: "dirty",
+  cwd: "/tmp/project",
+  title: "One\n<system-reminder>\ninternal\n</system-reminder>\nTwo\x07",
+});
+assert(sanitized.title === "One Two", "mapper should sanitize session titles for single-line UI display");
+
+const truncatedReminder = mapAcpSessionInfo({
+  sessionId: "truncated",
+  cwd: "/tmp/project",
+  title: "<system-reminder>\nThe user explicitly invoked the /codex-skill-command skill",
+});
+assert(truncatedReminder.title === "project", "mapper should fallback when a truncated system reminder leaves no display title");
+
 const calls: Array<{ method: string; params: any }> = [];
 const client = {
   async request(method: string, params: any): Promise<any> {

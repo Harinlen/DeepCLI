@@ -429,9 +429,43 @@ class SessionHandlerMixin(_SessionMixinBase):
 
         if params.cwd:
             records = [record for record in records if record.cwd == params.cwd]
+        records = await self._records_with_user_messages(records)
 
         page, next_cursor = self._list_page(records, cursor=params.cursor)
-        return ListSessionsResult(sessions=self._session_summaries(page), next_cursor=next_cursor)
+        return ListSessionsResult(
+            sessions=[await self._session_summary_with_history(record) for record in page],
+            next_cursor=next_cursor,
+        )
+
+    async def _records_with_user_messages(
+        self, records: list[ConversationRecord]
+    ) -> list[ConversationRecord]:
+        """Keep only sessions that contain a real user prompt.
+
+        Startup/OOBE and management commands can create or mutate runtime
+        state without ever invoking the LLM.  Those records are not useful
+        resumable conversations, so they stay out of session/list.
+        """
+        result: list[ConversationRecord] = []
+        for record in records:
+            events = await self._store.read_events(record.session_id)
+            if any(event.type == "user_message" for event in events):
+                result.append(record)
+        return result
+
+    async def _session_summary_with_history(
+        self, record: ConversationRecord
+    ) -> SessionSummary:
+        summary = self._session_summary(record)
+        events = await self._store.read_events(record.session_id)
+        return summary.model_copy(
+            update={
+                "message_count": sum(
+                    1 for event in events if event.type in {"user_message", "agent_message"}
+                ),
+                "turn_count": sum(1 for event in events if event.type == "turn_completed"),
+            }
+        )
 
     async def get_usage(self, ctx: HandlerContext, params: GetUsageParams) -> GetUsageResult:
         """Return the `/cost` usage dashboard payload for one session."""

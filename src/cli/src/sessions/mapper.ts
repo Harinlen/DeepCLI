@@ -20,6 +20,8 @@ export function mapAcpSessionInfo(raw: AcpSessionInfo): CliSessionInfo {
     titleSource: stringOrNull(raw.titleSource ?? sessionMeta.titleSource),
     totalInputTokens: numberOrNull(metadata?.totalInputTokens),
     totalOutputTokens: numberOrNull(metadata?.totalOutputTokens),
+    messageCount: numberOrNull(raw.messageCount ?? raw.message_count),
+    turnCount: numberOrNull(raw.turnCount ?? raw.turn_count),
     raw,
   };
 }

@@ -227,6 +227,8 @@ def _session_info(s: Any) -> AcpSessionInfo:
         cwd=s.cwd,
         updated_at=s.updated_at,
         title=s.title,
+        message_count=getattr(s, "message_count", 0),
+        turn_count=getattr(s, "turn_count", 0),
         meta=meta or None,
     )
 

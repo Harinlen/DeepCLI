@@ -98,12 +98,12 @@ const frames: GoldenFrame[] = [
 	{
 		name: "welcome first screen",
 		lines: new WelcomeComponent("0.1.0", "no-model", "ACP", [], []).render(90),
-		mustInclude: ["DeepCLI v0.1.0", "Welcome back!", "⣿", "Tips", "No LSP servers", "No recent sessions"],
+		mustInclude: ["DeepCLI v0.1.0", "Welcome back!", "⣿", "Tips", "No recent sessions"],
 	},
 	{
 		name: "welcome with long model keeps right column",
 		lines: new WelcomeComponent("0.1.0", "bedrock/us.anthropic.claude-sonnet-4-6", "bedrock", [], []).render(90),
-		mustInclude: ["Welcome back!", "Tips", "No LSP servers", "Recent sessions"],
+		mustInclude: ["Welcome back!", "Tips", "Recent sessions"],
 	},
 	{
 		name: "welcome with multiline recent session",

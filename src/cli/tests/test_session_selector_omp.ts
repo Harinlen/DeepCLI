@@ -20,6 +20,7 @@ const selector = new SessionSelectorComponent(
 const frame = selector.render(100).join("\n");
 assert(frame.includes("Resume Session"), "OMP session selector should render the upstream selector heading");
 assert(frame.includes("Second session"), "OMP session selector should render ACP-backed session rows");
+assert(!frame.includes("Second session\n  Second session"), "OMP session selector should not repeat title as preview");
 assert(frame.includes("Enter to select"), "OMP session selector should render upstream keybinding hints");
 
 selector.handleInput("\x1b[B");
@@ -36,7 +37,7 @@ function session(id: string, title: string, cwd: string) {
 		title,
 		created: new Date("2026-04-28T00:00:00Z"),
 		modified: new Date("2026-04-28T01:00:00Z"),
-		messageCount: 0,
+		messageCount: 2,
 		firstMessage: title,
 		allMessagesText: `${title} ${cwd} ${id}`,
 	};

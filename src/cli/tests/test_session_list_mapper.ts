@@ -13,6 +13,8 @@ const mapped = mapAcpSessionInfo({
   cwd: "/tmp/project",
   title: null,
   updatedAt: "2026-04-28T00:00:00Z",
+  messageCount: 2,
+  turnCount: 1,
   _meta: {
     createdAt: "2026-04-27T00:00:00Z",
     totalInputTokens: 3,
@@ -26,6 +28,8 @@ const mapped = mapAcpSessionInfo({
 assert(mapped.title === "project", "mapper should fallback title to cwd basename");
 assert(mapped.path === "abc123456789", "mapper should project sessionId to path for UI compatibility");
 assert(mapped.totalInputTokens === 3, "mapper should expose token metadata");
+assert(mapped.messageCount === 2, "mapper should expose session message count");
+assert(mapped.turnCount === 1, "mapper should expose session turn count");
 assert(mapped.archivedAt !== null, "mapper should expose archivedAt");
 
 const sanitized = mapAcpSessionInfo({

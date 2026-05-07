@@ -29,9 +29,12 @@ export async function resolveStartupSession(
     return { session: new MustangSession(service.clientForSession(), args.sessionId, summary), recentSessions };
   }
 
-  const mustAvoidPicker = args.print || Boolean(args.prompt) || !isInteractive;
-  if (args.newSession || mustAvoidPicker) {
+  const promptMode = args.print || Boolean(args.prompt);
+  if (promptMode || !isInteractive) {
     return createNew(service, config, listCwd, cwd);
+  }
+  if (args.newSession) {
+    return createDeferred(service, config, listCwd);
   }
 
   if (config.session.startup === "new") {

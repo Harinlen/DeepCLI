@@ -1003,7 +1003,7 @@ function cliSessionToOmpSessionInfo(session: CliSessionInfo): SessionInfo {
 	const created = parseDate(session.createdAt) ?? parseDate(session.updatedAt) ?? new Date(0);
 	const modified = parseDate(session.updatedAt) ?? created;
 	const title = session.title?.trim() || undefined;
-	const firstMessage = title || session.sessionId;
+	const firstMessage = title ? "" : session.sessionId;
 	return {
 		path: session.path || session.sessionId,
 		id: session.sessionId,
@@ -1011,7 +1011,7 @@ function cliSessionToOmpSessionInfo(session: CliSessionInfo): SessionInfo {
 		title,
 		created,
 		modified,
-		messageCount: 0,
+		messageCount: session.messageCount ?? 0,
 		firstMessage,
 		allMessagesText: `${title ?? ""} ${session.cwd ?? ""} ${session.sessionId}`.trim(),
 	};

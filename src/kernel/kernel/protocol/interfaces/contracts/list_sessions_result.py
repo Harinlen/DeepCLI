@@ -20,6 +20,10 @@ class SessionSummary(BaseModel):
     title_source: Literal["auto", "user"] | None = None
     created_at: str | None = None
     """Internal/backward-compatible timestamp; not emitted on ACP list by default."""
+    message_count: int = 0
+    """Number of persisted user/assistant messages in the session."""
+    turn_count: int = 0
+    """Number of completed LLM turns in the session."""
 
 
 class ListSessionsResult(BaseModel):

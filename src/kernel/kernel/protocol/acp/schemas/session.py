@@ -27,6 +27,8 @@ class AcpSessionInfo(AcpModel):
     title: str | None = None
     archived_at: str | None = None
     title_source: Literal["auto", "user"] | None = None
+    message_count: int = 0
+    turn_count: int = 0
     meta: dict[str, Any] | None = None
 
 

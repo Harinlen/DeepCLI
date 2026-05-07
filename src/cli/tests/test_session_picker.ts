@@ -36,6 +36,8 @@ function session(sessionId: string, title: string, cwd: string, archivedAt: stri
     titleSource: null,
     totalInputTokens: null,
     totalOutputTokens: null,
+    messageCount: null,
+    turnCount: null,
     raw: { sessionId, title, cwd, archivedAt },
   };
 }

@@ -23,8 +23,8 @@ const service = {
   list: async (options: any) => {
     await client.request("session/list", options);
     return [
-      { sessionId: "recent", path: "recent", title: "Recent", cwd: "/old", updatedAt: null, createdAt: null, archivedAt: null, titleSource: null, totalInputTokens: null, totalOutputTokens: null, raw: { sessionId: "recent" } },
-      { sessionId: "explicit", path: "explicit", title: "Explicit", cwd: "/repo", updatedAt: null, createdAt: null, archivedAt: null, titleSource: null, totalInputTokens: 14443, totalOutputTokens: 125, raw: { sessionId: "explicit" } },
+      { sessionId: "recent", path: "recent", title: "Recent", cwd: "/old", updatedAt: null, createdAt: null, archivedAt: null, titleSource: null, totalInputTokens: null, totalOutputTokens: null, messageCount: null, turnCount: null, raw: { sessionId: "recent" } },
+      { sessionId: "explicit", path: "explicit", title: "Explicit", cwd: "/repo", updatedAt: null, createdAt: null, archivedAt: null, titleSource: null, totalInputTokens: 14443, totalOutputTokens: 125, messageCount: null, turnCount: null, raw: { sessionId: "explicit" } },
     ];
   },
   load: async (sessionId: string, cwd: string) => client.request("session/load", { sessionId, cwd }),
@@ -43,7 +43,8 @@ assert(!requests.some((call) => call.method === "session/new"), "default interac
 assert(!requests.some((call) => call.method === "session/load"), "default interactive startup must not load a session");
 
 result = await resolveStartupSession(service, { newSession: true, print: false, help: false }, config, { isInteractive: true, cwd: "/repo" });
-assert(result.session?.sessionId === "new-session", "--new should create a new session");
+assert(result.session === undefined, "--new interactive startup should defer session creation until the first prompt");
+assert(!requests.some((call) => call.method === "session/new"), "--new interactive startup must not create an empty session");
 
 result = await resolveStartupSession(service, { newSession: false, print: true, help: false, prompt: "hello" }, config, { isInteractive: true, cwd: "/repo" });
 assert(result.session?.sessionId === "new-session", "--print/prompt should avoid picker and create new session");

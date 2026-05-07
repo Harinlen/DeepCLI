@@ -59,6 +59,8 @@ const mustangCommands = commandsToSlashCommands(sortCommandsByLabel(BUILTIN_COMM
 			titleSource: null,
 			totalInputTokens: null,
 			totalOutputTokens: null,
+			messageCount: null,
+			turnCount: null,
 			raw: { sessionId: "sess-1" },
 		},
 	],

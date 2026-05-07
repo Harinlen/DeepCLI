@@ -149,8 +149,10 @@ class SessionList implements Component {
 				lines.push(titleLine);
 
 				// Second line: dimmed first message preview
-				const truncatedPreview = truncateToWidth(normalizedMessage, maxWidth);
-				lines.push(`  ${theme.fg("dim", truncatedPreview)}`);
+				if (normalizedMessage && normalizedMessage !== session.title.trim()) {
+					const truncatedPreview = truncateToWidth(normalizedMessage, maxWidth);
+					lines.push(`  ${theme.fg("dim", truncatedPreview)}`);
+				}
 			} else {
 				// No title: show first message as main line
 				const truncatedMsg = truncateToWidth(normalizedMessage, maxWidth);

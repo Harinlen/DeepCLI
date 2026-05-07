@@ -7,6 +7,10 @@ export interface AcpSessionInfo {
   createdAt?: string | null;
   archivedAt?: string | null;
   titleSource?: string | null;
+  messageCount?: number | null;
+  message_count?: number | null;
+  turnCount?: number | null;
+  turn_count?: number | null;
   _meta?: {
     createdAt?: string | null;
     updatedAt?: string | null;
@@ -45,6 +49,8 @@ export interface CliSessionInfo {
   titleSource: string | null;
   totalInputTokens: number | null;
   totalOutputTokens: number | null;
+  messageCount: number | null;
+  turnCount: number | null;
   raw: AcpSessionInfo;
 }
 

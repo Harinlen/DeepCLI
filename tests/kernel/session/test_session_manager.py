@@ -480,10 +480,25 @@ async def test_delete_session_force_removes_sidecars(
 async def test_list_returns_new_session(manager: SessionManager, tmp_path: Path) -> None:
     ctx = _make_ctx()
     result = await manager.new(ctx, NewSessionParams(cwd=str(tmp_path)))
+    await manager.prompt(
+        ctx,
+        PromptParams(session_id=result.session_id, prompt=[TextBlock(text="hello")]),
+    )
 
     list_result = await manager.list(ctx, ListSessionsParams())
     ids = [s.session_id for s in list_result.sessions]
     assert result.session_id in ids
+
+
+async def test_list_hides_empty_management_only_session(
+    manager: SessionManager, tmp_path: Path
+) -> None:
+    ctx = _make_ctx()
+    result = await manager.new(ctx, NewSessionParams(cwd=str(tmp_path)))
+
+    list_result = await manager.list(ctx, ListSessionsParams())
+    ids = [s.session_id for s in list_result.sessions]
+    assert result.session_id not in ids
 
 
 async def test_list_filters_by_cwd(manager: SessionManager, tmp_path: Path) -> None:
@@ -492,9 +507,17 @@ async def test_list_filters_by_cwd(manager: SessionManager, tmp_path: Path) -> N
 
     ctx = _make_ctx()
     r_a = await manager.new(ctx, NewSessionParams(cwd=cwd_a))
+    await manager.prompt(
+        ctx,
+        PromptParams(session_id=r_a.session_id, prompt=[TextBlock(text="hello a")]),
+    )
     r_b = await manager.new(
         MagicMock(conn=_make_connection("c2"), sender=_make_sender(), request_id=None),
         NewSessionParams(cwd=cwd_b),
+    )
+    await manager.prompt(
+        ctx,
+        PromptParams(session_id=r_b.session_id, prompt=[TextBlock(text="hello b")]),
     )
 
     result = await manager.list(ctx, ListSessionsParams(cwd=cwd_a))
@@ -517,6 +540,10 @@ async def test_archive_hides_session_from_default_list(
     manager: SessionManager, tmp_path: Path
 ) -> None:
     result = await manager.new(_make_ctx(), NewSessionParams(cwd=str(tmp_path)))
+    await manager.prompt(
+        _make_ctx(),
+        PromptParams(session_id=result.session_id, prompt=[TextBlock(text="hello")]),
+    )
 
     archive_result = await manager.archive_session(
         _make_ctx(),

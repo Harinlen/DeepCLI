@@ -214,7 +214,7 @@ export class AcpClient {
     await this.request("initialize", {
       protocolVersion: 1,
       clientCapabilities: {},
-      clientInfo: { name: "deepcli-cli", version: "0.1.0" },
+      clientInfo: { name: "deepcli-cli", version: "1.0.0" },
     }, { skipReconnect: true });
   }
 

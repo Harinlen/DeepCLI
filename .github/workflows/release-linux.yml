@@ -1,0 +1,51 @@
+name: Release Linux
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  linux-amd64:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install CLI dependencies
+        working-directory: src/cli
+        run: bun install --frozen-lockfile
+
+      - name: Run release smoke tests
+        run: |
+          uv run pytest tests/kernel/test_entrypoints.py -q
+          cd src/cli
+          bun x tsc -p tsconfig.json --noEmit
+
+      - name: Build Linux amd64 release
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          DEEPCLI_VERSION="$version" \
+          DEEPCLI_RELEASE_DIR="dist/deepcli-linux-$version" \
+            src/launcher/packaging/linux/build-release.sh
+
+      - name: Upload GitHub release artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/deepcli-linux-*/deepcli-linux-amd64.tar.gz
+            dist/deepcli-linux-*/install.sh
+            dist/deepcli-linux-*/checksums.txt
+            dist/deepcli-linux-*/manifest.json

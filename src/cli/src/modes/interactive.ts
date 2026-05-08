@@ -172,7 +172,7 @@ export class InteractiveMode {
       this.options.config.oobe = oobeCheck.stateToSave;
       saveCliOobeState(this.options.configPath, oobeCheck.stateToSave);
     }
-    this.mode = new ActivePortInteractiveMode(this.adapter as never, this.options.version ?? "0.1.0");
+    this.mode = new ActivePortInteractiveMode(this.adapter as never, this.options.version ?? "1.0.0");
     this.applyConnectionState(this.client.getConnectionState());
     this.client.onConnectionStateChange((state) => this.applyConnectionState(state));
     this.client.setPermissionHandler((_id, req) => {

@@ -11,8 +11,11 @@ Linux v1 is the active target:
 - user-level install via `install.sh`;
 - no `.deb` / `.rpm`;
 - no systemd requirement;
-- Kernel runs from a managed Python venv;
-- CLI runs as a bundled artifact;
+- Kernel ships as a source runtime inside a release tarball and runs from a
+  release-local managed Python venv;
+- CLI runs as a bundled single-file artifact;
+- `uv` is installed as a DeepCLI-private tool under
+  `~/.local/share/deepcli/tools/uv/` and is not added to the user's PATH;
 - Supervisor is started as a detached process and gated by
   `/access/readiness`.
 - `deepcli --uninstall` removes the installed launcher, CLI artifact, and
@@ -60,16 +63,19 @@ and `src/kernel/pyproject.toml`.
 ```text
 ~/.local/bin/deepcli
 ~/.local/share/deepcli/
-├── bin/deepcli-<version>
-├── assets/welcome-logo.txt
-├── kernel/current/.venv/
-└── cli/current/
+├── tools/uv/<uv-version>/uv
+└── releases/<version>/
+    ├── kernel/.venv/
+    ├── cli/deepcli-cli
+    ├── launcher/deepcli
+    └── assets/welcome-logo.txt
 ~/.local/state/deepcli/
 └── runtime/
 ~/.config/deepcli/
 ```
 
-`cli/current` may contain either `deepcli-cli` or `bun + dist/main.js`.
+`~/.local/bin/deepcli` points at the current release's
+`launcher/deepcli`.
 
 ## Customization
 
@@ -80,7 +86,7 @@ order and falls back to its bundled default:
 $DEEPCLI_WELCOME_LOGO_FILE
 ~/.config/deepcli/welcome-logo.txt
 ~/.config/deepcli/ui/welcome-logo.txt
-~/.local/share/deepcli/assets/welcome-logo.txt
+~/.local/share/deepcli/releases/<version>/assets/welcome-logo.txt
 ```
 
 The installed asset is intentionally editable; future Kernel-served profile UI

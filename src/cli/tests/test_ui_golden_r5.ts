@@ -109,18 +109,18 @@ const warningWithAutocomplete = [
 const frames: GoldenFrame[] = [
 	{
 		name: "welcome first screen",
-		lines: new WelcomeComponent("0.1.0", "no-model", "ACP", [], []).render(90),
-		mustInclude: ["DeepCLI v0.1.0", "Welcome back!", "⣿", "Tips", "No recent sessions"],
+		lines: new WelcomeComponent("1.0.0", "no-model", "ACP", [], []).render(90),
+		mustInclude: ["DeepCLI v1.0.0", "Welcome back!", "⣿", "Tips", "No recent sessions"],
 	},
 	{
 		name: "welcome with long model keeps right column",
-		lines: new WelcomeComponent("0.1.0", "bedrock/us.anthropic.claude-sonnet-4-6", "bedrock", [], []).render(90),
+		lines: new WelcomeComponent("1.0.0", "bedrock/us.anthropic.claude-sonnet-4-6", "bedrock", [], []).render(90),
 		mustInclude: ["Welcome back!", "Tips", "Recent sessions"],
 	},
 	{
 		name: "welcome with multiline recent session",
 		lines: new WelcomeComponent(
-			"0.1.0",
+			"1.0.0",
 			"no-model",
 			"ACP",
 			[{ name: "The user invoked\n<system-reminder>\ninternal\n</system-reminder>", timeAgo: "1m ago" }],
@@ -224,7 +224,7 @@ for (const frame of frames) {
 
 const cjkWelcomeWidth = 70;
 const cjkWelcome = new WelcomeComponent(
-	"0.1.0",
+	"1.0.0",
 	"deepseek/deepseek-v4-pro",
 	"deepseek",
 	[

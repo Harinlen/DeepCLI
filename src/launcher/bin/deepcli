@@ -22,6 +22,7 @@ STDERR_LOG="$RUNTIME_DIR/supervisor.stderr.log"
 INVOCATION_CWD="$PWD"
 SCRIPT_PATH="$(realpath "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+RELEASE_DIR="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)"
 
 mkdir -p "$STATE_DIR" "$CONFIG_DIR" "$RUNTIME_DIR"
 
@@ -89,13 +90,9 @@ resolve_layout() {
     CLI_CWD="$DEV_ROOT/src/cli"
   else
     MODE="packaged"
-    KERNEL_CMD=("$DATA_DIR/kernel/current/.venv/bin/python" "-m" "kernel.supervisor")
-    KERNEL_CWD="$PWD"
-    if [[ -x "$DATA_DIR/cli/current/deepcli-cli" ]]; then
-      CLI_CMD=("$DATA_DIR/cli/current/deepcli-cli")
-    else
-      CLI_CMD=("$DATA_DIR/cli/current/bun" "$DATA_DIR/cli/current/dist/main.js")
-    fi
+    KERNEL_CMD=("$RELEASE_DIR/kernel/.venv/bin/python" "-m" "kernel.supervisor")
+    KERNEL_CWD="$RELEASE_DIR/kernel"
+    CLI_CMD=("$RELEASE_DIR/cli/deepcli-cli")
     CLI_CWD="$PWD"
   fi
 }
@@ -219,7 +216,7 @@ start_supervisor() {
     export DEEPCLI_STATE_DIR="$STATE_DIR"
     export DEEPCLI_CONFIG_DIR="$CONFIG_DIR"
     if [[ "$MODE" == "packaged" ]]; then
-      export VIRTUAL_ENV="$DATA_DIR/kernel/current/.venv"
+      export VIRTUAL_ENV="$RELEASE_DIR/kernel/.venv"
       export PATH="$VIRTUAL_ENV/bin:$PATH"
     fi
     setsid "${KERNEL_CMD[@]}" \
@@ -342,30 +339,18 @@ uninstall_current_version() {
     stop_runtime
 
     local bin_link="$HOME_DIR/.local/bin/deepcli"
-    local cli_target kernel_target self_target
-    cli_target="$(current_target "$DATA_DIR/cli/current")"
-    kernel_target="$(current_target "$DATA_DIR/kernel/current")"
+    local self_target release_target
     self_target="$SCRIPT_PATH"
-
-    if [[ -L "$DATA_DIR/cli/current" ]]; then
-      rm -f "$DATA_DIR/cli/current"
-    fi
-    if [[ -n "$cli_target" && "$cli_target" == "$DATA_DIR/cli/"* ]]; then
-      rm -rf "$cli_target"
-    fi
-
-    if [[ -L "$DATA_DIR/kernel/current" ]]; then
-      rm -f "$DATA_DIR/kernel/current"
-    fi
-    if [[ -n "$kernel_target" && "$kernel_target" == "$DATA_DIR/kernel/"* ]]; then
-      rm -rf "$kernel_target"
-    fi
+    release_target="$RELEASE_DIR"
 
     if [[ -L "$bin_link" && "$(current_target "$bin_link")" == "$self_target" ]]; then
       rm -f "$bin_link"
     fi
-    if [[ "$self_target" == "$DATA_DIR/bin/"* ]]; then
-      rm -f "$self_target"
+    if [[ "$release_target" == "$DATA_DIR/releases/"* ]]; then
+      rm -rf "$release_target"
+    fi
+    if ! find "$DATA_DIR/releases" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -q .; then
+      rm -rf "$DATA_DIR/tools/uv"
     fi
 
     rm -f "$STATE_FILE" "$RUNTIME_DIR/supervisor.pid"
@@ -373,7 +358,6 @@ uninstall_current_version() {
     echo "Preserved config/state/assets:"
     echo "  $CONFIG_DIR"
     echo "  $STATE_DIR"
-    echo "  $DATA_DIR/assets"
   ) 9>"$LOCK_FILE"
 }
 

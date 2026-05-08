@@ -130,16 +130,19 @@ Linux v1 用户级目录：
 ```text
 ~/.local/bin/deepcli
 ~/.local/share/deepcli/
-├── bin/
-│   └── deepcli-1.0.0              # launcher binary
-├── kernel/
+├── tools/
+│   ├── uv/<uv-version>/uv         # DeepCLI-private uv; not on user PATH
+│   └── python/                    # uv-managed Python installs
+├── releases/
 │   └── 1.0.0/
-│       ├── .venv/                 # uv-managed Python runtime
-│       ├── wheels/
-│       └── uv.lock
-├── cli/
-│   └── 1.0.0/
-│       └── deepcli-cli            # bundled CLI artifact
+│       ├── kernel/
+│       │   ├── .venv/             # release-local Kernel venv
+│       │   ├── pyproject.toml
+│       │   ├── uv.lock            # generated for staged runtime
+│       │   └── kernel/
+│       ├── cli/deepcli-cli        # bundled CLI artifact
+│       ├── launcher/deepcli       # Bash launcher
+│       └── assets/
 └── downloads/
 ~/.local/state/deepcli/
 ├── launcher.lock
@@ -156,7 +159,7 @@ Linux v1 用户级目录：
 launcher：
 
 ```text
-~/.local/bin/deepcli -> ~/.local/share/deepcli/bin/deepcli-1.0.0
+~/.local/bin/deepcli -> ~/.local/share/deepcli/releases/1.0.0/launcher/deepcli
 ```
 
 installer 负责：
@@ -164,11 +167,13 @@ installer 负责：
 1. 检测 Linux / WSL2 / CPU 架构。
 2. 创建 `~/.local/share/deepcli`、`~/.local/state/deepcli`、
    `~/.config/deepcli`。
-3. 下载 launcher binary、CLI artifact、Kernel wheel、lock metadata。
-4. 安装或定位 `uv`。
-5. 用 `uv python install 3.13` 准备 Kernel Python。
-6. 创建 `~/.local/share/deepcli/kernel/<version>/.venv`。
-7. 安装 Kernel wheel + locked dependencies。
+3. 下载 `deepcli-linux-amd64.tar.gz`、manifest、checksums。
+4. 校验 tarball 后解压到 `releases/<version>/`。
+5. 下载或复用 DeepCLI-private `uv`，路径在
+   `~/.local/share/deepcli/tools/uv/<uv-version>/uv`，不写用户 PATH。
+6. 用私有 `uv` 安装 managed Python。
+7. 基于 managed Python 创建 `releases/<version>/kernel/.venv`，并执行
+   `uv sync --locked --no-dev`。
 8. 创建 / 更新 `~/.local/bin/deepcli` symlink。
 9. 检查 `~/.local/bin` 是否在 PATH；缺失时提示或写入 shell rc。
 10. 运行 `deepcli doctor` 或等价 smoke，确认安装物可执行。
@@ -176,20 +181,17 @@ installer 负责：
 release artifact 至少包含：
 
 ```text
-deepcli-launcher-linux-x64
-deepcli-launcher-linux-arm64
-deepcli-cli-linux-x64.tar.gz
-deepcli-cli-linux-arm64.tar.gz
-deepcli-kernel-1.0.0-py3-none-any.whl
-deepcli-kernel-lock-1.0.0.txt / uv.lock
-install-linux.sh
+deepcli-linux-amd64.tar.gz
+install.sh
 checksums.txt
 manifest.json
 ```
 
-Kernel 不是 frozen binary。Kernel 发布为 wheel，并安装到 launcher 管理的
-完整 Python venv 中。这样 `import`、插件、MCP、Python 工具和未来动态依赖
-都仍然在真实 Python 环境里运行。
+Kernel 不是 frozen binary，也不在 Linux v1 打 wheel。Kernel 以源码运行时目录
+进入 release tarball，release 构建阶段为 staged runtime 生成 `uv.lock`，
+installer 在 release-local venv 中同步运行依赖。这样 `import`、插件、MCP、
+Python 工具和未来动态依赖都仍然在真实 Python 环境里运行，同时避免引入 Python
+wheel 发布流程。
 
 `!` 命令和 shell tool 不使用 Kernel venv 的 PATH。Kernel venv 只用于运行
 Kernel 自己；用户命令必须在用户项目 cwd 和用户 shell 环境中执行。Linux shell
@@ -200,7 +202,7 @@ Kernel 自己；用户命令必须在用户项目 cwd 和用户 shell 环境中�
 3. fallback `/bin/sh`。
 
 `!python` 因此走用户 PATH 上的 Python，而不是
-`~/.local/share/deepcli/kernel/<version>/.venv/bin/python`。
+`~/.local/share/deepcli/releases/<version>/kernel/.venv/bin/python`。
 
 ## Windows Native vs WSL2
 
@@ -231,7 +233,7 @@ launcher 需要支持两种运行布局。
 | 模式 | 发现方式 | Kernel 命令 | CLI 命令 |
 |---|---|---|---|
 | 开发 checkout | `DEEPCLI_DEV_ROOT` 或仓库标记文件 | 在 `src/kernel` 下执行 `uv run python -m kernel.supervisor ...` | 在 `src/cli` 下执行 `bun run src/main.ts ...` |
-| 正式安装包 | `~/.local/share/deepcli` 等平台安装布局 | managed Python venv + Kernel wheel | bundled CLI artifact |
+| 正式安装包 | `~/.local/share/deepcli/releases/<version>` | release-local managed Python venv + Kernel source runtime | bundled CLI artifact |
 
 跨平台安装包模式由 `InstallLayout` 抽象隐藏差异。Linux v1 的实体布局见
 “Linux v1 发布决策”；Windows/macOS 后续可采用各自更合适的 installer
@@ -527,10 +529,8 @@ Bun runtime + JS bundle。
 
 已经可用：
 
-- Kernel wheel 可以构建：
-  `cd src/kernel && uv build --wheel --out-dir /tmp/deepcli-kernel-wheel-check`
-  生成 `mustang_kernel-1.0.0-py3-none-any.whl`。
-- CLI 普通 bundle 和 Bun single executable 都可以构建。
+- Kernel 源码运行时 tarball 可以构建；release stage 内生成独立 `uv.lock`。
+- CLI Bun single executable 可以构建。
 - Supervisor 已支持 `--access-port`、`--state-dir`、`--workspace`，可以作为
   launcher 后台启动的主进程。
 - Access readiness endpoint 已存在，launcher 可用
@@ -538,8 +538,6 @@ Bun runtime + JS bundle。
 
 必须补齐：
 
-- Kernel package 名称仍是 `mustang-kernel`，产品发布前需要决定是否改成
-  `deepcli-kernel`，或在 v1 wheel artifact 中保留兼容名但由 manifest 映射。
 - Supervisor CLI 还没有 `--config-dir`；Kernel lifespan 当前仍默认读取旧 home
   config/state 位置。产品态需要支持 `~/.config/deepcli` 和
   `~/.local/state/deepcli`。
@@ -603,13 +601,14 @@ Bun runtime + JS bundle。
 ### Phase 4 — 安装包模式
 
 - 实现 Linux `install.sh` 用户级安装路径。
-- 发布 launcher binary、Kernel wheel/lock、CLI artifact、manifest/checksums。
-- 用 `uv` 创建 Kernel Python 3.13 venv 并安装 wheel。
-- bundle 或定位 CLI artifact。
+- 发布 Linux amd64 tarball、manifest/checksums 和在线 installer。
+- tarball 内包含 Kernel 源码运行时、发布包内 `uv.lock`、预编译 CLI artifact、
+  launcher 和 assets。
+- 用 DeepCLI-private `uv` 安装 managed Python，并创建 release-local Kernel
+  venv。
 - 增加 release builds：
-  - Linux x64
-  - Linux arm64
-  - Windows/macOS 后续补齐
+  - Linux amd64
+  - Linux arm64 / Windows / macOS 后续补齐
 
 ### Phase 5 — 全系统验证
 

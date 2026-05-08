@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version="${DEEPCLI_VERSION:-1.0.0}"
-base_url="${DEEPCLI_BASE_URL:-https://releases.deepcli.dev/$version}"
+requested_version="${DEEPCLI_VERSION:-latest}"
+github_repository="${DEEPCLI_GITHUB_REPOSITORY:-deepcli/deepcli}"
+if [ -n "${DEEPCLI_BASE_URL:-}" ]; then
+  base_url="$DEEPCLI_BASE_URL"
+elif [ "$requested_version" = "latest" ]; then
+  base_url="https://github.com/$github_repository/releases/latest/download"
+elif [[ "$requested_version" = v* ]]; then
+  base_url="https://github.com/$github_repository/releases/download/$requested_version"
+else
+  base_url="https://github.com/$github_repository/releases/download/v$requested_version"
+fi
 local_dir="${DEEPCLI_LOCAL_DIR:-}"
 home_dir="${HOME:?HOME is required}"
 bin_dir="$home_dir/.local/bin"
@@ -13,16 +22,25 @@ runtime_dir="$state_dir/runtime"
 runtime_state_file="$runtime_dir/launcher-runtime.env"
 launcher_lock_file="$state_dir/launcher.lock"
 arch="$(uname -m)"
+artifact_arch=""
+tarball_name=""
+uv_version="${DEEPCLI_UV_VERSION:-0.9.28}"
+python_version="${DEEPCLI_PYTHON_VERSION:-3.13}"
+tools_dir="$share_dir/tools"
+uv_bin="$tools_dir/uv/$uv_version/uv"
+python_install_dir="$tools_dir/python"
+downloads_dir="$share_dir/downloads"
 restart_kernel_after_install=0
 install_lock_fd=""
 
 case "$arch" in
   x86_64) artifact_arch="amd64" ;;
-  aarch64|arm64) artifact_arch="arm64" ;;
-  *) echo "Unsupported Linux architecture: $arch" >&2; exit 1 ;;
+  *) echo "DeepCLI Linux installer currently supports x86_64 only. Found: $arch" >&2; exit 1 ;;
 esac
 
-mkdir -p "$bin_dir" "$share_dir/bin" "$share_dir/assets" "$share_dir/cli/$version" "$share_dir/kernel/$version" "$runtime_dir" "$config_dir"
+tarball_name="deepcli-linux-$artifact_arch.tar.gz"
+
+mkdir -p "$bin_dir" "$share_dir/releases" "$tools_dir" "$downloads_dir" "$runtime_dir" "$config_dir"
 
 acquire_install_lock() {
   exec {install_lock_fd}>"$launcher_lock_file"
@@ -134,45 +152,102 @@ download() {
   mv -f "$tmp" "$dest"
 }
 
-read_manifest() {
+download_text() {
+  local name="$1"
   if [ -n "$local_dir" ]; then
-    cat "$local_dir/manifest.txt"
+    cat "$local_dir/$name"
   else
-    curl -fsSL "$base_url/manifest.txt"
+    curl -fsSL "$base_url/$name"
   fi
 }
 
-launcher_name="deepcli-launcher-linux"
-cli_name="deepcli-cli-linux-$artifact_arch"
+verify_checksums() {
+  local artifact_path="$1"
+  local checksums_path="$2"
+  local artifact_file
+  artifact_file="$(basename "$artifact_path")"
+  (
+    cd "$(dirname "$artifact_path")"
+    grep "  $artifact_file\$" "$checksums_path" | sha256sum -c -
+  )
+}
 
-download "$launcher_name" "$share_dir/bin/deepcli-$version"
-chmod +x "$share_dir/bin/deepcli-$version"
+install_private_uv() {
+  if [ -x "$uv_bin" ]; then
+    return 0
+  fi
 
-download "$cli_name" "$share_dir/cli/$version/deepcli-cli"
-chmod +x "$share_dir/cli/$version/deepcli-cli"
-ln -sfn "$share_dir/cli/$version" "$share_dir/cli/current"
+  mkdir -p "$(dirname "$uv_bin")"
 
-download "welcome-logo.txt" "$share_dir/assets/welcome-logo.txt"
+  if [ -n "${DEEPCLI_LOCAL_UV:-}" ]; then
+    echo "Copying private uv..."
+    cp "$DEEPCLI_LOCAL_UV" "$uv_bin"
+    chmod +x "$uv_bin"
+    return 0
+  fi
 
-wheel_name="$(read_manifest | awk '/mustang_kernel-.*\.whl/ {print $1; exit}')"
-if [ -z "$wheel_name" ]; then
-  echo "Could not find kernel wheel in manifest.txt" >&2
+  local uv_triple="x86_64-unknown-linux-gnu"
+  local uv_archive="uv-$uv_triple.tar.gz"
+  local uv_url="https://github.com/astral-sh/uv/releases/download/$uv_version/$uv_archive"
+  local tmp_dir="$downloads_dir/uv-$uv_version.$$"
+  mkdir -p "$tmp_dir"
+
+  echo "Downloading private uv $uv_version..."
+  curl -fsSL "$uv_url" -o "$tmp_dir/$uv_archive"
+  tar -xzf "$tmp_dir/$uv_archive" -C "$tmp_dir"
+  cp "$tmp_dir/uv-$uv_triple/uv" "$uv_bin"
+  chmod +x "$uv_bin"
+  rm -rf "$tmp_dir"
+}
+
+prepare_kernel_venv() {
+  local release_dir="$1"
+  echo "Preparing managed Python $python_version..."
+  UV_PYTHON_INSTALL_DIR="$python_install_dir" \
+  UV_CACHE_DIR="$share_dir/cache/uv" \
+    "$uv_bin" python install "$python_version" \
+      --managed-python \
+      --install-dir "$python_install_dir" \
+      --no-bin
+
+  echo "Preparing Kernel venv..."
+  (
+    cd "$release_dir/kernel"
+    UV_PYTHON_INSTALL_DIR="$python_install_dir" \
+    UV_CACHE_DIR="$share_dir/cache/uv" \
+      "$uv_bin" sync --locked --no-dev --python "$python_version" --managed-python
+  )
+}
+
+download "$tarball_name" "$downloads_dir/$tarball_name"
+download_text "checksums.txt" > "$downloads_dir/checksums.txt"
+verify_checksums "$downloads_dir/$tarball_name" "$downloads_dir/checksums.txt"
+
+tmp_extract="$downloads_dir/extract.$$"
+rm -rf "$tmp_extract"
+mkdir -p "$tmp_extract"
+tar -xzf "$downloads_dir/$tarball_name" -C "$tmp_extract"
+release_root="$(find "$tmp_extract" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+if [ -z "$release_root" ] || [ ! -f "$release_root/VERSION" ]; then
+  echo "Release tarball did not contain a valid DeepCLI release root." >&2
   exit 1
 fi
-download "$wheel_name" "$share_dir/kernel/$version/$wheel_name"
+version="$(tr -d '\r\n' < "$release_root/VERSION")"
+release_dir="$share_dir/releases/$version"
+release_tmp="$share_dir/releases/.$version.tmp.$$"
 
-if ! command -v uv >/dev/null 2>&1; then
-  echo "Installing uv..."
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  export PATH="$home_dir/.local/bin:$home_dir/.cargo/bin:$PATH"
-fi
+rm -rf "$release_tmp"
+mv "$release_root" "$release_tmp"
+rm -rf "$tmp_extract"
 
-uv python install 3.13
-uv venv "$share_dir/kernel/$version/.venv" --python 3.13 --clear
-uv pip install --python "$share_dir/kernel/$version/.venv/bin/python" "$share_dir/kernel/$version/$wheel_name"
-ln -sfn "$share_dir/kernel/$version" "$share_dir/kernel/current"
+install_private_uv
+prepare_kernel_venv "$release_tmp"
 
-ln -sfn "$share_dir/bin/deepcli-$version" "$bin_dir/deepcli"
+rm -rf "$release_dir"
+mv "$release_tmp" "$release_dir"
+chmod +x "$release_dir/launcher/deepcli" "$release_dir/cli/deepcli-cli"
+
+ln -sfn "$release_dir/launcher/deepcli" "$bin_dir/deepcli"
 
 if ! echo "$PATH" | tr ':' '\n' | grep -qx "$bin_dir"; then
   echo

@@ -20,6 +20,11 @@ wall twice.
   downgrade to HTTP/1.1 instead of raising an internal error.
 - **npm `--silent` removed in v11**: use `node --import tsx` directly
   instead of `npm run` to avoid noisy script banners.
+- **Windows batch launchers cannot delete themselves synchronously**:
+  if a `.cmd` wrapper calls PowerShell and the PowerShell uninstall path
+  deletes that wrapper before returning, `cmd.exe` resumes by reading a
+  now-missing batch file and prints `The batch file cannot be found`.
+  Defer shim deletion until after the wrapper exits.
 
 ---
 
@@ -332,6 +337,13 @@ wall twice.
   loaded `ScheduleManager` afterward.  Subsystems that depend on
   session/gateway state (`GatewayManager`, `ScheduleManager`) must start
   after the Runtime `SessionManager`, mirroring `kernel.app` ordering.
+
+- **Supervisor control cannot assume Unix sockets on Windows.**  The
+  packaged Windows launcher can start the Supervisor only if
+  `kernel.supervisor.control` avoids `socketserver.UnixStreamServer`.
+  Keep POSIX on Unix sockets, but use a loopback TCP fallback on Windows
+  behind the same control-path marker so Access Agent / Runtime callers
+  do not need a different argument contract.
 
 - **TUI visibility toggles that affect prior transcript lines need a
   forced redraw.**  The active-port differential renderer intentionally

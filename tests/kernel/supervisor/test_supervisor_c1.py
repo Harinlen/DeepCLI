@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+import kernel.supervisor.control as supervisor_control
 import kernel.supervisor.runtime as supervisor_runtime
 from kernel.supervisor import ChildKernelLaunch, SupervisorConfig, SupervisorRuntime
 from kernel.supervisor.runtime import (
@@ -308,6 +309,28 @@ def test_control_socket_routes_status_and_restart_agent(tmp_path: Path) -> None:
     assert status["status"] == "ready"
     assert restart["agent"] == "primary"
     assert target.restart_agent_calls == [("primary", "test")]
+
+
+def test_control_socket_routes_over_tcp_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(supervisor_control, "_supports_unix_socket", lambda: False)
+    target = _ControlTarget()
+    server = SupervisorControlServer(
+        SupervisorControlConfig(socket_path=tmp_path / "control.sock", token="secret"),
+        target,
+    )
+    server.start()
+    try:
+        marker = json.loads((tmp_path / "control.sock").read_text(encoding="utf-8"))
+        status = request_control(tmp_path / "control.sock", "secret", "status")
+    finally:
+        server.stop()
+
+    assert marker["transport"] == "tcp"
+    assert marker["host"] == "127.0.0.1"
+    assert status["status"] == "ready"
 
 
 def test_wait_runtime_file_reads_json_when_written(tmp_path: Path) -> None:

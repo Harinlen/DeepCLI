@@ -11,10 +11,11 @@ import json
 import os
 import socket
 import socketserver
+import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 
 class SupervisorControlTarget(Protocol):
@@ -36,12 +37,12 @@ class SupervisorControlConfig:
 
 
 class SupervisorControlServer:
-    """Small JSON-over-Unix-socket server for Supervisor lifecycle control."""
+    """Small JSON-over-local-socket server for Supervisor lifecycle control."""
 
     def __init__(self, config: SupervisorControlConfig, target: SupervisorControlTarget) -> None:
         self.config = config
         self._target = target
-        self._server: socketserver.UnixStreamServer | None = None
+        self._server: socketserver.BaseServer | None = None
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
@@ -67,8 +68,17 @@ class SupervisorControlServer:
                     }
                 self.wfile.write(json.dumps(response, sort_keys=True).encode("utf-8") + b"\n")
 
-        self._server = socketserver.UnixStreamServer(str(self.config.socket_path), Handler)
-        self.config.socket_path.chmod(0o600)
+        if _supports_unix_socket():
+            unix_server = getattr(socketserver, "UnixStreamServer")
+            self._server = unix_server(str(self.config.socket_path), Handler)
+            self.config.socket_path.chmod(0o600)
+        else:
+            self._server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Handler)
+            host, port = cast(tuple[str, int], self._server.server_address)
+            self.config.socket_path.write_text(
+                json.dumps({"transport": "tcp", "host": host, "port": port}, sort_keys=True),
+                encoding="utf-8",
+            )
         self._thread = threading.Thread(
             target=self._server.serve_forever,
             name="supervisor-control",
@@ -125,9 +135,17 @@ def request_control(
         "method": method,
         "params": params or {},
     }
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+    endpoint = _resolve_control_endpoint(socket_path)
+    if endpoint["transport"] == "unix":
+        sock = socket.socket(cast(int, getattr(socket, "AF_UNIX")), socket.SOCK_STREAM)
+        connect_target: str | tuple[str, int] = str(socket_path)
+    else:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        connect_target = (str(endpoint["host"]), int(endpoint["port"]))
+
+    with sock:
         sock.settimeout(timeout)
-        sock.connect(str(socket_path))
+        sock.connect(connect_target)
         sock.sendall(json.dumps(payload).encode("utf-8") + b"\n")
         chunks: list[bytes] = []
         while True:
@@ -143,3 +161,27 @@ def request_control(
         message = response.get("message") or response.get("error") or "supervisor control failed"
         raise RuntimeError(str(message))
     return response
+
+
+def _supports_unix_socket() -> bool:
+    return (
+        sys.platform != "win32"
+        and hasattr(socket, "AF_UNIX")
+        and hasattr(socketserver, "UnixStreamServer")
+    )
+
+
+def _resolve_control_endpoint(
+    socket_path: str | os.PathLike[str],
+) -> dict[str, str | int]:
+    if _supports_unix_socket():
+        return {"transport": "unix"}
+    marker_path = Path(socket_path)
+    payload = json.loads(marker_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("transport") != "tcp":
+        raise RuntimeError(f"invalid supervisor control endpoint marker: {marker_path}")
+    return {
+        "transport": "tcp",
+        "host": str(payload.get("host") or "127.0.0.1"),
+        "port": int(payload["port"]),
+    }

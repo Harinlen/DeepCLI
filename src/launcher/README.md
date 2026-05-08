@@ -1,12 +1,13 @@
 # DeepCLI Launcher
 
-Linux `deepcli` launcher. The launcher owns local runtime discovery, user-level
-singleton locking, port selection, detached Supervisor startup, and CLI handoff.
+Cross-platform `deepcli` launcher. The launcher owns local runtime discovery,
+user-level singleton locking, port selection, detached Supervisor startup, and
+CLI handoff.
 
 Linux v1 is implemented as Bash to avoid adding another build toolchain before
 the Kernel Python runtime is prepared.
 
-Linux v1 is the active target:
+Linux v1:
 
 - user-level install via `install.sh`;
 - no `.deb` / `.rpm`;
@@ -21,6 +22,17 @@ Linux v1 is the active target:
 - `deepcli --uninstall` removes the installed launcher, CLI artifact, and
   managed Kernel venv for the current user while preserving config, state,
   sessions, logs, and editable UI assets.
+
+Windows local install-dev is implemented for v1.0.0 development smoke:
+
+- user-level install via `install-dev.ps1`;
+- no GitHub Release Windows package yet;
+- Kernel ships as a source runtime inside a release zip and runs from a
+  release-local managed Python venv;
+- CLI runs as a bundled `deepcli-cli.exe`;
+- `uv.exe` is installed as a DeepCLI-private tool under
+  `%LOCALAPPDATA%\DeepCLI\tools\uv\` unless overridden by `DEEPCLI_INSTALL_DIR`;
+- Supervisor is started as a hidden process and gated by `/access/readiness`.
 
 ## Development
 
@@ -40,10 +52,17 @@ into the local user layout:
 ./install-dev.sh
 ```
 
+On Windows:
+
+```powershell
+.\install-dev.ps1
+```
+
 The root wrapper delegates to the launcher sub-repo script:
 
 ```bash
 src/launcher/packaging/linux/install-dev.sh
+src/launcher/packaging/windows/install-dev.ps1
 ```
 
 For an isolated smoke test that does not touch the real home directory:
@@ -76,6 +95,25 @@ and `src/kernel/pyproject.toml`.
 
 `~/.local/bin/deepcli` points at the current release's
 `launcher/deepcli`.
+
+## Packaged Windows Layout
+
+```text
+%LOCALAPPDATA%\DeepCLI\
+├── bin\deepcli.cmd
+├── tools\uv\<uv-version>\uv.exe
+└── releases\<version>\
+    ├── kernel\.venv\
+    ├── cli\deepcli-cli.exe
+    ├── launcher\deepcli.ps1
+    ├── launcher\deepcli.cmd
+    └── assets\welcome-logo.txt
+%USERPROFILE%\.deepcli\
+└── state\runtime\
+```
+
+`bin\deepcli.cmd` is a shim that points at the current release's
+`launcher\deepcli.ps1`.
 
 ## Customization
 

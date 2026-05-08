@@ -73,8 +73,12 @@ sha256_file() {
 }
 
 write_installer_asset() {
-  sed "s/__DEEPCLI_TARGET_OS__/$target_os/g" \
-    "$script_dir/install.sh" > "$out_dir/$installer_name"
+  if [[ "$installer_name" == "install.sh" ]]; then
+    cp "$script_dir/install.sh" "$out_dir/$installer_name"
+  else
+    sed "s/__DEEPCLI_TARGET_OS__/$target_os/g" \
+      "$script_dir/install.sh" > "$out_dir/$installer_name"
+  fi
   chmod +x "$out_dir/$installer_name"
 }
 

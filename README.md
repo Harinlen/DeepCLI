@@ -78,16 +78,7 @@ Active code lives under `src/`:
 DeepCLI is still alpha software. Linux x86_64, macOS x86_64 / Apple Silicon,
 and Windows x86_64 have user-local release installers.
 
-Windows PowerShell:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/Harinlen/DeepCLI/releases/latest/download/install.ps1 | iex"
-```
-
-Open a new terminal tab after install if this shell still cannot find
-`deepcli`.
-
-Linux / WSL2:
+Linux / macOS:
 
 ```bash
 sh -c "$(curl -fsSL https://github.com/Harinlen/DeepCLI/releases/latest/download/install.sh)"
@@ -99,11 +90,15 @@ If `~/.local/bin` is not already on your shell `PATH`, add it after install:
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-macOS:
+Windows PowerShell:
 
-```bash
-sh -c "$(curl -fsSL https://github.com/Harinlen/DeepCLI/releases/latest/download/install-macos.sh)"
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/Harinlen/DeepCLI/releases/latest/download/install.ps1 | iex"
 ```
+
+Open a new terminal tab after install if this shell still cannot find
+`deepcli`.
+
 Then start DeepCLI:
 
 ```text
@@ -130,15 +125,7 @@ deepcli --uninstall
 
 To install the current checkout into the same user layout as a release:
 
-Linux / WSL2:
-
-```bash
-git clone https://github.com/Harinlen/DeepCLI.git deepcli
-cd deepcli
-./install-dev.sh
-```
-
-macOS:
+Linux / macOS:
 
 ```bash
 git clone https://github.com/Harinlen/DeepCLI.git deepcli

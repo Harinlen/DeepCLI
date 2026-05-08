@@ -1,7 +1,17 @@
 #!/bin/sh
 set -eu
 
-target_os="${DEEPCLI_TARGET_OS:-__DEEPCLI_TARGET_OS__}"
+target_os="${DEEPCLI_TARGET_OS:-auto}"
+if [ "$target_os" = "__DEEPCLI_TARGET_OS__" ]; then
+  target_os="auto"
+fi
+if [ "$target_os" = "auto" ]; then
+  case "$(uname -s)" in
+    Linux) target_os="linux" ;;
+    Darwin) target_os="macos" ;;
+    *) echo "DeepCLI POSIX installer supports Linux and macOS. Found: $(uname -s)" >&2; exit 1 ;;
+  esac
+fi
 case "$target_os" in
   linux|macos) ;;
   *) echo "Unsupported DeepCLI POSIX install target: $target_os" >&2; exit 1 ;;

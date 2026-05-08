@@ -7,12 +7,6 @@ install the latest release instead:
 sh -c "$(curl -fsSL https://github.com/Harinlen/DeepCLI/releases/latest/download/install.sh)"
 ```
 
-macOS:
-
-```bash
-sh -c "$(curl -fsSL https://github.com/Harinlen/DeepCLI/releases/latest/download/install-macos.sh)"
-```
-
 The release installer does not require Node, npm, Bun, uv, or a pre-existing
 virtualenv on the user machine. It installs user-local artifacts and a
 DeepCLI-private `uv` + managed Python runtime.

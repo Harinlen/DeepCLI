@@ -38,11 +38,11 @@ Windows amd64 release packaging is implemented for v1.0.0:
 
 macOS release packaging is implemented for v1.0.0:
 
-- user-level install via `install-macos.sh`, with local development installs
-  through `install-dev.sh` on macOS;
+- user-level install via the shared POSIX `install.sh`, with local development
+  installs through `install-dev.sh` on macOS;
 - GitHub tag releases publish `deepcli-macos-amd64.tar.gz`,
-  `deepcli-macos-arm64.tar.gz`, `install-macos.sh`, arch-specific manifests,
-  and arch-specific checksum files;
+  `deepcli-macos-arm64.tar.gz`, arch-specific manifests, and arch-specific
+  checksum files; `install-macos.sh` is kept as a compatibility alias;
 - Kernel ships as a source runtime inside a release tarball and runs from a
   release-local managed Python venv;
 - CLI runs as a bundled `deepcli-cli` executable compiled for the release
@@ -82,6 +82,12 @@ Published Windows releases can be installed from GitHub Release assets:
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/Harinlen/DeepCLI/releases/latest/download/install.ps1 | iex"
 ```
 
+Published Linux and macOS releases share one POSIX installer:
+
+```bash
+sh -c "$(curl -fsSL https://github.com/Harinlen/DeepCLI/releases/latest/download/install.sh)"
+```
+
 The root wrapper delegates to the launcher sub-repo script:
 
 ```bash
@@ -101,12 +107,6 @@ DEEPCLI_RELEASE_DIR=/tmp/deepcli-install-dev-release \
 If `DEEPCLI_DEV_ROOT` is not set, the launcher walks upward from the current
 directory and looks for this repo's `scripts/run-kernel.sh`, `src/cli/package.json`,
 and `src/kernel/pyproject.toml`.
-
-Published macOS releases can be installed from GitHub Release assets:
-
-```bash
-sh -c "$(curl -fsSL https://github.com/Harinlen/DeepCLI/releases/latest/download/install-macos.sh)"
-```
 
 ## Packaged Linux Layout
 

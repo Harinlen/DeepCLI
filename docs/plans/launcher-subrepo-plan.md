@@ -113,7 +113,7 @@ Linux v1 采用 Claude Code / Hermes 风格的一键 shell installer，而不是
 `.deb` / `.rpm` / distro package manager：
 
 ```bash
-curl -fsSL https://install.deepcli.dev/linux.sh | sh
+sh -c "$(curl -fsSL https://github.com/Harinlen/DeepCLI/releases/latest/download/install.sh)"
 ```
 
 设计原则：
@@ -144,15 +144,16 @@ Linux v1 用户级目录：
 │       ├── launcher/deepcli       # Bash launcher
 │       └── assets/
 └── downloads/
-~/.local/state/deepcli/
-├── launcher.lock
-├── launcher.log
-└── runtime/
-    ├── supervisor.json
-    ├── supervisor.stdout.log
-    └── supervisor.stderr.log
-~/.config/deepcli/
-└── config.yaml
+~/.deepcli/
+├── client.yaml
+├── config/
+│   └── kernel.yaml
+└── state/
+    ├── launcher.lock
+    └── runtime/
+        ├── supervisor.json
+        ├── supervisor.stdout.log
+        └── supervisor.stderr.log
 ```
 
 `~/.local/bin/deepcli` 是用户 PATH 上的稳定入口，通常指向当前版本的
@@ -165,8 +166,7 @@ launcher：
 installer 负责：
 
 1. 检测 Linux / WSL2 / CPU 架构。
-2. 创建 `~/.local/share/deepcli`、`~/.local/state/deepcli`、
-   `~/.config/deepcli`。
+2. 创建 `~/.local/share/deepcli` 和必要的 `~/.deepcli/state` runtime 目录。
 3. 下载 `deepcli-linux-amd64.tar.gz`、manifest、checksums。
 4. 校验 tarball 后解压到 `releases/<version>/`。
 5. 下载或复用 DeepCLI-private `uv`，路径在
@@ -258,12 +258,12 @@ DeepCLI 产品态使用 DeepCLI 自己的目录，不沿用旧兼容目录：
 |---|---|
 | Windows native | `%LOCALAPPDATA%\DeepCLI\state` |
 | macOS | `$HOME/Library/Application Support/DeepCLI/state` 或 `$HOME/.local/state/deepcli`（待 macOS 打包决策确认） |
-| Linux / WSL2 | `$HOME/.local/state/deepcli` |
+| Linux / WSL2 | `$HOME/.deepcli/state` |
 
 launcher 拥有的文件：
 
 ```text
-~/.local/state/deepcli/
+~/.deepcli/state/
 ├── launcher.lock
 ├── launcher.log
 └── runtime/
@@ -425,7 +425,7 @@ Supervisor 自己负责优雅 shutdown children；launcher 负责兜底杀进程
 连接认证仍由 Kernel 拥有。产品态 token 存储在 state dir：
 
 ```text
-~/.local/state/deepcli/runtime/auth_token
+~/.deepcli/state/auth_token
 ```
 
 launcher 在 Supervisor readiness 后读取 token，并通过环境变量传给 CLI：
@@ -448,10 +448,16 @@ TypeScript CLI 不应该变成 launcher。它的启动路径应保持为：
 2. 连接 ACP WebSocket。
 3. 渲染 TUI 或执行 `--print`。
 
-开发时仍然可以直接运行 CLI：
+开发时仍然可以从源码运行。先启动 dev Supervisor：
 
 ```bash
-KERNEL_URL=ws://127.0.0.1:8200/session DEEPCLI_TOKEN=... bun run src/main.ts
+scripts/run-kernel.sh
+```
+
+再运行 CLI：
+
+```bash
+scripts/run-cli.sh
 ```
 
 但用户面对的 `deepcli` 命令应该是 native launcher。
@@ -538,9 +544,9 @@ Bun runtime + JS bundle。
 
 必须补齐：
 
-- Supervisor CLI 还没有 `--config-dir`；Kernel lifespan 当前仍默认读取旧 home
-  config/state 位置。产品态需要支持 `~/.config/deepcli` 和
-  `~/.local/state/deepcli`。
+- Packaged launcher must not force `DEEPCLI_CONFIG_DIR` / `DEEPCLI_DATA_DIR`
+  to install paths. Kernel and CLI should default to `~/.deepcli` config/state
+  unless the user explicitly overrides the environment.
 - Supervisor primary runtime 当前仍把 agent state 写到
   `Path.home() / ".mustang" / "agents" / "primary"`；需要改成从
   SupervisorConfig 派生的产品 state dir。

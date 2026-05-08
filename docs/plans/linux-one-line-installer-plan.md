@@ -12,7 +12,7 @@
 提供一个类似 oh-my-zsh 的 Linux 一键安装入口：
 
 ```bash
-curl -fsSL https://<release-host>/install.sh | sh
+sh -c "$(curl -fsSL https://github.com/Harinlen/DeepCLI/releases/latest/download/install.sh)"
 ```
 
 第一版不做 `.deb` / `.rpm` / systemd user service，也不把 Kernel 打成
@@ -158,9 +158,12 @@ deepcli-<version>-linux-<arch>/
         ├── launcher/
         │   └── deepcli
         └── assets/
-~/.local/state/deepcli/
-└── runtime/
-~/.config/deepcli/
+~/.deepcli/
+├── config/
+│   └── kernel.yaml
+├── client.yaml
+└── state/
+    └── runtime/
 ```
 
 稳定入口：
@@ -212,7 +215,7 @@ deepcli-<version>-linux-<arch>/
 
 ```bash
 scripts/run-kernel.sh
-cd src/cli && bun run src/main.ts
+scripts/run-cli.sh
 ```
 
 正式安装包：
@@ -423,7 +426,7 @@ checksums.txt
 默认一键安装命令应安装最新 **正式** release：
 
 ```bash
-curl -fsSL https://github.com/<owner>/<repo>/releases/latest/download/install.sh | sh
+sh -c "$(curl -fsSL https://github.com/Harinlen/DeepCLI/releases/latest/download/install.sh)"
 ```
 
 Prerelease 需要用户明确指定版本：
@@ -483,8 +486,7 @@ deepcli --uninstall
 
 卸载默认保留：
 
-- `~/.config/deepcli/`
-- `~/.local/state/deepcli/`
+- `~/.deepcli/`
 - sessions / logs / runtime 历史
 
 ## 非目标

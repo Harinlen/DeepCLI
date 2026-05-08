@@ -44,12 +44,17 @@ Active code lives under `src/`:
 
 ## Quick Start
 
-DeepCLI is still alpha software.  Linux is the first supported install target. From a local checkout, build and install the current repo into your user layout:
+DeepCLI is still alpha software. Linux x86_64 is the first supported install
+target. Install the latest release with one command:
 
 ```bash
-git clone <repo-url> deepcli
-cd deepcli
-./install-dev.sh
+sh -c "$(curl -fsSL https://github.com/Harinlen/DeepCLI/releases/latest/download/install.sh)"
+```
+
+If `~/.local/bin` is not already on your shell `PATH`, add it after install:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 Then start DeepCLI:
@@ -58,7 +63,10 @@ Then start DeepCLI:
 deepcli
 ```
 
-The `deepcli` launcher keeps the Kernel as a per-user singleton.  It checks for an existing ready Kernel, starts one in the background when needed, chooses `127.0.0.1:8200` by default, and falls back to a free port if the default is already occupied.
+The `deepcli` launcher keeps the Kernel as a per-user singleton. It checks for
+an existing ready Kernel, starts one in the background when needed, chooses
+`127.0.0.1:8200` by default, and falls back to a free port if the default is
+already occupied.
 
 Useful launcher commands:
 
@@ -71,19 +79,36 @@ deepcli --resume <session-id>
 deepcli --uninstall
 ```
 
-If `~/.local/bin` is not already on your shell `PATH`, add it after install:
+## Install From Source
+
+To install the current checkout into the same user layout as a release:
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
+git clone https://github.com/Harinlen/DeepCLI.git deepcli
+cd deepcli
+./install-dev.sh
 ```
 
-For source-only development without installing, use:
+This builds release-shaped local artifacts from the checkout, installs a
+precompiled CLI executable, prepares the Kernel runtime with DeepCLI-private
+`uv` and managed Python, and updates `~/.local/bin/deepcli`.
+
+## Source Development
+
+For source-only development without installing, start the dev Supervisor first:
+
+```bash
+scripts/run-kernel.sh
+```
+
+Then, in another terminal, run the CLI from source:
 
 ```bash
 scripts/run-cli.sh
 ```
 
-That script ensures a dev Kernel is ready and forwards CLI arguments, including `--resume`, `--port`, and `--kernel`.
+`scripts/run-cli.sh` forwards CLI arguments, including `--resume`, `--port`,
+and `--kernel`.
 
 ## Development
 

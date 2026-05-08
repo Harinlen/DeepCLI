@@ -1,6 +1,17 @@
-# Development Environment Setup
+# Setup
 
-Cross-platform (Linux / macOS / Windows).
+This page is for source development. For normal Linux x86_64 use, install the
+latest release instead:
+
+```bash
+sh -c "$(curl -fsSL https://github.com/Harinlen/DeepCLI/releases/latest/download/install.sh)"
+```
+
+The release installer does not require Node, npm, Bun, uv, or a pre-existing
+virtualenv on the user machine. It installs user-local artifacts and a
+DeepCLI-private `uv` + managed Python runtime.
+
+The rest of this page covers source checkouts on Linux / macOS / Windows.
 
 ## Prerequisites
 
@@ -12,7 +23,7 @@ Cross-platform (Linux / macOS / Windows).
 | cloc | any | `sudo apt install cloc` | `brew install cloc` | `scoop install cloc` |
 | git | any | built-in | built-in | [git-scm.com](https://git-scm.com/) |
 
-## Quick Start
+## Source Checkout
 
 For agent-driven setup, see [`INIT.md`](../INIT.md) — it does a
 preflight check first and only runs the steps that are actually
@@ -49,39 +60,53 @@ If all five pass, the dev environment is ready — no need to re-run
 
 ## Local LLM
 
-DeepCLI defaults to an OpenAI-compatible endpoint at
-`http://127.0.0.1:8080/v1`. Point `~/.mustang/config.yaml` at
-whatever you run locally (llama.cpp, Ollama, vLLM, …) or at a
-hosted OpenAI-compatible provider:
+DeepCLI model configuration lives in:
+
+```text
+~/.deepcli/config/kernel.yaml
+```
+
+Point it at whatever you run locally or at a hosted provider:
 
 ```yaml
-provider:
-  default: local
-  local:
-    type: openai_compatible
-    base_url: http://127.0.0.1:8080/v1
-    model: qwen3.5
+llm:
+  current_used:
+    default:
+      provider: local
+      model: qwen3.5
+  providers:
+    local:
+      type: openai_compatible
+      base_url: http://127.0.0.1:8080/v1
+      api_key: local
+      models:
+        - id: qwen3.5
 ```
 
 Current dev target: **llama.cpp + Qwen3.5** (function calling
 supported). No Anthropic API key required.
 
-## Running the Kernel (Dev)
+## Running From Source
 
-### Start
+### Start the dev Supervisor
 
-First kill any existing kernel process, then launch:
+First stop any existing dev kernel process, then launch:
 
 ```bash
 # Kill existing kernel if running
 lsof -ti:8200 | xargs -r kill
 
-# Start dev server (auto-reload, INFO logging, port 8200)
+# Start the dev Supervisor, Access Agent, Agent Hub, and Primary Agent.
 scripts/run-kernel.sh
 ```
 
-The dev server runs on `http://127.0.0.1:8200` with `--dev` (uvicorn
-auto-reload + INFO log level).
+The dev Supervisor exposes Access Agent on `http://127.0.0.1:8200`.
+
+In another terminal, run the CLI from source:
+
+```bash
+scripts/run-cli.sh
+```
 
 ### Run Tests
 

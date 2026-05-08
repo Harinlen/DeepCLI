@@ -52,7 +52,7 @@
 
 状态：已完成 owned Phase 1 单元测试覆盖目标；剩余行覆盖缺口已归属到 platform / MCP transport / memory / scheduler / external integration 后续任务。
 
-细化任务见 [`kernel-unit-test-phase1.md`](kernel-unit-test-phase1.md)。
+细化任务见 [`kernel-unit-test-phase1.md`](../kernel/history/plans/kernel-unit-test-phase1.md)。
 
 目标：针对 Kernel 的每一个组件补齐单元测试，提高覆盖率，并保证每个模块的公共接口、边界条件、错误路径、返回结构都有断言。
 

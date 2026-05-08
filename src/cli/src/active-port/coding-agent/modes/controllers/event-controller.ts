@@ -11,7 +11,6 @@ import { TtsrNotificationComponent } from "../../modes/components/ttsr-notificat
 import { getSymbolTheme, theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext, TodoPhase } from "../../modes/types";
 import type { AgentSessionEvent } from "../../session/agent-session";
-import { calculatePromptTokens } from "../../session/compaction/compaction";
 import type { ExitPlanModeDetails } from "../../tools";
 
 type AgentSessionEventKind = AgentSessionEvent["type"];
@@ -664,11 +663,7 @@ export class EventController {
 	}
 
 	#currentContextTokens(): number {
-		const lastAssistant = this.ctx.session.agent.state.messages
-			.slice()
-			.reverse()
-			.find((m): m is AssistantMessage => m.role === "assistant" && m.stopReason !== "aborted");
-		return lastAssistant?.usage ? calculatePromptTokens(lastAssistant.usage) : 0;
+		return this.ctx.session.sessionManager?.getContextUsage?.().totalTokens ?? 0;
 	}
 
 	sendCompletionNotification(): void {

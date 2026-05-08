@@ -108,12 +108,11 @@ class ToolManager(Subsystem):
         search_tool._prompt_manager = prompts
         self._registry.register(search_tool, layer="core", module_table=self._module_table)
 
-        # Register ReplTool — needs a registry reference (same pattern
-        # as ToolSearchTool).  Only registered when the repl flag is on.
+        # Register scriptable ReplTool only when the repl flag is on.
         if flags.repl:
-            from kernel.tools.builtin.repl import ReplTool
+            from kernel.tools.builtin.repl_python import ReplTool
 
-            repl_tool = ReplTool(self._registry)
+            repl_tool = ReplTool()
             repl_tool._prompt_manager = prompts
             self._registry.register(repl_tool, layer="core", module_table=self._module_table)
 
@@ -182,10 +181,14 @@ class ToolManager(Subsystem):
     async def shutdown(self) -> None:
         """Drop registered tools + clear FileStateCache.
 
-        No external resources to release; tools are pure in-process objects.
+        REPL may own worker processes; shut down tools that expose a shutdown hook.
         """
         if self._mcp_disconnect is not None:
             self._mcp_disconnect()
+        for tool, _layer in self._registry.all_tools():
+            shutdown = getattr(tool, "shutdown", None)
+            if shutdown is not None:
+                await shutdown()
         self._file_state.clear()
         logger.info("ToolManager: shutdown complete")
 

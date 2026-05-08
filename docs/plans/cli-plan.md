@@ -140,7 +140,7 @@ class DeepCLISession {
 
 ```
 main.ts 逻辑：
-1. 读 ~/.mustang/config.yaml（或默认 ws://localhost:8765 + dev token）
+1. 读 `~/.deepcli/config/client.yaml`（或默认 `ws://localhost:8200` + token file）
 2. AcpClient.connect()
 3. DeepCLISession.create()（或 --session <id> 时 load）
 4. 进入简单 readline loop：

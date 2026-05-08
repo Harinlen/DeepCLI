@@ -4,14 +4,14 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
-if (-not $env:MUSTANG_FLAGS_PATH) {
+if (-not $env:DEEPCLI_FLAGS_PATH -and -not $env:MUSTANG_FLAGS_PATH) {
     $DevFlagsPath = Join-Path $RepoRoot "src/.mustang-dev-flags.yaml"
     $DevFlags = @"
 transport:
   stack: acp
 "@
     [IO.File]::WriteAllText($DevFlagsPath, $DevFlags + "`n", [Text.UTF8Encoding]::new($false))
-    $env:MUSTANG_FLAGS_PATH = $DevFlagsPath
+    $env:DEEPCLI_FLAGS_PATH = $DevFlagsPath
 }
 
 $SupervisorArgs = @($args)

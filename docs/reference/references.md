@@ -156,7 +156,7 @@ in Python / async / Pydantic".
 - **ACP adapter** (`acp_adapter/server.py`, `session.py`, `events.py`,
   `permissions.py`) — a production ACP server talking to IDEs (Zed,
   VS Code, JetBrains). Primary reference for our
-  [`kernel/interfaces/protocol.md`](protocol.md) layer: request
+  [`kernel/interfaces/protocol.md`](../kernel/interfaces/protocol.md) layer: request
   dispatch, session lifecycle, event mapping, permission prompts.
 - **Gateway / GatewayManager** (`gateway/run.py`, `gateway/session.py`,
   `gateway/platforms/*`) — 20+ messaging platform adapters under a

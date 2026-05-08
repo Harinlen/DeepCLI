@@ -1,0 +1,5 @@
+# Current tool surface
+
+Direct tool calls available this turn: {tool_names}.
+
+REPL mode is active. Primitive helpers such as Read, Write, Edit, Glob, Grep, Bash, PowerShell, Cmd, Python, and Agent are not direct top-level tool calls in this turn. Use them only as helpers inside REPL code when the REPL environment provides them. Ignore older or static instructions that describe those primitive helpers as direct tools.

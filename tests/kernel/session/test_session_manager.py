@@ -272,6 +272,7 @@ async def test_prompt_broadcasts_usage_update(manager: SessionManager, tmp_path:
     assert len(usage) == 1
     assert usage[0].input_tokens == 100
     assert usage[0].output_tokens == 25
+    assert usage[0].used == 125
 
 
 async def test_prompt_replays_completed_client_turn_id(
@@ -657,6 +658,47 @@ async def test_resume_session_binds_without_replay(manager: SessionManager, tmp_
     assert resume_result.replayed is False
     assert resume_ctx.conn.bound_session_id == sid
     resume_ctx.sender.notify.assert_not_called()
+
+
+async def test_resume_session_replays_usage_snapshot(
+    manager: SessionManager, tmp_path: Path
+) -> None:
+    result = await manager.new(_make_ctx(), NewSessionParams(cwd=str(tmp_path)))
+    sid = result.session_id
+
+    from kernel.session.events import TurnCompletedEvent as TCE
+    from kernel.session.models import TokenUsageUpdate
+
+    await manager._store.append_event(
+        sid,
+        TCE(
+            event_id="ev_resume_usage",
+            parent_id=None,
+            timestamp=datetime.now(UTC),
+            session_id=sid,
+            agent_depth=0,
+            kernel_version="0.1.0",
+            cwd=str(tmp_path),
+            git_branch=None,
+            stop_reason="end_turn",
+            input_tokens=14443,
+            output_tokens=125,
+        ),
+        tokens=TokenUsageUpdate(14443, 125),
+    )
+    manager._sessions.pop(sid)
+
+    resume_ctx = _make_ctx("conn-resume")
+    await manager.resume_session(
+        resume_ctx,
+        ResumeSessionParams(session_id=sid, cwd=str(tmp_path)),
+    )
+
+    update = resume_ctx.sender.notify.call_args.args[1].update
+    assert update.session_update == "usage_update"
+    assert update.input_tokens == 14443
+    assert update.output_tokens == 125
+    assert update.used == 14568
 
 
 async def test_resume_session_restores_mode_into_new_orchestrator(

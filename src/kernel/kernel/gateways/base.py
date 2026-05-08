@@ -548,9 +548,6 @@ class GatewayAdapter(ABC):
                     lines.append(f"  {r.session_id[:8]}… {title}")
                 return "\n".join(lines)
 
-        if name == "auth":
-            return "/auth is only available via local ACP connection."
-
         # Unsupported commands — direct users to a richer client.
         return f"/{name} is not yet available in gateway context. Use the TUI or CLI."
 

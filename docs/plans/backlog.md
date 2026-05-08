@@ -123,18 +123,17 @@ lockout 5min；per remote_addr 每秒最多 10 次 `authenticate()`；成功后�
 
 跨子系统的 cross-cutting concern，不是 subsystem（无 startup/shutdown 生命周期、
 无 `bind_section`、不依赖其他子系统）。`kernel/logging/` 作为普通工具模块：
-- 统一 formatter + `~/.mustang/logs/` 文件 handler + 大小上限轮转
+- 统一 formatter + `~/.deepcli/logs/` 文件 handler + 大小上限轮转
 - 日志级别从 ConfigManager 读
 - 各子系统 `startup()` 里 `self._log = get_logger(__name__)`
 - 与 DiagnosticBuffer（session 维度专用诊断）正交
 
 ---
 
-## 12. REPL Tool — Python `exec` 化重写（对齐 Claude Code）
+## 12. REPL Tool Follow-ups
 
-详细设计 + 实施计划见 [`repl-rewrite.md`](./repl-rewrite.md)。
+非 Windows 范围已实现，记录见 [`repl-rewrite.md`](./repl-rewrite.md)。
 
-**摘要**：当前 [`kernel/tools/builtin/repl.py`](../../src/kernel/kernel/tools/builtin/repl.py)
-是 JSON BatchTool，与 CC 真正的 REPL（Node `vm` context 跑 JS）不是同一种东西。
-重写方案为 Python `exec()` + per-session globals dict + AST 静态预扫，与 CC
-在 vm context 跑 JS 同强度隔离，0 外部依赖。优先级 P2。
+剩余事项：
+- 在 Windows 真机或 Windows CI 上补 PowerShell / Cmd probe。
+- 若要动态工具管理（`registerTool` / `listTools` 等），另起设计，不并入 v1。

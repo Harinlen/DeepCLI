@@ -41,11 +41,11 @@ async def run() -> int:
     logging.basicConfig(level=logging.WARNING)
 
     # 1. Boot config + flags + prompts (minimum needed for LLMManager).
-    global_dir = Path.home() / ".mustang" / "config"
+    global_dir = Path.home() / ".deepcli" / "config"
     project_dir = Path.cwd() / ".mustang" / "config"
-    state_dir = Path.home() / ".mustang" / "state"
+    state_dir = Path.home() / ".deepcli" / "state"
 
-    flags = FlagManager(path=Path.home() / ".mustang" / "flags.yaml")
+    flags = FlagManager(path=Path.home() / ".deepcli" / "config" / "flags.yaml")
     await flags.initialize()
 
     config = ConfigManager(

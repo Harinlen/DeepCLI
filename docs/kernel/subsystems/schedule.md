@@ -376,7 +376,7 @@ kernel/schedule/
 class CronStore:
     """Cron task 持久化层。
 
-    SQLite 表在 kernel 全局数据库中（~/.mustang/kernel.db），
+    SQLite 表在 kernel state database（~/.deepcli/state/kernel.db），
     不在 session.db 中——cron task 跨 session 存在。
 
     durable=False 的 task 不写 SQLite，仅存内存 dict。
@@ -408,7 +408,7 @@ class CronStore:
 **SQLite schema**：
 
 ```sql
--- ~/.mustang/kernel.db
+-- ~/.deepcli/state/kernel.db
 
 CREATE TABLE IF NOT EXISTS cron_tasks (
     id                  TEXT PRIMARY KEY,
@@ -533,7 +533,7 @@ class CronScheduler:
 **多实例协调**：
 
 同一台机器可能跑多个 kernel 实例（不同项目、不同端口），共享
-`~/.mustang/kernel.db`。需要防止两个 kernel 同时 fire 同一个 task。
+`~/.deepcli/state/kernel.db`。需要防止两个 kernel 同时 fire 同一个 task。
 
 借鉴 OpenClaw 的 `runningAtMs` 标记，但用 SQLite 行锁代替内存标记，
 并用**心跳**代替固定超时来判断执行方是否还活着。
@@ -1197,7 +1197,7 @@ Shutdown 顺序相反。
 ### 6.3 配置
 
 ```yaml
-# ~/.mustang/config/config.yaml
+# ~/.deepcli/config/config.yaml
 
 schedule:
   enabled: true
@@ -1259,10 +1259,10 @@ if hook_result and hook_result.stdout:
     enriched_prompt = f"[Pre-run data]\n{hook_result.stdout}\n\n{task.prompt}"
 ```
 
-这样用户可以在 `~/.mustang/hooks/` 下写一个 `pre_cron_fire` hook：
+这样用户可以在 `~/.deepcli/hooks/` 下写一个 `pre_cron_fire` hook：
 
 ```yaml
-# ~/.mustang/hooks/pre_cron_fire.yaml
+# ~/.deepcli/hooks/pre_cron_fire.yaml
 event: pre_cron_fire
 type: command
 command: "python3 scripts/collect_metrics.py"
@@ -1332,9 +1332,9 @@ agent 拿到的就是最新数据。
 
 # ScheduleManager 实装计划
 
-设计文档：[schedule-manager.md](schedule-manager.md)
+设计文档：[schedule.md](schedule.md)
 
-遵循 [workflow.md](../workflow/workflow.md) 的 6-phase 流程。
+遵循 [workflow.md](../../workflow/workflow.md) 的 6-phase 流程。
 Phase 1（设计）已完成。本文档是 Phase 2–6 的执行清单。
 
 **核心原则**：E2E 先行。每个步骤实装完后必须在 probe 中跑通，

@@ -118,7 +118,7 @@ deepcli/
 | `modes/interactive-mode.ts` | `modes/interactive-mode.ts` | 移除 `AgentSession` 依赖；改为从 ACP client 接收 events |
 | `modes/components/assistant-message.ts` | `components/assistant-message.ts` | 渲染逻辑不变；数据来源改为 ACP event |
 | `modes/components/tool-execution.ts` | `components/tool-execution.ts` | 移除工具调用实现；改为展示 kernel 发来的 tool call 事件 |
-| `modes/components/status-line.ts` | `components/status-line.ts` | 基本不变；model/context 信息来自 ACP；token/cost 明细留给 `/cost` |
+| `modes/components/status-line.ts` | `components/status-line.ts` | 基本不变；model/context 信息来自 ACP `usage_update` snapshot；token/cost 明细留给 `/cost` |
 | `modes/components/welcome.ts` | `components/welcome.ts` | 去掉 LSP 信息；加 kernel 版本 + session ID |
 | `modes/controllers/input-controller.ts` | — | 保留键盘处理逻辑；submit 改为发 ACP user_message event |
 | `modes/controllers/command-controller.ts` | — | 斜杠命令：本地命令（`/help`、`/quit`）直接处理；其余透传 kernel |

@@ -103,6 +103,8 @@ class UsageUpdate(AcpModel):
     output_tokens: int = 0
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
+    used: int = 0
+    size: int | None = None
     duration_ms: int | None = None
     meta: dict[str, Any] | None = None
 

@@ -916,6 +916,7 @@ export class SelectorController {
 		this.ctx.updateEditorBorderColor();
 		this.ctx.renderInitialMessages();
 		await this.ctx.reloadTodos();
+		await this.ctx.refreshWelcomeRecentSessions();
 		this.ctx.ui.requestRender();
 		return true;
 	}
@@ -934,6 +935,7 @@ export class SelectorController {
 		this.ctx.updateEditorBorderColor();
 
 		await this.ctx.reloadTodos();
+		await this.ctx.refreshWelcomeRecentSessions();
 		this.ctx.showStatus("Resumed session");
 	}
 
@@ -969,6 +971,7 @@ export class SelectorController {
 
 		// Show session selector
 		this.ctx.showStatus("Session deleted");
+		await this.ctx.refreshWelcomeRecentSessions();
 		await this.showSessionSelector();
 	}
 

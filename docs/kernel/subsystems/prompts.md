@@ -72,7 +72,7 @@ src/kernel/kernel/
 │       │   └── bash_classifier_user.txt     # Bash 分类器 user message 模板
 │       └── _index.yaml               # prompt 注册清单（可选，见 §4）
 │   # 用户覆盖层（运行期发现，优先级高于 default/）：
-│   # ~/.mustang/prompts/<module>/<name>.txt       — 用户全局覆盖
+│   # ~/.deepcli/prompts/<module>/<name>.txt       — 用户全局覆盖
 │   # <project>/.mustang/prompts/<module>/<name>.txt — 项目级覆盖
 ```
 
@@ -301,7 +301,7 @@ class BashClassifier:
 | prompt 版本控制 | 不做 | git 已经提供了完整的版本历史 |
 | prompt A/B 测试框架 | 不做 | 超出当前范围，未来可通过 key 别名实现 |
 | 继承 Subsystem | 不做 | bootstrap 服务，不需要降级语义 |
-| 用户自定义 prompt 覆盖 | **已实现（M2）** | `~/.mustang/prompts/`（global）和 `<project>/.mustang/prompts/`（project-local）；project 优先；目录不存在静默跳过 |
+| 用户自定义 prompt 覆盖 | **已实现（M2）** | `~/.deepcli/prompts/`（global）和 `<project>/.mustang/prompts/`（project-local）；project 优先；目录不存在静默跳过 |
 | `.md` 格式 | 不用 | `.txt` 更简单，prompt 不需要 frontmatter |
 | 国际化 | 不做 | 当前无需求，未来可通过 locale 子目录扩展 |
 

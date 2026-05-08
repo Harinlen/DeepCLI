@@ -46,19 +46,25 @@ from kernel.orchestrator.types import OrchestratorDeps
 
 logger = logging.getLogger(__name__)
 
-# Ordered list of static prompt section keys.
-# Each key maps to ``prompts/default/orchestrator/<key>.txt``.
+# Ordered list of static prompt section keys. Each key maps to
+# ``prompts/default/orchestrator/<key>.txt``.
 # Order matches Claude Code's ``getSystemPrompt()`` return array.
-_STATIC_SECTION_KEYS: list[str] = [
+_STATIC_SECTION_KEYS: tuple[str, ...] = (
     "orchestrator/identity",
     "orchestrator/system",
     "orchestrator/first_principles",
     "orchestrator/doing_tasks",
     "orchestrator/actions_with_care",
-    "orchestrator/using_tools",
+    "{using_tools}",
     "orchestrator/tone_and_style",
     "orchestrator/output_efficiency",
-]
+)
+
+
+def _static_section_keys(*, repl_mode: bool) -> list[str]:
+    """Return static prompt keys for the current tool surface."""
+    using_tools = "orchestrator/using_tools_repl" if repl_mode else "orchestrator/using_tools"
+    return [key.format(using_tools=using_tools) for key in _STATIC_SECTION_KEYS]
 
 
 class PromptBuilder:
@@ -91,6 +97,7 @@ class PromptBuilder:
         *,
         model: ModelRef | None = None,
         language: str | None = None,
+        repl_mode: bool = False,
     ) -> list[PromptSection]:
         """Return the ordered list of prompt sections for this query.
 
@@ -107,6 +114,9 @@ class PromptBuilder:
                 a ``# Language`` section is injected immediately after
                 the static block (position 8) — stable for the session
                 lifetime so it is cacheable.
+            repl_mode: Whether REPL is the active tool surface.  Mirrors
+                Claude Code's REPL-mode prompt branch by omitting direct
+                primitive-tool guidance when those tools are hidden.
 
         Returns:
             Ordered prompt sections with cacheable sections before volatile ones.
@@ -124,7 +134,7 @@ class PromptBuilder:
         # 1-7. Static behavioral instructions (one merged block)
         if prompts is not None:
             static_parts: list[str] = []
-            for key in _STATIC_SECTION_KEYS:
+            for key in _static_section_keys(repl_mode=repl_mode):
                 if prompts.has(key):
                     static_parts.append(prompts.get(key))
             if static_parts:

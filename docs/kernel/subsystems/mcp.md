@@ -180,7 +180,7 @@ class MCPConfig(BaseModel):
 |--------|------|------|
 | 1（最高） | local | `<cwd>/.mustang/config/mcp.local.yaml` |
 | 2 | project | `<cwd>/.mustang/config/mcp.yaml` |
-| 3 | global | `~/.mustang/config/mcp.yaml` |
+| 3 | global | `~/.deepcli/config/mcp.yaml` |
 | 4（最低） | .mcp.json | `<cwd>/.mcp.json`（Claude Code 约定，转换合入） |
 
 ConfigManager 的 `deep_merge` 处理前三层。`.mcp.json` 在 MCPManager startup 时单独加载，转换为 `ServerConfig`，name 不冲突时合入。
@@ -725,7 +725,7 @@ Mock transport，不启动真实进程。覆盖：
 
 ### 12.3 手动测试（probe 交互）
 
-配置：`~/.mustang/config/mcp.yaml`（走 ConfigManager，不依赖 `.mcp.json`）
+配置：`~/.deepcli/config/mcp.yaml`（走 ConfigManager，不依赖 `.mcp.json`）
 
 ```yaml
 mcp:

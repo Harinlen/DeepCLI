@@ -7,7 +7,7 @@ Adapter model.
 
 > 2026-04-30 architecture note: this standalone GatewayManager design is
 > superseded for future implementation by
-> [`agent-control-plane.md`](../../plans/agent-control-plane.md). Platform
+> [`agent-control-plane.md`](../history/plans/agent-control-plane.md). Platform
 > integrations should become Access Agent Platform Adapters with ingress/reply
 > sinks owned by Access Agent and target routing handled by Agent Hub.Router.
 > Do not implement new platform entrypoints that deliver directly to
@@ -222,7 +222,7 @@ not part of `CommandManager`. It maps `cmd.acp_method` to a direct kernel
 call and returns plain text. See `command-manager.md — DiscordBackend 的职责`.
 
 `_peer_sessions` is persisted to disk so session continuity survives kernel
-restarts. Storage path: `~/.mustang/gateways/<instance_id>/peer_sessions.json`.
+restarts. Storage path: `~/.deepcli/gateways/<instance_id>/peer_sessions.json`.
 
 ---
 
@@ -246,8 +246,8 @@ async def create_for_gateway(
     # 1. uuid4 session_id
     # 2. cwd = Path.home() — gateway sessions have no project directory
     # 3. construct Session + Orchestrator
-    # 4. write session_created to JSONL
-    # 5. update index.json
+    # 4. write session_created through SessionStore
+    # 5. update the sessions row/index state
     # 6. register in self._sessions
     # 7. ensure consumer task is running (see note below)
     # 8. return session_id
@@ -301,10 +301,10 @@ resolve when implementing this method. See session.md Gateway Internal API
 section for the full change.
 
 **Why not bypass the consumer loop?**
-The consumer loop is where JSONL persistence, turn serialization, and
+The consumer loop is where SessionStore persistence, turn serialization, and
 WS broadcasting happen. Bypassing it would cause:
 - Concurrent WS client + Gateway turns racing on the same Orchestrator
-- Gateway-originated turns not written to JSONL (invisible to `session show`)
+- Gateway-originated turns not written to SessionStore (invisible to `session show`)
 
 Using `run_turn_for_gateway` ensures Gateway turns are first-class citizens
 in the session history.

@@ -16,7 +16,7 @@ for shipped CLI milestones.
 
 ## Superseded — ACP 跨 Session 通信
 
-此旧路线已被 [`agent-control-plane.md`](agent-control-plane.md) 的 durable Agent Router
+此旧路线已被 [`agent-control-plane.md`](../kernel/history/plans/agent-control-plane.md) 的 durable Agent Router
 设计取代。后续不要单独实现“SessionManager 直接跨 session relay”作为主路线；跨 durable
 Agent 通信应进入 Agent Hub.Router，旧 `SessionManager.deliver_message()` 只保留为
 session reminder primitive 或兼容桥。
@@ -68,7 +68,7 @@ Router、Manager、queue/status/cancel 稳定后重新设计。不要在当前�
 
 **Design**: [`docs/cli/design.md`](../cli/design.md)
 **Docs**: [`docs/cli/README.md`](../cli/README.md)
-**Launcher plan**: [`launcher-subrepo-plan.md`](launcher-subrepo-plan.md)
+**Launcher plan**: [`launcher-subrepo-plan.md`](../launcher/history/plans/launcher-subrepo-plan.md)
 
 DeepCLI 的第一个面向用户前端：thin ACP client，TUI 移植自
 [oh-my-pi](https://github.com/can1357/oh-my-pi)（TypeScript/Bun）。

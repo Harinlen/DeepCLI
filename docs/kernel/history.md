@@ -43,9 +43,9 @@ subsystem docs rather than expanding this into a second progress log.
 
 | Milestone | What Landed | Current Docs |
 |---|---|---|
-| ACP namespace migration | DeepCLI extensions moved to `_mustang.agent/*`; temporary legacy aliases removed after CLI/probe migration. | [interfaces/protocol.md](interfaces/protocol.md), [../plans/acp-acpx-schema-alignment-plan.md](../plans/acp-acpx-schema-alignment-plan.md) |
+| ACP namespace migration | DeepCLI extensions moved to `_mustang.agent/*`; temporary legacy aliases removed after CLI/probe migration. | [interfaces/protocol.md](interfaces/protocol.md), [history/plans/acp-acpx-schema-alignment-plan.md](history/plans/acp-acpx-schema-alignment-plan.md) |
 | ACP `_meta` migration | Request `_meta` reaches schema models; session filters/worktree/archive/title metadata use `mustang.agent/*`; REPL execution updates are namespaced. | [interfaces/protocol.md](interfaces/protocol.md) |
-| Agent Control Plane Batch A | Shared runtime kinds, statuses, queue states, control operations, identity/status/result dataclasses, and `AgentRuntimeController`. No runtime control dispatch yet. | [../plans/agent-control-plane.md](../plans/agent-control-plane.md) |
+| Agent Control Plane Batch A | Shared runtime kinds, statuses, queue states, control operations, identity/status/result dataclasses, and `AgentRuntimeController`. No runtime control dispatch yet. | [history/plans/agent-control-plane.md](history/plans/agent-control-plane.md) |
 
 ## Refactors And Quality Work
 

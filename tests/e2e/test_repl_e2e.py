@@ -2,7 +2,7 @@
 
 Exercises the REPL tool through the real ACP WebSocket interface.
 A dedicated kernel subprocess is started with ``tools.repl: true``
-via a temporary flags file + ``MUSTANG_FLAGS_PATH`` env var.
+via a temporary flags file + ``DEEPCLI_FLAGS_PATH`` env var.
 
 Coverage map
 ------------
@@ -116,7 +116,7 @@ def repl_kernel():
     """Start a kernel subprocess with REPL mode enabled.
 
     Creates a temporary flags.yaml with ``tools.repl: true`` and
-    passes it via ``MUSTANG_FLAGS_PATH``.  Uses port 18201 to avoid
+    passes it via ``DEEPCLI_FLAGS_PATH``.  Uses port 18201 to avoid
     collision with the standard E2E kernel on 18200.
     """
     _kill_port(_REPL_PORT)
@@ -140,7 +140,7 @@ def repl_kernel():
         stderr_file = stderr_path.open("w")
 
         env = os.environ.copy()
-        env["MUSTANG_FLAGS_PATH"] = flags_path
+        env["DEEPCLI_FLAGS_PATH"] = flags_path
         env["HOME"] = str(sandbox_home)
 
         proc = subprocess.Popen(

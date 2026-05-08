@@ -63,6 +63,15 @@ if TYPE_CHECKING:
 
         async def _broadcast(self, session: Session, update: Any) -> None: ...
 
+        async def _usage_update_for_turn(
+            self,
+            session: Session,
+            *,
+            input_tokens: int,
+            output_tokens: int,
+            duration_ms: int | None,
+        ) -> Any: ...
+
         async def _drain_pending_mode_changes(self, session: Session) -> None: ...
 
         @staticmethod

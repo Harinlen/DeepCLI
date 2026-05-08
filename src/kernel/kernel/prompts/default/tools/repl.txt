@@ -1,5 +1,18 @@
-Execute one or more tool calls in a single batch. When REPL mode is active, primitive tools (Bash, Read, Edit, Write, Glob, Grep, Agent, etc.) are only accessible through this tool.
+Execute Python code in a per-session REPL worker process. Use this for dense
+multi-step investigation and tool orchestration.
 
-Submit an array of tool calls. Each call specifies the tool name and its input parameters. Results are returned per-call in indexed <repl_result> blocks.
+Available async helpers include Read, Write, Edit, Glob, Grep, Python, Agent,
+Bash, PowerShell, Cmd, plus sh(), cat(), rg(), rgf(), gl(), put(), and chdir().
+Only registered tools work. Variables persist while the active REPL worker
+lives, but reset after worker timeout, crash, session close, or runtime restart.
+Common shorthand forms are supported, for example:
+`await Read("path")`, `await Bash("printf hi")`, `await Grep("needle", path="src")`.
 
-Read-only tools in the batch may run concurrently; mutating tools run serially in order.
+REPL code is agent-authored and untrusted. External effects must happen through
+the helper tools, which still go through normal DeepCLI permission checks. Do
+not use shell commands to stop or restart DeepCLI; use RestartSelf or ask the
+user for a kernel restart.
+
+On Windows, sh() defaults to PowerShell. On Linux/WSL, sh() defaults to Bash.
+Prefer Read/Write/Edit/Glob/Grep/Python helpers over shell commands for
+cross-platform work.

@@ -290,6 +290,8 @@ class SessionHandlerMixin(_SessionMixinBase):
                 update=UsageUpdate(
                     input_tokens=record.total_input_tokens,
                     output_tokens=record.total_output_tokens,
+                    used=total,
+                    size=await self._context_window_for_usage(session),
                 ),
             ),
         )
@@ -316,6 +318,7 @@ class SessionHandlerMixin(_SessionMixinBase):
 
         session = self._sessions[session_id]
         self._bind_connection_to_session(ctx, session)
+        await self._replay_usage_snapshot(ctx, session, record)
 
         return ResumeSessionResult(
             config_options=_config_descriptors(session.config_options, session.mode_id),
@@ -453,9 +456,7 @@ class SessionHandlerMixin(_SessionMixinBase):
                 result.append(record)
         return result
 
-    async def _session_summary_with_history(
-        self, record: ConversationRecord
-    ) -> SessionSummary:
+    async def _session_summary_with_history(self, record: ConversationRecord) -> SessionSummary:
         summary = self._session_summary(record)
         events = await self._store.read_events(record.session_id)
         return summary.model_copy(
@@ -510,6 +511,30 @@ class SessionHandlerMixin(_SessionMixinBase):
             environment=_environment_summary(session),
             cost_usd=None,
             cost_note="Pricing is not estimated until provider/model pricing tables are trusted.",
+        )
+
+    async def _usage_update_for_turn(
+        self,
+        session: Session,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        duration_ms: int | None,
+    ) -> UsageUpdate:
+        """Build the canonical per-session context snapshot for UI clients.
+
+        ``input_tokens``/``output_tokens`` are the latest provider turn usage,
+        so their sum is the best-known context-window occupancy for this
+        session.  Cumulative billing counters stay in ``get_usage`` and must
+        not be used by frontends as current context.
+        """
+        context_tokens = max(0, input_tokens + output_tokens)
+        return UsageUpdate(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            used=context_tokens,
+            size=await self._context_window_for_usage(session),
+            duration_ms=duration_ms,
         )
 
     async def _context_window_for_usage(self, session: Session | None) -> int | None:

@@ -95,16 +95,9 @@ async def build_prompt(
     Returns:
         Rendered system prompt sections and visible tool schemas.
     """
-    system_prompt = await orchestrator._prompt_builder.build(
-        prompt_text,
-        cwd=orchestrator._cwd,
-        model=orchestrator._config.model,
-        language=orchestrator._config.language,
-    )
-    if turn_index == 1:
-        dump_system_prompt(system_prompt, orchestrator._session_id, orchestrator._config.model)
     tool_schemas: list[ToolSchema] = []
     snapshot = None
+    repl_mode = False
     if orchestrator._deps.tool_source is not None:
         try:
             snapshot = orchestrator._deps.tool_source.snapshot_for_session(
@@ -112,12 +105,30 @@ async def build_prompt(
                 plan_mode=orchestrator.plan_mode,
             )
             tool_schemas = list(snapshot.schemas)
-            if snapshot.deferred_listing:
-                system_prompt.append(system_reminder_section(snapshot.deferred_listing))
+            repl_mode = any(schema.name == "REPL" for schema in tool_schemas)
         except Exception:
             logger.exception(
                 "Orchestrator[%s]: tool_source.snapshot failed", orchestrator._session_id
             )
+    system_prompt = await orchestrator._prompt_builder.build(
+        prompt_text,
+        cwd=orchestrator._cwd,
+        model=orchestrator._config.model,
+        language=orchestrator._config.language,
+        repl_mode=repl_mode,
+    )
+    if turn_index == 1:
+        dump_system_prompt(system_prompt, orchestrator._session_id, orchestrator._config.model)
+    if snapshot and snapshot.deferred_listing:
+        system_prompt.append(system_reminder_section(snapshot.deferred_listing))
+    prompts = orchestrator._deps.prompts
+    if repl_mode and prompts is not None and prompts.has("orchestrator/repl_tool_surface"):
+        visible = ", ".join(schema.name for schema in tool_schemas)
+        system_prompt.append(
+            system_reminder_section(
+                prompts.render("orchestrator/repl_tool_surface", tool_names=visible)
+            )
+        )
     names = (
         ({schema.name for schema in snapshot.schemas} | snapshot.deferred_names)
         if snapshot

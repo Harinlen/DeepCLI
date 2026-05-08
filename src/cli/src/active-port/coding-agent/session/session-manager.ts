@@ -22,6 +22,7 @@ export interface SessionInfo extends SessionContext {
 
 export interface MustangSessionProvider {
 	listSessions(cwd?: string, limit?: number): Promise<SessionInfo[]>;
+	listRecentSessions?(cwd?: string, limit?: number): Promise<SessionInfo[]>;
 }
 
 let mustangSessionProvider: MustangSessionProvider | undefined;
@@ -40,8 +41,11 @@ export class SessionManager {
 	}
 }
 
-export async function getRecentSessions(): Promise<SessionInfo[]> {
-	const sessions = await SessionManager.list();
+export async function getRecentSessions(cwd?: string): Promise<SessionInfo[]> {
+	const sessions = await (
+		mustangSessionProvider?.listRecentSessions?.(cwd, 5)
+		?? SessionManager.list(cwd)
+	);
 	return sessions.slice(0, 5).map(session => ({
 		...session,
 		name: session.title || session.firstMessage || session.id,

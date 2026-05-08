@@ -53,7 +53,7 @@ def mustang_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """
     global_dir = tmp_path / ".deepcli" / "config"
     project_dir = tmp_path / "project-config"
-    flags_path = tmp_path / ".deepcli" / "flags.yaml"
+    flags_path = tmp_path / ".deepcli" / "config" / "flags.yaml"
     global_dir.mkdir(parents=True, exist_ok=True)
     project_dir.mkdir(parents=True, exist_ok=True)
 
@@ -250,7 +250,7 @@ def test_unknown_stack_name_aborts_boot(
     ``FlagManager.register``, which the lifespan converts into a
     fatal error.
     """
-    flags_path = mustang_home / ".deepcli" / "flags.yaml"
+    flags_path = mustang_home / ".deepcli" / "config" / "flags.yaml"
     flags_path.parent.mkdir(parents=True, exist_ok=True)
     flags_path.write_text(yaml.safe_dump({"transport": {"stack": "definitely-not-a-stack"}}))
 

@@ -36,7 +36,7 @@ Flag 管"通电/不通电"的启动期开关，Config 管"运行期可调的结�
 ## File Layout
 
 ```
-~/.mustang/config/          # 全局用户层
+~/.deepcli/config/          # 全局用户层
   config.yaml               # 默认共享文件
   mcp.yaml                  # 某子系统选择独占一个文件
   ...                       # 任意多个 yaml 文件
@@ -47,7 +47,7 @@ Flag 管"通电/不通电"的启动期开关，Config 管"运行期可调的结�
 
 同一 file 名的三层路径：
 
-- **全局用户层**：`~/.mustang/config/<file>.yaml`
+- **全局用户层**：`~/.deepcli/config/<file>.yaml`
 - **项目层**：`<cwd>/.mustang/config/<file>.yaml`
 - **项目本地层**：`<cwd>/.mustang/config/<file>.local.yaml`（gitignored）
 
@@ -57,7 +57,7 @@ Flag 管"通电/不通电"的启动期开关，Config 管"运行期可调的结�
 
 ```
 1. 子系统 schema defaults        (Pydantic model 默认值)
-2. 全局用户层    ~/.mustang/config/<file>.yaml
+2. 全局用户层    ~/.deepcli/config/<file>.yaml
 3. 项目层        <cwd>/.mustang/config/<file>.yaml
 4. 项目本地层    <cwd>/.mustang/config/<file>.local.yaml
 5. 环境变量      MUSTANG_<FILE>__<SECTION>__<KEY>=...
@@ -298,7 +298,7 @@ Orchestrator 还在响应配置变更"的诡异 bug。Orchestrator 本体
 ## 持久化规则
 
 - `MutableSection.update` 只写**全局用户层**
-  （`~/.mustang/config/<file>.yaml`）
+  （`~/.deepcli/config/<file>.yaml`）
 - **不写**项目层 / 项目本地层 —— 那是用户的 git 管理区
 - 写回时保留未修改字段；等于 schema 默认值的字段从文件中删除
   （省去的字段自然用默认值，文件保持干净）

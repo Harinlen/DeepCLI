@@ -485,10 +485,31 @@ class ToolManager(Subsystem):
 | `FileWrite` | edit | core | 同上 |
 | `Glob` | search | core | 纯函数，无 ctx 依赖 |
 | `Grep` | search | core | 纯函数 |
+| `REPL` | execute | core | feature flag `tools.repl` 开启时注册；Python top-level-await worker，primitive tools 通过 nested dispatch 调用 |
 | `ToolSearch` | think | core | 解锁 deferred 工具的前置 |
 | `Agent` (Task) | other | core | 递归调 Orchestrator（见 §6） |
 
 Deferred 层已激活：ToolManager 按 `Tool.should_defer` 自动路由到 `deferred` 层，ToolSearchTool 解锁 deferred 工具的 schema。PlanMode 工具（EnterPlanMode / ExitPlanMode）将作为首批 deferred 消费者。
+
+### 4.5 REPL Tool
+
+`REPL` 不是旧的 JSON batch dispatcher。当前实现位于
+[`src/kernel/kernel/tools/builtin/repl_python.py`](../../../src/kernel/kernel/tools/builtin/repl_python.py)，
+执行层位于 [`src/kernel/kernel/tools/repl/`](../../../src/kernel/kernel/tools/repl/)。
+
+运行模型：
+
+- `tools.repl = true` 时，模型只看到 `REPL`；`Read`、`Write`、`Edit`、`Glob`、
+  `Grep`、shell、`Python`、`Agent` 等 primitive tools 从 snapshot 隐藏。
+- `REPL` code 在 per-session worker process 中执行，支持 top-level `await` 和同一
+  active session 内的 globals 复用。
+- worker 不能直接拿 registry；它通过 IPC 请求 parent 执行 nested tool call。
+- parent 侧 nested call 由 `ToolExecutor` 注入的 `ToolContext.run_nested_tool()` 执行，
+  仍走 validation、ToolAuthorizer、hooks、runtime kill guard 和 tool result 映射。
+- timeout / cancel 会终止 worker；下一次 `REPL` 调用会重建 worker，并在结果里标记
+  `reset=True`。
+- `chdir()` 会把 worker cwd 随 IPC 带回 parent，保证相对路径工具调用用一致 cwd。
+- 旧 JSON batch dispatcher 已删除；`REPL` 只接受脚本化 `code` 输入。
 
 ---
 
@@ -518,6 +539,9 @@ class ToolContext:
     file_state: FileStateCache           # Tools 内部
     blobs: BlobStore                     # Session 子系统
     tasks: BackgroundTaskRegistry        # Session 子系统
+    run_nested_tool: Callable[
+        [str, dict[str, Any]], Awaitable[NestedToolResult]
+    ] | None = None                      # 仅由 ToolExecutor 注入；REPL 等上层工具使用
 
     # ── 用于 sub-agent 递归 ──────────────────────────────────────
     spawn_subagent: Callable[
@@ -1107,10 +1131,10 @@ Claude Code 源码里无直接答案、需要 mustang 自己决定的：
 Status: **pending**
 
 > 前置阅读：
-> - Tool ABC：[tool-manager.md](landed/tool-manager.md) § 3
-> - ToolContext：[tool-manager.md](landed/tool-manager.md) § 5
+> - Tool ABC：[tool-manager.md](tools.md) § 3
+> - ToolContext：[tool-manager.md](tools.md) § 5
 > - 参考实现（archived daemon）：`archive/daemon/daemon/extensions/tools/builtin/`
-> - Lessons learned：[../lessons-learned.md](../lessons-learned.md) § "web_fetch anti-bot fallback"
+> - Lessons learned：[../lessons-learned.md](../../lessons-learned.md) § "web_fetch anti-bot fallback"
 
 ---
 
@@ -2847,7 +2871,7 @@ Status: **landed** — 全部实装。
 > 2026-04-30 architecture note: the landed in-session / sub-agent resume behavior
 > remains current, but the older ACP cross-session route described in this appendix
 > is superseded for future work by
-> [`agent-control-plane.md`](../../plans/agent-control-plane.md). New durable
+> [`agent-control-plane.md`](../history/plans/agent-control-plane.md). New durable
 > Agent-to-Agent communication must go through Agent Hub.Router; do not extend
 > `SessionManager.deliver_message()` as the primary multi-agent transport.
 
@@ -2949,7 +2973,7 @@ Sub-agent 的 Orchestrator 在每轮 query loop 开头（STEP 0），检查自�
 > Superseded: do not extend this path for future durable Agent-to-Agent
 > messaging. The landed compatibility behavior may remain as a session reminder
 > bridge, but new routing must use Agent Hub.Router from
-> [`agent-control-plane.md`](../../plans/agent-control-plane.md).
+> [`agent-control-plane.md`](../history/plans/agent-control-plane.md).
 
 Claude Code 用 UDS 做同机跨 session 通信。DeepCLI 的 kernel 已经管理
 所有 session（SessionManager._sessions），天然支持内部路由：

@@ -2,8 +2,8 @@
 
 Every e2e test starts a real kernel subprocess whose state (SQLite
 databases, session journals, memory files, flags, plans, etc.) lives
-under ``Path.home() / ".mustang" / ...``.  Previously the test kernel
-shared the developer's real ``~/.mustang/`` — which meant cron tasks,
+under ``Path.home() / ".deepcli" / ...``.  Previously the test kernel
+shared the developer's real user-level state — which meant cron tasks,
 memory entries, and sessions created by tests polluted the developer's
 environment and kept firing long after the tests finished.
 
@@ -24,7 +24,7 @@ Usage::
     ...
     cleanup_test_home(home)                     # wipe sandbox
 
-The real user config (``~/.mustang/config/kernel.yaml``) is partially
+The real user config (``~/.deepcli/config/kernel.yaml``) is partially
 mirrored into the sandbox — only the ``llm:`` section, so LLM-dependent
 tests run against the configured provider.  ``gateways:``, ``mcp.yaml``,
 ``secrets.db``, and all persistent state are intentionally excluded:
@@ -52,8 +52,8 @@ def prepare_test_home(label: str) -> Path:
 
     Steps:
     1. Remove any leftover sandbox from a prior run.
-    2. Create ``<sandbox>/.mustang/config/``.
-    3. If the developer has a real ``~/.mustang/config/kernel.yaml``,
+    2. Create ``<sandbox>/.deepcli/config/``.
+    3. If the developer has a real ``~/.deepcli/config/kernel.yaml``,
        copy only its ``llm:`` section into the sandbox so LLM tests
        can reach the configured provider.  Anything else is omitted.
 
@@ -66,10 +66,13 @@ def prepare_test_home(label: str) -> Path:
     home = _sandbox_root(label)
     if home.exists():
         shutil.rmtree(home)
-    config_dir = home / ".mustang" / "config"
+    config_dir = home / ".deepcli" / "config"
     config_dir.mkdir(parents=True)
 
-    real_cfg = Path.home() / ".mustang" / "config" / "kernel.yaml"
+    real_cfg = Path.home() / ".deepcli" / "config" / "kernel.yaml"
+    legacy_cfg = Path.home() / ".mustang" / "config" / "kernel.yaml"
+    if not real_cfg.exists() and legacy_cfg.exists():
+        real_cfg = legacy_cfg
     if real_cfg.exists():
         try:
             parsed = yaml.safe_load(real_cfg.read_text()) or {}
@@ -85,8 +88,8 @@ def prepare_test_home(label: str) -> Path:
     # flags.yaml, which may contain user-specific settings (e.g.
     # tools.repl=true) that would interfere with tests that assume
     # the default tool set.  Fixtures that need additional flags
-    # (e.g. repl_kernel) override via MUSTANG_FLAGS_PATH env var.
-    (home / ".mustang" / "flags.yaml").write_text(
+    # (e.g. repl_kernel) override via DEEPCLI_FLAGS_PATH env var.
+    (home / ".deepcli" / "config" / "flags.yaml").write_text(
         "transport:\n  stack: acp\n"
     )
 
@@ -100,4 +103,4 @@ def cleanup_test_home(home: Path) -> None:
 
 def token_path_for(home: Path) -> Path:
     """Path where the kernel writes its auth token inside *home*."""
-    return home / ".mustang" / "state" / "auth_token"
+    return home / ".deepcli" / "state" / "auth_token"

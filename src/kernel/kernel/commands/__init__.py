@@ -76,13 +76,6 @@ _BUILTIN_COMMANDS: list[CommandDef] = [
         subcommands=["list", "show", "delete"],
     ),
     CommandDef(
-        name="auth",
-        description="Manage stored credentials",
-        usage="/auth set|get|list|delete|import-env ...",
-        acp_method=MustangMethod.SECRETS_AUTH,
-        subcommands=["set", "get", "list", "delete", "import-env"],
-    ),
-    CommandDef(
         name="kernel",
         description="Inspect or restart the local DeepCLI runtime",
         usage="/kernel [status | restart]",

@@ -51,7 +51,7 @@ Kernel 的认证发生在**传输层**（WebSocket `accept()` 后立即进行）
    "accept 时一次判断"，简单得多。
 
 3. **POSIX 文件权限本身就是充分的认证介质** ——
-   `~/.mustang/state/auth_token` 的 0600 权限建立了这条等价链：
+   `~/.deepcli/state/auth_token` 的 0600 权限建立了这条等价链：
 
    > 能读 auth_token → 是本机文件系统的合法用户 → 认证通过
 
@@ -91,8 +91,8 @@ Kernel 同时接受两种凭证：
 
 | 凭证 | 来源 | 用途 |
 |------|------|------|
-| **Token** | `~/.mustang/state/auth_token`（kernel 管理，0600） | 本机客户端 —— 能读这个文件就证明是本机合法用户 |
-| **Password** | `~/.mustang/state/auth_password.hash`（scrypt 哈希） | 远程客户端（经反代）—— 用户手动输入明文，kernel 用哈希比对 |
+| **Token** | `~/.deepcli/state/auth_token`（kernel 管理，0600） | 本机客户端 —— 能读这个文件就证明是本机合法用户 |
+| **Password** | `~/.deepcli/state/auth_password.hash`（scrypt 哈希） | 远程客户端（经反代）—— 用户手动输入明文，kernel 用哈希比对 |
 
 客户端侧的选择逻辑：
 
@@ -110,9 +110,9 @@ kernel 只 bind loopback，任何连接的远端地址都是 `127.0.0.1`（要�
 ## File Layout
 
 ```
-~/.mustang/
-  flags.yaml                    # FlagManager
+~/.deepcli/
   config/
+    flags.yaml                  # FlagManager
     config.yaml                 # ConfigManager 管的业务配置
     ...
   state/                        # kernel 运行时产物，人不该手编辑
@@ -128,7 +128,7 @@ flags 清晰分开。
 ## Configuration
 
 ConnectionAuthenticator **不** bind 任何 ConfigManager section —— 目前没有
-任何用户可调的 auth 选项，所以 `~/.mustang/config/config.yaml`
+任何用户可调的 auth 选项，所以 `~/.deepcli/config/config.yaml`
 里也没有 `auth` 段。
 
 为什么不放 `port`？监听端口属于**进程启动**参数（`python -m kernel
@@ -155,7 +155,7 @@ CLI 命令：
 
 **Token 轮转策略**：ConnectionAuthenticator 启动时若 `auth_token` 文件存在就
 直接读进内存，不存在才生成新 token。这样 kernel 正常重启不会让
-客户端反复重新读文件；token 文件被删（比如用户清理 `~/.mustang`）
+客户端反复重新读文件；token 文件被删（比如用户清理 `~/.deepcli`）
 时才会自动生成新的。轮转由上面的 CLI 命令显式触发。
 
 ## Credential Transport
@@ -341,7 +341,7 @@ class ConnectionAuthenticator(Subsystem):
   debug 级 log 且不含原文
 - **TLS 由反代负责** —— kernel 永远走明文
 - **仅支持 POSIX** —— Windows 下权限 bit 不做特殊处理，用户自行
-  保证 `~/.mustang/` 目录不被其他用户访问
+  保证 `~/.deepcli/` 目录不被其他用户访问
 
 ## Service Discovery (Not Kernel's Job)
 

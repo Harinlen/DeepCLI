@@ -88,7 +88,7 @@
 ### 存储结构（记忆树）
 
 ```
-~/.mustang/memory/                    # Global scope
+~/.deepcli/memory/                    # Global scope
 ├── index.md                          # 全局索引（常驻 system prompt）
 ├── log.md                            # 审计日志（不注入 prompt）
 │
@@ -159,7 +159,7 @@ verbosity: 2         # 1-5，注入详细度：低=只注入 description，高=�
 
 - 不同项目可以有不同的记忆行为——严肃生产项目高怀疑度，
   实验项目低怀疑度
-- 全局 `~/.mustang/memory/` 也可以有一个 `config.md` 作为默认值
+- 全局 `~/.deepcli/memory/` 也可以有一个 `config.md` 作为默认值
 - 项目级 config 覆盖全局 config
 - 不配置时使用内置默认值（skepticism=3, recency_bias=3, verbosity=3）
 - Disposition 参数注入到 RelevanceSelector 的 scoring prompt 和
@@ -202,18 +202,18 @@ locked: false
 
 ```markdown
 ## profile
-- [identity](profile/identity.md) — 后端工程师，5 年经验，主要使用 Python/Go
-- [preferences](profile/preferences.md) — 厌恶冗长输出，偏好简洁代码风格
-- [history](profile/history.md) — 偏好变更追踪记录
+- `profile/identity.md` — 后端工程师，5 年经验，主要使用 Python/Go
+- `profile/preferences.md` — 厌恶冗长输出，偏好简洁代码风格
+- `profile/history.md` — 偏好变更追踪记录
 
 ## semantic
-- [tech_stack](semantic/tech_stack.md) — 项目用 FastAPI + PostgreSQL + React
+- `semantic/tech_stack.md` — 项目用 FastAPI + PostgreSQL + React
 
 ## episodic
-- [auth_bug](episodic/incident_auth_bug.md) — 2026-04-15 认证 bug 根因是 token 过期配置
+- `episodic/incident_auth_bug.md` — 2026-04-15 认证 bug 根因是 token 过期配置
 
 ## procedural
-- [pr_workflow](procedural/workflow_pr.md) — PR 必须有 test plan，squash merge
+- `procedural/workflow_pr.md` — PR 必须有 test plan，squash merge
 ```
 
 分组让 LLM 和人类都能快速定位。Index 上限 200 行。
@@ -445,7 +445,7 @@ memory_search(query, top_n=5)
 
 | 措施 | 来源 | 说明 |
 |------|------|------|
-| PermissionEngine guardrail | CC + D17 | `~/.mustang/memory/**` 的 file_edit/file_write 硬编码拒绝 |
+| PermissionEngine guardrail | CC + D17 | `~/.deepcli/memory/**` 的 file_edit/file_write 硬编码拒绝 |
 | 写入扫描 | Hermes | `_scan_content()` 拒绝 prompt injection 模式 |
 | 原子写入 | Hermes | `temp → os.replace()` + `fcntl.flock` |
 | Confirmation | Text2Mem | delete 操作需 `confirmation=True` |
@@ -706,7 +706,7 @@ class MemoryManager(Subsystem):
     async def startup(self) -> None:
         # 1. 获取 memory model: deps.llm_manager.get_model("memory")
         #    （未配置时 fallback 到默认 model）
-        # 2. 解析 memory 目录（~/.mustang/memory/）
+        # 2. 解析 memory 目录（~/.deepcli/memory/）
         #    确保 4 个 category 子目录存在
         # 3. 加载 MemoryIndex（扫描所有文件 frontmatter）
         # 4. 注册 5 个 memory tools 到 ToolManager
@@ -732,7 +732,7 @@ class MemoryManager(Subsystem):
 | 模块 | 内容 |
 |------|------|
 | **存储** | |
-| 目录树 | Global `~/.mustang/memory/` + Project `.mustang/memory/`，各含 4 个 category 子目录 |
+| 目录树 | Global `~/.deepcli/memory/` + Project `.mustang/memory/`，各含 4 个 category 子目录 |
 | 文件格式 | MD + YAML frontmatter（description/category/source/access_count/locked） |
 | Index | 按 category 分组的 index.md（常驻 system prompt，cacheable，200 行上限）|
 | Profile 区分 | identity（客观）/ preferences（主观）/ history（变化追踪）|

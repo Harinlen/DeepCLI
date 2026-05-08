@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 
 
 class ProtocolFlags(BaseModel):
-    """Flag section ``"protocol"`` in ``~/.mustang/flags.yaml``."""
+    """Flag section ``"protocol"`` in ``~/.deepcli/config/flags.yaml``."""
 
     implementation: Literal["acp"] = Field(
         "acp",

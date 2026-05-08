@@ -145,8 +145,8 @@ Linux v1 用户级目录：
 │       └── assets/
 └── downloads/
 ~/.deepcli/
-├── client.yaml
 ├── config/
+│   ├── client.yaml
 │   └── kernel.yaml
 └── state/
     ├── launcher.lock

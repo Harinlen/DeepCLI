@@ -1,6 +1,5 @@
 // @ts-nocheck
 import * as fs from "node:fs";
-import type { AssistantMessage } from "@/compat/ai.js";
 import { type Component, truncateToWidth, visibleWidth } from "@/tui/index.js";
 import { formatCount, getProjectDir } from "@/compat/utils.js";
 import { $ } from "bun";
@@ -8,7 +7,6 @@ import { settings } from "../../config/settings";
 import type { StatusLinePreset, StatusLineSegmentId, StatusLineSeparatorStyle } from "../../config/settings-schema";
 import { theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
-import { calculatePromptTokens } from "../../session/compaction/compaction";
 import * as git from "../../utils/git";
 import { getSessionAccentAnsi, getSessionAccentHexForTitle } from "../../utils/session-color";
 import { sanitizeStatusText } from "../shared";
@@ -286,17 +284,10 @@ export class StatusLineComponent implements Component {
 			turnDurationMs: this.#getLastTurnDurationMs(),
 		};
 
-		// Get context percentage
-		const lastAssistantMessage = state.messages
-			.slice()
-			.reverse()
-			.find(m => m.role === "assistant" && m.stopReason !== "aborted") as AssistantMessage | undefined;
-
-		const contextTokens = lastAssistantMessage
-			? calculatePromptTokens(lastAssistantMessage.usage)
-			: calculateFallbackContextTokens(this.session.sessionManager?.getUsageStatistics?.());
-		const contextWindow = state.model?.contextWindow || 0;
-		const contextPercent = contextWindow > 0 ? (contextTokens / contextWindow) * 100 : 0;
+		const contextUsage = this.session.sessionManager?.getContextUsage?.() ?? { totalTokens: 0, contextWindow: null, percent: 0 };
+		const contextTokens = contextUsage.totalTokens ?? 0;
+		const contextWindow = contextUsage.contextWindow ?? state.model?.contextWindow ?? 0;
+		const contextPercent = contextUsage.percent ?? (contextWindow > 0 ? (contextTokens / contextWindow) * 100 : 0);
 
 		return {
 			session: this.session,
@@ -480,14 +471,4 @@ export class StatusLineComponent implements Component {
 		const hookLine = sortedStatuses.join(" ");
 		return [truncateToWidth(hookLine, width)];
 	}
-}
-
-function calculateFallbackContextTokens(usage: unknown): number {
-	if (!usage || typeof usage !== "object") return 0;
-	const stats = usage as { input?: unknown; output?: unknown; cacheRead?: unknown; cacheWrite?: unknown };
-	return numberToken(stats.input) + numberToken(stats.output) + numberToken(stats.cacheRead) + numberToken(stats.cacheWrite);
-}
-
-function numberToken(value: unknown): number {
-	return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 }

@@ -315,13 +315,9 @@ export class InteractiveMode implements InteractiveModeContext {
 		const providerName = this.session.model?.provider ?? "Unknown";
 
 		// Get recent sessions
-		const recentSessions = await logger.time("InteractiveMode.init:recentSessions", () =>
-			getRecentSessions(this.sessionManager.getSessionDir()).then(sessions =>
-				sessions.map(s => ({
-					name: s.name,
-					timeAgo: s.timeAgo,
-				})),
-			),
+		const recentSessions = await logger.time(
+			"InteractiveMode.init:recentSessions",
+			() => this.#loadWelcomeRecentSessions(),
 		);
 
 		const startupQuiet = settings.get("startup.quiet") || options.skipStartupWelcome === true;
@@ -444,12 +440,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		if (settings.get("startup.quiet")) return;
 		const modelName = this.session.model?.name ?? "Unknown";
 		const providerName = this.session.model?.provider ?? "Unknown";
-		const recentSessions = await getRecentSessions(this.sessionManager.getSessionDir()).then(sessions =>
-			sessions.map(s => ({
-				name: s.name,
-				timeAgo: s.timeAgo,
-			})),
-		);
+		const recentSessions = await this.#loadWelcomeRecentSessions();
 		if (this.#welcomeComponent) {
 			this.#welcomeComponent.setModel(modelName, providerName);
 			this.#welcomeComponent.setRecentSessions(recentSessions);
@@ -472,6 +463,21 @@ export class InteractiveMode implements InteractiveModeContext {
 			for (const child of children) this.ui.addChild(child);
 		}
 		this.ui.requestRender(true);
+	}
+
+	async refreshWelcomeRecentSessions(): Promise<void> {
+		if (!this.#welcomeComponent) return;
+		this.#welcomeComponent.setRecentSessions(await this.#loadWelcomeRecentSessions());
+		this.ui.requestRender(true);
+	}
+
+	async #loadWelcomeRecentSessions(): Promise<Array<{ name: string; timeAgo: string }>> {
+		return getRecentSessions(this.sessionManager.getSessionDir()).then(sessions =>
+			sessions.map(s => ({
+				name: s.name,
+				timeAgo: s.timeAgo,
+			})),
+		);
 	}
 
 	/** Reload slash commands and autocomplete for the provided working directory. */
@@ -967,6 +973,7 @@ export class InteractiveMode implements InteractiveModeContext {
 			planContent,
 		].join("\n");
 		await this.session.prompt(planModePrompt, { synthetic: true });
+		await this.refreshWelcomeRecentSessions();
 	}
 
 	async handlePlanModeCommand(initialPrompt?: string): Promise<void> {

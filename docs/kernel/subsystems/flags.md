@@ -4,14 +4,14 @@
 
 FlagManager 是 kernel 的 **bootstrap 服务**，最优先加载。它管理
 **运行期不可变的功能开关** —— 一旦 kernel 启动就按这份配置运行，
-变更只能靠改 `~/.mustang/flags.yaml` 然后重启 kernel。
+变更只能靠改 `~/.deepcli/config/flags.yaml` 然后重启 kernel。
 
 类比：**车上的 FuseBox**。保险丝是上车前装好的，行驶过程中
 不会动；要改装某条电路必须停车操作。
 
 职责边界：
 
-- ✅ 加载 `~/.mustang/flags.yaml`
+- ✅ 加载 `~/.deepcli/config/flags.yaml`
 - ✅ 让各子系统注册自己的 flag section（Pydantic schema）
 - ✅ 提供强类型的 flag 实例给子系统缓存使用
 - ❌ **不管运行期变更** —— 没有 `set_many`，没有 hot reload，
@@ -62,13 +62,14 @@ class KernelFlags(BaseModel):
 ## File Location
 
 ```
-~/.mustang/
-  flags.yaml           # FlagManager 管理（单文件）
-  config/              # ConfigManager 管理的目录
+~/.deepcli/
+  config/
+    flags.yaml         # FlagManager 管理（单文件）
+    *.yaml             # ConfigManager 管理的业务配置
   state/               # kernel 运行时产物
 ```
 
-如果 `flags.yaml` 不存在，所有 flag 用 schema 定义的默认值，
+如果 `config/flags.yaml` 不存在，所有 flag 用 schema 定义的默认值，
 不自动生成文件。
 
 ### Flag 结构
@@ -77,7 +78,7 @@ class KernelFlags(BaseModel):
 Section 内部是 Pydantic model，字段名用 snake_case：
 
 ```yaml
-# ~/.mustang/flags.yaml
+# ~/.deepcli/config/flags.yaml
 kernel:                    # kernel 内置的 section
   memory: true
   mcp: true
@@ -107,7 +108,7 @@ FlagManager 是 bootstrap 服务，**不继承 `Subsystem`**（详见
 ```python
 class FlagManager:
     async def initialize(self) -> None:
-        """读取 flags.yaml，注册内置的 KernelFlags。"""
+        """读取 config/flags.yaml，注册内置的 KernelFlags。"""
 
     def register(
         self, section: str, schema: type[T]

@@ -2,7 +2,7 @@
 
 状态: reference notes
 创建: 2026-04-29
-主计划: [`../../../plans/agent-control-plane.md`](../../../plans/agent-control-plane.md)
+主计划: [`agent-control-plane.md`](agent-control-plane.md)
 
 这个文件保存 `agent-control-plane.md` 精简时移出的讨论背景、参考实现发现和取舍理由。
 实现时优先读主计划；当模块边界、数据归属或迁移顺序不清楚时再查这里。

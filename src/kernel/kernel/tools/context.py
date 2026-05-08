@@ -168,5 +168,14 @@ class ToolContext:
     the "tools access kernel state only through context" rule.
     """
 
+    run_nested_tool: Callable[[str, dict[str, Any]], "Awaitable[Any]"] | None = None
+    """Execute one Kernel tool from inside another tool.
+
+    This is intentionally a narrow ToolExecutor-owned bridge, not registry
+    access.  REPL uses it to let worker-process scripts request primitive
+    tool calls while preserving ToolAuthorizer, hooks, file-touch, result
+    budgeting, and context modifiers.
+    """
+
 
 __all__ = ["ToolContext"]

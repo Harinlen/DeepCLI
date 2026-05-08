@@ -6,7 +6,7 @@ Status: **landed** — 全部实装（bootstrap 服务，Phase 16）。
 > - 架构子系统表：[kernel/architecture.md](../../kernel/architecture.md)
 > - ConfigManager 实现：`kernel/config/manager.py`
 > - MCP 连接状态机：[mcp.md](mcp.md)
-> - Roadmap credential store 条目：[plans/roadmap.md](../roadmap.md) §Standing gaps
+> - Roadmap credential store 条目：[plans/roadmap.md](../../plans/roadmap.md) §Standing gaps
 > - Hermes credential store：`hermes-agent/hermes_cli/auth.py`
 
 ---
@@ -24,7 +24,7 @@ bootstrap 服务），因为 ConfigManager 加载的 YAML 里可能包含
 而 key 放在同一台机器上等于锁和钥匙放在一起，徒增复杂度。
 
 它**做**：
-1. 管理一个 SQLite 数据库（`~/.mustang/secrets.db`，0600 权限），
+1. 管理一个 SQLite 数据库（`~/.deepcli/secrets.db`，0600 权限），
    使用 Python 标准库 `sqlite3`，零额外依赖
 2. 提供 `get(name) → str | None` / `set(name, value, metadata)`
    / `delete(name)` CRUD API
@@ -67,7 +67,7 @@ bootstrap 服务），因为 ConfigManager 加载的 YAML 里可能包含
    Code 在 Linux 上回退路径也是明文 JSON（0600）。没有先例
    证明加密 SQLite 在这个场景下有实际收益。
 2. **锁和钥匙问题** — 数据库加密需要 master key。key 存在
-   同一台机器上（key file / env var），任何能读 `~/.mustang/`
+   同一台机器上（key file / env var），任何能读 `~/.deepcli/`
    的进程同时拿到两者，加密形同虚设。
 3. **真正的防线在别处** — 文件权限（0600）防其他用户读，
    LLM 隔离（§6）防 agent 泄露。这两层才是实际有效的防御。
@@ -85,11 +85,11 @@ bootstrap 服务），因为 ConfigManager 加载的 YAML 里可能包含
 ### 3.2 数据库位置
 
 ```
-~/.mustang/secrets.db       # 0600 权限，owner-only
+~/.deepcli/secrets.db       # 0600 权限，owner-only
 ```
 
-与 `~/.mustang/config/`（用户编辑的意图声明）和
-`~/.mustang/state/`（运行时产物）分开。secrets.db 是独立文件，
+与 `~/.deepcli/config/`（用户编辑的意图声明）和
+`~/.deepcli/state/`（运行时产物）分开。secrets.db 是独立文件，
 不放在 config 目录下——ConfigManager 完全不知道它的存在。
 
 **为什么用 SQLite 而不是像 Hermes 一样用 JSON**：
@@ -168,7 +168,7 @@ class SecretManager:
         ----------
         db_path:
             Override database location.  Defaults to
-            ``~/.mustang/secrets.db``.  Tests pass a tmp_path
+            ``~/.deepcli/secrets.db``.  Tests pass a tmp_path
             to stay hermetic.
         """
 
@@ -416,7 +416,7 @@ Pydantic config 对象的内存中（provider 拿到 API key 去调
 LLM，MCP transport 拿到 header token 去建连）。这些值
 **不会**出现在：
 
-- conversation history（JSONL）
+- conversation history / session events
 - tool call input/output
 - system prompt sections
 - compaction summaries
@@ -431,7 +431,7 @@ LLM，MCP transport 拿到 header token 去建连）。这些值
    大量不可读内容，但 **secret 明文值可能出现在 raw page 中**
    （SQLite 不加密文本）。这不是可靠防线，只是增加了难度
 3. **Bash 是主要攻击面** — LLM 可以尝试
-   `sqlite3 ~/.mustang/secrets.db 'SELECT * FROM secrets'`。
+   `sqlite3 ~/.deepcli/secrets.db 'SELECT * FROM secrets'`。
    防御依赖 ToolAuthorizer 的 content-scoped deny 规则。
    DeepCLI 的 `Bash(content)` 规则匹配委托给 Bash tool 的
    `prepare_permission_matcher()`，但**目前只支持 prefix

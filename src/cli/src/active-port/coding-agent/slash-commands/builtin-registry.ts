@@ -132,6 +132,7 @@ async function executeSessionCommand(ctx: any, argsText: string): Promise<boolea
 		}
 		case "new": {
 			const id = await session.createSession?.();
+			await ctx.refreshWelcomeRecentSessions?.();
 			ctx.showStatus?.(`Created session ${id}`);
 			ctx.updateEditorTopBorder?.();
 			return true;
@@ -144,6 +145,7 @@ async function executeSessionCommand(ctx: any, argsText: string): Promise<boolea
 				return true;
 			}
 			const id = await session.loadSession?.(target);
+			await ctx.refreshWelcomeRecentSessions?.();
 			ctx.showStatus?.(`Loaded session ${id}`);
 			ctx.updateEditorTopBorder?.();
 			return true;
@@ -162,6 +164,7 @@ async function executeSessionCommand(ctx: any, argsText: string): Promise<boolea
 		case "archive":
 		case "unarchive": {
 			await session.archiveCurrentSession?.(subcommand === "archive");
+			await ctx.refreshWelcomeRecentSessions?.();
 			ctx.showStatus?.(subcommand === "archive" ? "Archived current session" : "Unarchived current session");
 			ctx.updateEditorTopBorder?.();
 			return true;
@@ -172,6 +175,7 @@ async function executeSessionCommand(ctx: any, argsText: string): Promise<boolea
 				return true;
 			}
 			const id = await session.deleteCurrentSessionAndCreate?.();
+			await ctx.refreshWelcomeRecentSessions?.();
 			ctx.showStatus?.(`Deleted session and switched to ${id}`);
 			ctx.updateEditorTopBorder?.();
 			return true;

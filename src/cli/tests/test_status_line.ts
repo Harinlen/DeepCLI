@@ -24,6 +24,7 @@ const statusLine = new StatusLineComponent({
 		getCwd: () => "/tmp",
 		getSessionName: () => "Test",
 		getUsageStatistics: () => ({ premiumRequests: 0 }),
+		getContextUsage: () => ({ totalTokens: 1500, contextWindow: 200_000, percent: 0.8 }),
 		titleSource: "user",
 	},
 	state: {
@@ -74,6 +75,7 @@ const millionWindowStatusLine = new StatusLineComponent({
 		getCwd: () => "/tmp",
 		getSessionName: () => undefined,
 		getUsageStatistics: () => ({ premiumRequests: 0 }),
+		getContextUsage: () => ({ totalTokens: 29_000, contextWindow: 1_000_000, percent: 2.9 }),
 		titleSource: undefined,
 	},
 	state: {
@@ -95,6 +97,7 @@ const resumedStatusLine = new StatusLineComponent({
 		getCwd: () => "/tmp",
 		getSessionName: () => "Resumed",
 		getUsageStatistics: () => ({ input: 14_443, output: 125, cacheRead: 0, cacheWrite: 0, cost: 0, premiumRequests: 0 }),
+		getContextUsage: () => ({ totalTokens: 0, contextWindow: 1_000_000, percent: 0 }),
 		titleSource: "auto",
 	},
 	state: {
@@ -107,8 +110,8 @@ const resumedStatusLine = new StatusLineComponent({
 } as never);
 const resumedBorder = resumedStatusLine.getTopBorder(100).content;
 assert(
-	resumedBorder.includes("15K (1.5%/1M)"),
-	`resumed sessions should fall back to summary token totals instead of showing zero context, got: ${resumedBorder}`,
+	resumedBorder.includes("0 (0.0%/1M)"),
+	`resumed sessions without a kernel context snapshot should not treat cumulative totals as context, got: ${resumedBorder}`,
 );
 
 const noModelStatusLine = new StatusLineComponent({
@@ -118,6 +121,7 @@ const noModelStatusLine = new StatusLineComponent({
 		getCwd: () => "/tmp",
 		getSessionName: () => undefined,
 		getUsageStatistics: () => ({ premiumRequests: 0 }),
+		getContextUsage: () => ({ totalTokens: 0, contextWindow: null, percent: 0 }),
 		titleSource: undefined,
 	},
 	state: { messages: [], model: { id: "no-model", name: "no-model", provider: "ACP" } },
@@ -134,6 +138,7 @@ const turnStatsStatusLine = new StatusLineComponent({
 		getCwd: () => "/tmp",
 		getSessionName: () => undefined,
 		getUsageStatistics: () => ({ input: 1200, output: 300, cacheRead: 0, cacheWrite: 0, cost: 0, premiumRequests: 0 }),
+		getContextUsage: () => ({ totalTokens: 1500, contextWindow: 200_000, percent: 0.8 }),
 		titleSource: undefined,
 	},
 	state: {

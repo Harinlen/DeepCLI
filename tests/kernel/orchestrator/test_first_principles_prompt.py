@@ -43,6 +43,20 @@ async def test_first_principles_prompt_is_in_static_prefix() -> None:
     assert static_text.index("# First principles") < static_text.index("# Doing tasks")
 
 
+async def test_repl_mode_uses_repl_tool_guidance() -> None:
+    pm = PromptManager()
+    pm.load()
+    deps = OrchestratorDeps(provider=FakeLLMProvider(), prompts=pm)
+    builder = PromptBuilder(session_id="repl-static", deps=deps)
+
+    sections = await builder.build(repl_mode=True)
+
+    static_text = sections[0].text
+    assert "REPL mode is active" in static_text
+    assert "hidden from direct top-level use" in static_text
+    assert "To read files use Read instead of cat" not in static_text
+
+
 async def test_empty_skill_listing_overrides_stale_skill_context() -> None:
     pm = PromptManager()
     pm.load()

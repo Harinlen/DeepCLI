@@ -254,6 +254,7 @@ export class InteractiveMode {
       try {
         if (!input.started && !this.mode.markPendingSubmissionStarted(input)) continue;
         await this.adapter.prompt(input.text, { images: input.images });
+        await this.mode.refreshWelcomeRecentSessions?.();
       } catch (error) {
         this.mode.showError(error instanceof Error ? error.message : String(error));
       } finally {

@@ -2,7 +2,7 @@
 
 状态: active baseline
 创建: 2026-04-30
-相关: [`../../../plans/agent-control-plane.md`](../../../plans/agent-control-plane.md)
+相关: [`agent-control-plane.md`](agent-control-plane.md)
 
 Batch B0 只建立目录 skeleton 和 wire/schema contract，不改变运行路径。当前 single
 Primary Agent 兼容路径仍是 baseline：CLI 和 Probe 都通过现有 WebSocket `/session` 与

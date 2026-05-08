@@ -439,7 +439,7 @@ self._current_used = self._current_used.model_copy(update={role: resolved})
 ### 配置迁移
 
 - 本仓库内 `docs/` 里搜索 `default_model` 的例子：`docs/kernel/subsystems/llm.md` 已改；无其他示例。
-- 用户本地 `~/.mustang/config/kernel.yaml` 可能含旧字段：
+- 用户本地 `~/.deepcli/config/kernel.yaml` 可能含旧字段：
   - 实际行为：`LLMConfig` 沿用默认 `extra="ignore"`，启动时会**静默丢弃**
     旧的 `default_model: X`，回落到新 schema 默认
     `current_used.default = "claude-opus"`。不会 raise。

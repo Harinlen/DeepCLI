@@ -144,7 +144,12 @@ async def test_replay_events_falls_back_to_conversation_messages(tmp_path: Path)
                     "content": [
                         {"type": "thinking", "thinking": "reasoning", "signature": ""},
                         {"type": "text", "text": "answer"},
-                        {"type": "tool_use", "id": "tool-1", "name": "Bash", "input": {"command": "pwd"}},
+                        {
+                            "type": "tool_use",
+                            "id": "tool-1",
+                            "name": "Bash",
+                            "input": {"command": "pwd"},
+                        },
                     ],
                 },
             ),
@@ -190,7 +195,9 @@ async def test_replay_events_prefers_explicit_ui_transcript(tmp_path: Path) -> N
 
 
 @pytest.mark.anyio
-async def test_replay_events_recovers_conversation_when_ui_agent_event_is_empty(tmp_path: Path) -> None:
+async def test_replay_events_recovers_conversation_when_ui_agent_event_is_empty(
+    tmp_path: Path,
+) -> None:
     replay = _Replay(_Store())
     ctx = _ctx()
     base = _base(tmp_path)
@@ -201,7 +208,10 @@ async def test_replay_events_recovers_conversation_when_ui_agent_event_is_empty(
         [
             ConversationMessageEvent(
                 **{**base, "event_id": "ev-conv"},
-                message={"role": "assistant", "content": [{"type": "text", "text": "conversation answer"}]},
+                message={
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "conversation answer"}],
+                },
             ),
             AgentMessageEvent(
                 **{**base, "event_id": "ev-ui-empty"},
@@ -217,7 +227,9 @@ async def test_replay_events_recovers_conversation_when_ui_agent_event_is_empty(
 
 
 @pytest.mark.anyio
-async def test_replay_events_uses_conversation_text_when_only_tool_ui_exists(tmp_path: Path) -> None:
+async def test_replay_events_uses_conversation_text_when_only_tool_ui_exists(
+    tmp_path: Path,
+) -> None:
     replay = _Replay(_Store())
     ctx = _ctx()
     base = _base(tmp_path)
@@ -232,7 +244,10 @@ async def test_replay_events_uses_conversation_text_when_only_tool_ui_exists(tmp
             ),
             ConversationMessageEvent(
                 **{**base, "event_id": "ev-user-conv"},
-                message={"role": "user", "content": [{"type": "text", "text": "conversation user"}]},
+                message={
+                    "role": "user",
+                    "content": [{"type": "text", "text": "conversation user"}],
+                },
             ),
             ToolCallEvent(
                 **{**base, "event_id": "ev-tool-ui"},
@@ -255,7 +270,11 @@ async def test_replay_events_uses_conversation_text_when_only_tool_ui_exists(tmp
     )
 
     updates = [call.args[1].update for call in ctx.sender.notify.call_args_list]
-    assert [type(update) for update in updates] == [UserMessageChunk, ToolCallStart, AgentMessageChunk]
+    assert [type(update) for update in updates] == [
+        UserMessageChunk,
+        ToolCallStart,
+        AgentMessageChunk,
+    ]
     assert updates[0].content.text == "ui user"
     assert updates[1].tool_call_id == "tool-ui"
     assert updates[2].content.text == "conversation answer"
@@ -282,6 +301,7 @@ async def test_replay_turn_completed_emits_usage_update(tmp_path: Path) -> None:
     assert isinstance(update, UsageUpdate)
     assert update.input_tokens == 14443
     assert update.output_tokens == 125
+    assert update.used == 14568
     assert update.duration_ms == 1234
 
 

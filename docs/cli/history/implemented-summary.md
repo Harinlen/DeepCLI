@@ -22,7 +22,7 @@ state files directly; runtime behavior goes through WebSocket ACP.
 | Kernel REPL routing | `!` / `!!` shell and `$` / `$$` Python input route to kernel ACP execution methods instead of local CLI execution. | [kernel-repl-bang-dollar.md](kernel-repl-bang-dollar.md) |
 | OMP-first refactor | Production interactive mode starts through the copied OMP path; session selector uses ACP-backed rows; active-port parity checks guard copied files. | [omp-first-refactor.md](omp-first-refactor.md) |
 | Active-port prune | Removed unused copied OMP runtime assets and kept the manifest as the source of truth for managed files and local assets. | [plans/cli-active-port-prune-audit.md](plans/cli-active-port-prune-audit.md) |
-| ACP namespace migration | CLI calls active DeepCLI extensions through `_mustang.agent/*`; legacy parsing for old execution updates was removed. | [../../plans/acp-acpx-schema-alignment-plan.md](../../plans/acp-acpx-schema-alignment-plan.md) |
+| ACP namespace migration | CLI calls active DeepCLI extensions through `_mustang.agent/*`; legacy parsing for old execution updates was removed. | [../../kernel/history/plans/acp-acpx-schema-alignment-plan.md](../../kernel/history/plans/acp-acpx-schema-alignment-plan.md) |
 | Welcome logo restore | The local welcome logo asset is registered in the active-port manifest and covered by golden-frame glyph assertion. | [../design.md](../design.md) |
 
 ## Current Verification Surface

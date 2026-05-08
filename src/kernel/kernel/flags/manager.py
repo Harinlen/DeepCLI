@@ -8,22 +8,26 @@ import yaml
 from pydantic import BaseModel
 
 from kernel.flags.kernel_flags import KernelFlags
-from kernel.paths import user_path
+from kernel.paths import user_config_dir, user_path
 
 logger = logging.getLogger(__name__)
 
 def _resolve_default_path() -> Path:
     """Return the flags file path, with env-var override for testing.
 
-    ``MUSTANG_FLAGS_PATH`` lets E2E tests point the kernel at a
-    temporary flags file without touching ``~/.mustang/flags.yaml``.
+    ``DEEPCLI_FLAGS_PATH`` lets tests point the kernel at a temporary
+    flags file without touching ``~/.deepcli/config/flags.yaml``.
+    ``MUSTANG_FLAGS_PATH`` is retained as a legacy alias.
     """
     import os
 
+    env = os.environ.get("DEEPCLI_FLAGS_PATH")
+    if env:
+        return Path(env)
     env = os.environ.get("MUSTANG_FLAGS_PATH")
     if env:
         return Path(env)
-    return user_path("flags.yaml")
+    return user_config_dir() / "flags.yaml"
 
 
 _DEFAULT_PATH = _resolve_default_path()
@@ -32,10 +36,10 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class FlagManager:
-    """Owns ``~/.mustang/flags.yaml`` and serves typed flag sections.
+    """Owns ``~/.deepcli/config/flags.yaml`` and serves typed flag sections.
 
     Runtime contract: flags are **frozen at startup**.  Subsystems
-    read ``~/.mustang/flags.yaml`` once during :meth:`initialize`,
+    read ``~/.deepcli/config/flags.yaml`` once during :meth:`initialize`,
     register their section schemas in their own ``startup``, and use
     the returned Pydantic instances directly.  There is no runtime
     mutation, no hot reload, and no write path — changing a flag
@@ -64,7 +68,7 @@ class FlagManager:
         if self._initialized:
             return
 
-        self._raw = self._load_raw(self._path)
+        self._raw = self._load_raw(self._read_path())
         self.register("kernel", KernelFlags)
         self._initialized = True
 
@@ -114,6 +118,20 @@ class FlagManager:
         to edit ``flags.yaml`` and restart — there is no write path.
         """
         return {name: (self._schemas[name], self._instances[name]) for name in self._schemas}
+
+    def _read_path(self) -> Path:
+        """Return canonical path, with read-only fallback for old installs."""
+        if self._path.exists() or self._path != _DEFAULT_PATH:
+            return self._path
+        legacy_path = user_path("flags.yaml")
+        if legacy_path.exists():
+            logger.warning(
+                "Loaded legacy flags from %s; move this file to %s",
+                legacy_path,
+                self._path,
+            )
+            return legacy_path
+        return self._path
 
     @staticmethod
     def _load_raw(path: Path) -> dict[str, Any]:

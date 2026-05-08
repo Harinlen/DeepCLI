@@ -178,9 +178,9 @@ class ToolRegistry:
         """
         # Lazy import to avoid circular dependency at module load.
         if repl_mode:
-            from kernel.tools.builtin.repl import REPL_HIDDEN_TOOLS
+            from kernel.tools.repl.primitives import REPL_PRIMITIVE_TOOLS
         else:
-            REPL_HIDDEN_TOOLS = frozenset()  # noqa: N806
+            REPL_PRIMITIVE_TOOLS = frozenset()  # noqa: N806
 
         denied = denied_names or set()
         core: list[Tool] = []
@@ -195,7 +195,7 @@ class ToolRegistry:
             if plan_mode and _is_mutating(tool.kind):
                 continue
 
-            hidden_by_repl = repl_mode and tool.name in REPL_HIDDEN_TOOLS
+            hidden_by_repl = repl_mode and tool.name in REPL_PRIMITIVE_TOOLS
 
             if not hidden_by_repl:
                 # Tool is visible to the LLM — add to schemas.

@@ -60,7 +60,7 @@ def check_setup(manifest: SkillManifest) -> tuple[bool, str | None]:
             lines.append(f"    Help: {entry.help}")
         lines.append("")
 
-    lines.append("Set these in your environment or ~/.mustang/config.yaml, then retry.")
+    lines.append("Set these in your environment or ~/.deepcli/config/skills.yaml, then retry.")
 
     return False, "\n".join(lines)
 

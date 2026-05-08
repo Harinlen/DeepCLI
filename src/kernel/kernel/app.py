@@ -156,8 +156,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ------------------------------------------------------------------
     # Kernel-wide state directory — home for subsystem runtime
     # artifacts (auth tokens, memory indices, session metadata, ...).
-    # Separate from ``<DeepCLI home>/config/`` (user-edited intent) and
-    # ``<DeepCLI home>/flags.yaml`` (feature switches) so the three
+    # Separate from ``<DeepCLI home>/config/`` (user-edited intent, including
+    # ``config/flags.yaml`` feature switches) so the two
     # categories never bleed into each other.  The directory is
     # created with 0o700 because it holds secrets (notably the auth
     # token file); the mode is only applied on creation — existing

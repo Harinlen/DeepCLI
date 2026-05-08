@@ -160,8 +160,8 @@ deepcli-<version>-linux-<arch>/
         └── assets/
 ~/.deepcli/
 ├── config/
+│   ├── client.yaml
 │   └── kernel.yaml
-├── client.yaml
 └── state/
     └── runtime/
 ```
@@ -358,7 +358,7 @@ tag                         v1.1.0
 scripts/release.sh
 ```
 
-使用说明见 [`../workflow/release-tool.md`](../workflow/release-tool.md)。
+使用说明见 [`release-tool.md`](../../../workflow/release-tool.md)。
 
 职责：
 

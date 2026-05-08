@@ -45,7 +45,6 @@
 | 376 | `src/kernel/kernel/skills/manifest.py` |
 | 365 | `src/kernel/kernel/tools/builtin/powershell.py` |
 | 353 | `src/kernel/kernel/orchestrator/history.py` |
-| 348 | `src/kernel/kernel/tools/builtin/repl.py` |
 | 342 | `src/kernel/kernel/tools/__init__.py` |
 | 338 | `src/kernel/kernel/orchestrator/__init__.py` |
 | 333 | `src/kernel/kernel/secrets/__init__.py` |
@@ -125,14 +124,14 @@ Line-count inventory 是风险信号，不是执行顺序。实际拆分按模�
 
 ### Tools and Tool AuthZ modules
 
-- 覆盖文件：`tools/builtin/bash.py` (749)、`tool_authz/authorizer.py` (565)、`tools/builtin/file_read.py` (424)、`powershell.py` (365)、`repl.py` (348)、`tools/__init__.py` (342)、`tools/tool.py` (309)、`tool_authz/bash_classifier.py` (303)。
+- 覆盖文件：`tools/builtin/bash.py` (749)、`tool_authz/authorizer.py` (565)、`tools/builtin/file_read.py` (424)、`powershell.py` (365)、`tools/__init__.py` (342)、`tools/tool.py` (309)、`tool_authz/bash_classifier.py` (303)。
 - 问题：工具 schema、风险判断、授权流、执行器和输出映射处在同一调用链，需要成组验证 tool search / execution / deny-ask-allow。
 - 拆分目标：
   - `bash.py` 拆为 parser / risk / executor / output
   - `authorizer.py` 拆为 pipeline / decision / cache / permission_flow
   - `bash_classifier.py` 拆为 prompting / judge / postprocess
   - `file_read.py` 拆为 text / image / pdf readers
-  - `powershell.py` 与 `repl.py` 拆为 parser / executor / result formatter
+  - `powershell.py` 拆为 parser / executor / result formatter
   - `tools/tool.py` 拆为 ABC / schema / validation helpers
   - `tools/__init__.py` 仅保留 package API export
 

@@ -254,6 +254,15 @@ export function parseKey(data: string, ..._rest: unknown[]): string | undefined 
 		"\x1b[B": "down",
 		"\x1b[C": "right",
 		"\x1b[D": "left",
+		"\x1b[H": "home",
+		"\x1bOH": "home",
+		"\x1b[1~": "home",
+		"\x1b[7~": "home",
+		"\x1b[F": "end",
+		"\x1bOF": "end",
+		"\x1b[4~": "end",
+		"\x1b[8~": "end",
+		"\x1b[3~": "delete",
 		"\x1b[Z": "shift+tab",
 	};
 	const mapped = map[data];

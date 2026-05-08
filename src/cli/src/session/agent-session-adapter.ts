@@ -22,6 +22,12 @@ type AssistantMessage = {
 	timestamp: number;
 };
 
+type ContextUsageSnapshot = {
+	totalTokens: number;
+	contextWindow: number | null;
+	percent: number;
+};
+
 export interface MustangAgentSessionAdapterOptions {
 	client: AcpClient;
 	session?: MustangSession;
@@ -99,7 +105,8 @@ export class MustangAgentSessionAdapter {
 			options.client.onUpdate(update => this.#handleAmbientUpdate(update));
 		}
 		setMustangSessionProvider({
-			listSessions: async (_cwd?: string, limit = 50) => this.listSessionInfos(limit),
+			listSessions: async (cwd?: string, limit = 50) => this.listSessionInfos(limit, cwd),
+			listRecentSessions: async (cwd?: string, limit = 5) => this.listRecentSessionInfos(limit, cwd),
 		});
 	}
 
@@ -227,6 +234,11 @@ export class MustangAgentSessionAdapter {
 				? Number(((report.context.totalTokens / contextWindow) * 100).toFixed(1))
 				: 0;
 		}
+		this.sessionManager.recordContextUsage({
+			totalTokens: report.context.totalTokens,
+			contextWindow: report.context.contextWindow ?? null,
+			percent: report.context.percent,
+		});
 		return report;
 	}
 
@@ -308,9 +320,15 @@ export class MustangAgentSessionAdapter {
 		return this.prompt(String(message.content ?? ""), options);
 	}
 	async newSession(): Promise<boolean> {
-		const result = await this.options.sessionService.create(process.cwd());
-		this.options.session = new MustangSession(this.options.sessionService.clientForSession(), result.sessionId);
+		const cwd = process.cwd();
+		const result = await this.options.sessionService.create(cwd);
+		this.options.session = new MustangSession(
+			this.options.sessionService.clientForSession(),
+			result.sessionId,
+			createdSessionSummary(result.sessionId, cwd),
+		);
 		this.sessionManager.replaceSession(this.options.session);
+		this.#resetTranscript();
 		return true;
 	}
 	async fork(): Promise<boolean> { return false; }
@@ -419,19 +437,35 @@ export class MustangAgentSessionAdapter {
 		this.currentPermissionMode = mode;
 	}
 
-	listSessions(limit = 20): Promise<CliSessionInfo[]> {
-		return this.options.sessionService.list({ cwd: this.sessionManager.getCwd(), limit });
+	listSessions(limit = 20, cwd?: string): Promise<CliSessionInfo[]> {
+		return this.options.sessionService.list({ cwd: cwd ?? this.sessionManager.getCwd(), limit });
 	}
 
-	async listSessionInfos(limit = 50): Promise<SessionInfo[]> {
-		const sessions = await this.listSessions(limit);
+	async listSessionInfos(limit = 50, cwd?: string): Promise<SessionInfo[]> {
+		const sessions = await this.listSessions(limit, cwd);
 		return sessions.map(cliSessionToOmpSessionInfo);
 	}
 
+	async listRecentSessionInfos(limit = 5, cwd?: string): Promise<SessionInfo[]> {
+		const sessions = await this.listSessions(limit, cwd);
+		const active = currentSessionInfo(this.options.session, this.sessionManager);
+		if (!active || (cwd && active.cwd !== cwd)) {
+			return sessions.map(cliSessionToOmpSessionInfo);
+		}
+		const withoutActive = sessions.filter(session => session.sessionId !== active.id);
+		return [active, ...withoutActive.map(cliSessionToOmpSessionInfo)].slice(0, limit);
+	}
+
 	async createSession(): Promise<string> {
-		const result = await this.options.sessionService.create(this.sessionManager.getCwd());
-		this.options.session = new MustangSession(this.options.sessionService.clientForSession(), result.sessionId);
+		const cwd = this.sessionManager.getCwd();
+		const result = await this.options.sessionService.create(cwd);
+		this.options.session = new MustangSession(
+			this.options.sessionService.clientForSession(),
+			result.sessionId,
+			createdSessionSummary(result.sessionId, cwd),
+		);
 		this.sessionManager.replaceSession(this.options.session);
+		this.#resetTranscript();
 		if (this.currentPermissionMode !== "default") {
 			await this.options.session.setMode(this.currentPermissionMode);
 		} else {
@@ -464,8 +498,10 @@ export class MustangAgentSessionAdapter {
 		}
 		const loadedSessionId = result.sessionId ?? result.session?.sessionId ?? result.session?.id ?? sessionId;
 		const summary = "session" in result ? result.session as any : undefined;
+		const replayedContextUsage = this.sessionManager.getContextUsage();
 		this.options.session = new MustangSession(this.options.sessionService.clientForSession(), loadedSessionId, summary);
 		this.sessionManager.replaceSession(this.options.session);
+		this.sessionManager.recordContextUsage(replayedContextUsage);
 		this.#applySessionSetupMode(result);
 		return loadedSessionId;
 	}
@@ -495,10 +531,16 @@ export class MustangAgentSessionAdapter {
 
 	async #ensureSessionForPrompt(): Promise<MustangSession> {
 		if (this.options.session) return this.options.session;
-		const result = await this.options.sessionService.create(this.sessionManager.getCwd());
-		const session = new MustangSession(this.options.sessionService.clientForSession(), result.sessionId);
+		const cwd = this.sessionManager.getCwd();
+		const result = await this.options.sessionService.create(cwd);
+		const session = new MustangSession(
+			this.options.sessionService.clientForSession(),
+			result.sessionId,
+			createdSessionSummary(result.sessionId, cwd),
+		);
 		this.options.session = session;
 		this.sessionManager.replaceSession(session);
+		this.#resetTranscript();
 		if (this.currentPermissionMode !== "default") {
 			await session.setMode(this.currentPermissionMode);
 		} else {
@@ -650,17 +692,29 @@ export class MustangAgentSessionAdapter {
 	}
 
 	#applyUsageUpdate(update: SessionUpdateParams): void {
-		if (!this.#activeAssistant) return;
 		const input = numberFromUpdate(update.inputTokens ?? update.input_tokens);
 		const output = numberFromUpdate(update.outputTokens ?? update.output_tokens);
 		const cacheRead = numberFromUpdate(update.cacheReadTokens ?? update.cache_read_tokens);
 		const cacheWrite = numberFromUpdate(update.cacheWriteTokens ?? update.cache_write_tokens);
+		this.sessionManager.recordContextUsage(contextUsageSnapshotFromUpdate(update, this.model.contextWindow));
+		if (!this.#activeAssistant) return;
 		this.#activeAssistant.usage = { input, output, cacheRead, cacheWrite };
 		const duration = numberFromUpdate(update.durationMs ?? update.duration_ms);
 		if (duration > 0) {
 			this.#activeAssistant.duration = duration;
 		}
 		this.sessionManager.recordUsage(input, output);
+	}
+
+	#resetTranscript(): void {
+		this.messages = [];
+		this.agent.messages = this.messages;
+		this.agent.state.messages = this.messages;
+		this.state.messages = this.messages;
+		this.#activeAssistant = undefined;
+		this.#activeAssistantSegment = undefined;
+		this.#toolNames.clear();
+		this.#subagentDepth = 0;
 	}
 
 	#appendAssistant(kind: "text" | "thinking", text: string): void {
@@ -757,6 +811,11 @@ export class MustangSessionManagerAdapter {
 	#name: string | undefined;
 	#liveInputTokens = 0;
 	#liveOutputTokens = 0;
+	#contextUsage: ContextUsageSnapshot = {
+		totalTokens: 0,
+		contextWindow: null,
+		percent: 0,
+	};
 
 	constructor(private readonly options: MustangAgentSessionAdapterOptions) {
 		this.#session = options.session;
@@ -770,6 +829,11 @@ export class MustangSessionManagerAdapter {
 		this.titleSource = normalizeTitleSource(session.summary?.titleSource);
 		this.#liveInputTokens = 0;
 		this.#liveOutputTokens = 0;
+		this.#contextUsage = {
+			totalTokens: 0,
+			contextWindow: null,
+			percent: 0,
+		};
 	}
 
 	getSessionId(): string { return this.#session?.sessionId ?? "pending"; }
@@ -784,6 +848,12 @@ export class MustangSessionManagerAdapter {
 	recordUsage(input: number, output: number): void {
 		this.#liveInputTokens += input;
 		this.#liveOutputTokens += output;
+	}
+	recordContextUsage(snapshot: ContextUsageSnapshot): void {
+		this.#contextUsage = snapshot;
+	}
+	getContextUsage(): ContextUsageSnapshot {
+		return this.#contextUsage;
 	}
 	getUsageStatistics(): { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number; premiumRequests: number } {
 		const input = (this.#session?.summary?.totalInputTokens ?? 0) + this.#liveInputTokens;
@@ -982,6 +1052,25 @@ function numberFromUpdate(value: unknown): number {
 	return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function contextUsageSnapshotFromUpdate(
+	update: SessionUpdateParams,
+	fallbackWindow?: number | null,
+): ContextUsageSnapshot {
+	const input = numberFromUpdate(update.inputTokens ?? update.input_tokens);
+	const output = numberFromUpdate(update.outputTokens ?? update.output_tokens);
+	const cacheRead = numberFromUpdate(update.cacheReadTokens ?? update.cache_read_tokens);
+	const cacheWrite = numberFromUpdate(update.cacheWriteTokens ?? update.cache_write_tokens);
+	const used = numberFromUpdate(update.used) || input + output + cacheRead + cacheWrite;
+	const size = numberFromUpdate(update.size);
+	const contextWindow = size > 0 ? size : fallbackWindow ?? null;
+	const percent = contextWindow && contextWindow > 0 ? Number(((used / contextWindow) * 100).toFixed(1)) : 0;
+	return {
+		totalTokens: used,
+		contextWindow,
+		percent,
+	};
+}
+
 function normalizeTitleSource(value: unknown): "auto" | "user" | undefined {
 	return value === "auto" || value === "user" ? value : undefined;
 }
@@ -1024,6 +1113,49 @@ function cliSessionToOmpSessionInfo(session: CliSessionInfo): SessionInfo {
 		messageCount: session.messageCount ?? 0,
 		firstMessage,
 		allMessagesText: `${title ?? ""} ${session.cwd ?? ""} ${session.sessionId}`.trim(),
+	};
+}
+
+function currentSessionInfo(
+	session: MustangSession | undefined,
+	sessionManager: MustangSessionManagerAdapter,
+): SessionInfo | undefined {
+	if (!session) return undefined;
+	const now = new Date();
+	const summary = session.summary;
+	const title = sessionManager.getSessionName() || summary?.title?.trim() || "Untitled session";
+	const created = parseDate(summary?.createdAt) ?? now;
+	const modified = parseDate(summary?.updatedAt) ?? now;
+	const cwd = summary?.cwd || sessionManager.getCwd();
+	return {
+		path: session.sessionId,
+		id: session.sessionId,
+		cwd,
+		title,
+		created,
+		modified,
+		messageCount: summary?.messageCount ?? 0,
+		firstMessage: "",
+		allMessagesText: `${title} ${cwd} ${session.sessionId}`.trim(),
+	};
+}
+
+function createdSessionSummary(sessionId: string, cwd: string): CliSessionInfo {
+	const timestamp = new Date().toISOString();
+	return {
+		sessionId,
+		path: sessionId,
+		title: "",
+		cwd,
+		updatedAt: timestamp,
+		createdAt: timestamp,
+		archivedAt: null,
+		titleSource: null,
+		totalInputTokens: null,
+		totalOutputTokens: null,
+		messageCount: 0,
+		turnCount: 0,
+		raw: { sessionId, cwd, createdAt: timestamp, updatedAt: timestamp },
 	};
 }
 

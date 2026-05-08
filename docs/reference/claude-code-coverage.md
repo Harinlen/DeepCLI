@@ -35,7 +35,7 @@
 | **Web 工具** | ✅ 完成 | WebFetchTool + WebSearchTool（deferred tools，通过 ToolSearch 加载） |
 | **AskUserQuestion** | ✅ 完成 | AskUserQuestionTool — permission channel hijack 实现结构化提问，客户端通过 updated_input 回传答案 |
 | **Git 上下文** | ✅ 完成 | GitManager 注入完整 CC 格式 git context（branch/main_branch/user/status/log）+ EnterWorktree/ExitWorktree 工具 |
-| **Credential Store** | ✅ 完成 | SecretManager（SQLite + 0600 权限）+ `${secret:name}` config 展开 + `/auth` CLI 命令 + ACP `secrets/auth` 方法 |
+| **Credential Store** | ✅ 完成 | SecretManager（SQLite + 0600 权限）+ `${secret:name}` config 展开 + ACP `secrets/auth` 方法 |
 | **MCP OAuth** | ✅ 完成 | OAuth 2.1 Authorization Code + PKCE + RFC 9728/8414 discovery + Dynamic Client Registration + McpAuthTool 伪工具 + token refresh + NeedsAuth 状态机 |
 | **PromptBuilder 缓存排序** | ✅ 完成 | cacheable 节（identity→system→memory→skills→git_commit_pr）置于 volatile 节（MCP instructions→Git context→Environment）之前。Environment（含时间戳）正确放在最后，与 CC `getSystemPrompt()` 顺序对齐 |
 | **PromptManager 用户覆盖** | ✅ 完成 | PromptManager 支持用户级 prompt 文件覆盖 builtin 默认值（`~/.mustang/prompts/` 覆盖层） |

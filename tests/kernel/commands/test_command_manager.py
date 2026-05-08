@@ -90,11 +90,11 @@ async def test_command_manager_startup_registers_builtins(
         "session",
         "cost",
         "memory",
-        "auth",
         "kernel",
     ):
         assert expected in names, f"Expected built-in command {expected!r} missing"
     assert "cron" not in names
+    assert "auth" not in names
 
 
 async def test_command_manager_lookup_hit(module_table: MagicMock) -> None:

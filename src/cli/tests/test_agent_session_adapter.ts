@@ -1,4 +1,5 @@
 import { MustangAgentSessionAdapter } from "../src/session/agent-session-adapter.js";
+import { getRecentSessions } from "../src/active-port/coding-agent/session/session-manager.js";
 import { assert } from "./helpers.js";
 
 const updates = [
@@ -8,7 +9,7 @@ const updates = [
 	{ sessionUpdate: "tool_call_update", toolCallId: "tool-1", status: "in_progress", content: "running" },
 	{ sessionUpdate: "tool_call_update", toolCallId: "tool-1", status: "completed", content: "done" },
 	{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "after" } },
-	{ sessionUpdate: "usage_update", inputTokens: 123, outputTokens: 45, durationMs: 1500 },
+	{ sessionUpdate: "usage_update", inputTokens: 123, outputTokens: 45, used: 234, size: 64_000, durationMs: 1500 },
 	{ sessionUpdate: "session_info_update", title: "New title" },
 ];
 
@@ -44,6 +45,23 @@ const fakeSessionService = {
 		return { ...fakeSession.summary, title, titleSource: "user" };
 	},
 	create: async () => ({ sessionId: "new-session", modes: { currentModeId: "default" } }),
+	list: async () => [
+		{
+			sessionId: "old-session",
+			path: "old-session",
+			title: "Old listed session",
+			cwd: "/tmp",
+			updatedAt: "2026-05-08T00:00:00.000Z",
+			createdAt: "2026-05-08T00:00:00.000Z",
+			archivedAt: null,
+			titleSource: "auto",
+			totalInputTokens: null,
+			totalOutputTokens: null,
+			messageCount: 1,
+			turnCount: 1,
+			raw: { sessionId: "old-session" },
+		},
+	],
 	clientForSession: () => ({}),
 };
 
@@ -96,6 +114,8 @@ assert(stats.tokens.total === 168, "/session stats should expose token totals");
 const usageStats = adapter.sessionManager.getUsageStatistics();
 assert(usageStats.input === 123, "status line usage stats should include live input tokens");
 assert(usageStats.output === 45, "status line usage stats should include live output tokens");
+assert(adapter.sessionManager.getContextUsage().totalTokens === 234, "status line context should use kernel usage_update snapshot");
+assert(adapter.sessionManager.getContextUsage().contextWindow === 64_000, "status line context should use kernel context window snapshot");
 assert(adapter.state.model.contextWindow === 64_000, "adapter should expose model context window to status line");
 assert(adapter.getAsyncJobSnapshot().running.length === 0, "adapter should expose empty async job snapshot");
 assert(adapter.modelRegistry.authStorage.hasOAuth("deepseek") === false, "adapter should expose no-op OAuth auth storage");
@@ -116,6 +136,15 @@ assert(assistant?.content.some((block: { type: string; thinking?: string }) => b
 assert(assistant?.content.some((block: { type: string; id?: string }) => block.type === "toolCall" && block.id === "tool-1"), "tool call should be appended to assistant message");
 assert(assistant?.usage?.input === 123 && assistant?.usage?.output === 45, "usage_update should attach usage to assistant message");
 assert(assistant?.duration === 1500, "usage_update should attach response duration to assistant message");
+
+await adapter.createSession();
+assert(adapter.sessionId === "new-session", "createSession should switch to the new kernel session");
+assert(adapter.messages.length === 0, "createSession should clear transcript state from the previous session");
+assert(adapter.sessionManager.getContextUsage().totalTokens === 0, "createSession should reset context to the new session snapshot");
+const recentAfterCreate = await getRecentSessions("/tmp");
+assert(recentAfterCreate[0]?.id === "new-session", "welcome recents should include the active newly-created session");
+assert(recentAfterCreate[0]?.title === "Untitled session", "welcome recents should label empty active sessions");
+assert(recentAfterCreate.some(session => session.id === "old-session"), "welcome recents should still include kernel-listed sessions");
 
 const subagentUpdates = [
 	{ sessionUpdate: "tool_call", toolCallId: "agent-1", title: "Agent", rawInput: "{\"description\":\"Check weather\",\"prompt\":\"Look up weather\"}" },
@@ -258,11 +287,11 @@ const replayAdapter = new MustangAgentSessionAdapter({
 	sessionService: {
 		clientForSession: () => replayClient,
 		load: async () => {
-			loadUpdateHandler?.({ sessionUpdate: "user_message_chunk", content: { type: "text", text: "old question" } });
-			setTimeout(() => {
-				loadUpdateHandler?.({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "late answer" } });
-				loadUpdateHandler?.({ sessionUpdate: "usage_update", inputTokens: 78_768, outputTokens: 1_080, durationMs: 147_622 });
-			}, 10);
+				loadUpdateHandler?.({ sessionUpdate: "user_message_chunk", content: { type: "text", text: "old question" } });
+				setTimeout(() => {
+					loadUpdateHandler?.({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "late answer" } });
+					loadUpdateHandler?.({ sessionUpdate: "usage_update", inputTokens: 78_768, outputTokens: 1_080, used: 79_848, size: 1_000_000, durationMs: 147_622 });
+				}, 10);
 			loadUpdateHandler?.({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "old answer" } });
 			loadUpdateHandler?.({ sessionUpdate: "tool_call", toolCallId: "old-tool", title: "Bash", rawInput: "{\"command\":\"pwd\"}" });
 			loadUpdateHandler?.({ sessionUpdate: "tool_call_update", toolCallId: "old-tool", status: "completed", content: "done" });
@@ -280,6 +309,8 @@ assert(replayAssistant?.content.some((block: any) => block.type === "text" && bl
 assert(replayAssistant?.content.some((block: any) => block.type === "text" && block.text === "late answer"), "session/load replay should keep listening for updates that arrive after the response");
 assert(replayAssistant?.content.some((block: any) => block.type === "toolCall" && block.id === "old-tool"), "session/load replay should rebuild tool calls");
 assert(replayAssistant?.usage?.input === 78_768 && replayAssistant?.usage?.output === 1_080, "late usage_update should attach to resumed transcript");
+assert(replayAdapter.sessionManager.getContextUsage().totalTokens === 79_848, "session/load should preserve replayed kernel context snapshot after switching session");
+assert(replayAdapter.sessionManager.getContextUsage().contextWindow === 1_000_000, "session/load should preserve replayed kernel context window after switching session");
 
 const modeCalls: Array<{ method: string; params: { modeId?: string; sessionId?: string } }> = [];
 const modeClient = {

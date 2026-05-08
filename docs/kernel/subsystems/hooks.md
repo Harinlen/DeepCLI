@@ -17,8 +17,8 @@ Status: **pending — design decided, implementation pending**.  本文先以
 
 > 前置阅读：
 > - 子系统分工：[kernel/architecture.md § 子系统清单](../../kernel/architecture.md)
-> - 姐妹子系统 fire 点契约：[ToolAuthorizer §14](tool-authorizer.md) +
->   [ToolManager §6.1](tool-manager.md)
+> - 姐妹子系统 fire 点契约：[ToolAuthorizer §14](tool_authorizer.md) +
+>   [ToolManager §6.1](tools.md)
 > - 旧 pre-kernel 的成品参考：[archive/daemon/daemon/extensions/hooks/](../../../archive/daemon/daemon/extensions/hooks/)
 > - 参考源码（只读）：
 >   - OpenClaw `src/hooks/` —— `/home/saki/Documents/alex/openclaw/src/hooks/`
@@ -33,7 +33,7 @@ Status: **pending — design decided, implementation pending**.  本文先以
 
 1. **可选子系统**，启动顺序 7（Tools 后、MCP 前）。flag-off 跳过；启动失败降级。
 2. **不附送 bundled hooks** —— framework only。用户自己在
-   `~/.mustang/hooks/` 写。OpenClaw 的"bundled boot-md / session-memory /
+   `~/.deepcli/hooks/` 写。OpenClaw 的"bundled boot-md / session-memory /
    command-logger"我们不抄。
 3. **system_reminder 通道必选** —— 明确否决独立的
    NotificationBus。**实现形式**：`HookEventCtx.messages: list[str]`（OpenClaw
@@ -46,8 +46,8 @@ Status: **pending — design decided, implementation pending**.  本文先以
 5. **fire 点归属已经定**：
    | 事件 | fire 处 |
    |------|---------|
-   | `pre_tool_use` / `post_tool_use` / `post_tool_failure` | `Orchestrator.ToolExecutor`（[tool-manager §6.1](tool-manager.md)）|
-   | `permission_requested` / `permission_denied` | `ToolAuthorizer`（[tool-authorizer §14.2](tool-authorizer.md)）|
+   | `pre_tool_use` / `post_tool_use` / `post_tool_failure` | `Orchestrator.ToolExecutor`（[tool-manager §6.1](tools.md)）|
+   | `permission_requested` / `permission_denied` | `ToolAuthorizer`（[tool-authorizer §14.2](tool_authorizer.md)）|
    | `user_prompt_submit` / `stop` / `pre_compact` / `post_compact` / `subagent_start` | `Orchestrator`（已有 TODO 标位）|
    | `session_start` / `session_end` | `SessionManager` |
    | `file_changed` | 写类 Tool 的 `call()` 在返回前 emit，由 `ToolExecutor` 中转 |
@@ -354,7 +354,7 @@ archive 没明确列表，CC 是逐事件 exit-code 语义。kernel 需要一张
   pre-kernel 没给。Kernel 倾向 **跟 CC**——allow 用户在压缩前 dump 状态/取消。
 - `permission_*` 事件设计上是**纯审计**，不应该让 hook 改决策
   （否则 ToolAuthorizer 的"唯一仲裁者"语义就破了）。这与
-  [tool-authorizer.md §14](tool-authorizer.md) 一致。
+  [tool-authorizer.md §14](tool_authorizer.md) 一致。
 - `session_end` 时 session 已经在销毁路径上，注入 reminder 没人看，全砍。
 
 **最终决议**（见 §2.C + §7.1 EVENT_SPECS）：上表的 `blocked` 列被简化为
@@ -434,7 +434,7 @@ async def fire(
 
 **最终决议**（见 §2.G + §7.3）：采 (ii)。Session 层持 `pending_reminders: list[str]`，
 caller fire 后显式 `session.queue_reminders(ctx.messages)` drain。HookManager
-保持无状态。这条与 [tool-authorizer.md §3.2 SessionGrantCache](tool-authorizer.md)
+保持无状态。这条与 [tool-authorizer.md §3.2 SessionGrantCache](tool_authorizer.md)
 同模式：session-scoped state 永远归 Session 层。
 
 ### 6.H — 测试策略
@@ -512,8 +512,8 @@ class HookEventCtx:
     框架不对 mutation 做任何 schema 校验 —— 写错了用户自己负责.
 
     ⚠️ tool_input / user_text 等 mutation 不影响 audit trail —— 因为 tool_use /
-    user_prompt 在 fire 前已经 append 到 SessionManager 的 JSONL conversation
-    history (磁盘 append-only). 内存 mutation 只对当前 turn 的下游 (tool.call /
+    user_prompt 在 fire 前已经 append 到 SessionManager 的持久事件日志。
+    内存 mutation 只对当前 turn 的下游 (tool.call /
     LLM stream) 生效, 不会回写历史. 所以 caller 不需要 deepcopy 防御.
     """
     event: HookEvent
@@ -592,7 +592,7 @@ class HookManager(Subsystem):
         cfg = self._module_table.config.get_section("hooks", HooksConfig)
         self._registry = HookRegistry()
         # 多源 discovery (OpenClaw 套路, 但只 user + project 两层):
-        #   1. ~/.mustang/hooks/<name>/         user-layer, default-on
+        #   1. ~/.deepcli/hooks/<name>/         user-layer, default-on
         #   2. <cwd>/.mustang/hooks/<name>/     project-layer, explicit-opt-in
         # 目录不存在 → 静默跳过, 不报警 (Hermes 路线)
         for entry in await self._discover(cfg):
@@ -654,7 +654,7 @@ class HookManager(Subsystem):
 | 不支持 | OpenClaw 的 frontmatter `export:` 自定义函数名 |
 
 ```
-~/.mustang/hooks/<hook_name>/
+~/.deepcli/hooks/<hook_name>/
 ├── HOOK.md      ← frontmatter manifest (events / requires / os)
 └── handler.py   ← async def handle(ctx) -> None
 ```
@@ -696,7 +696,7 @@ ctx = HookEventCtx(
     event=HookEvent.PRE_TOOL_USE,
     ambient=ambient,
     tool_name=tc.name,
-    tool_input=tc.input,  # 直接传引用, 不 copy: tool_use 已经 append 到 JSONL
+    tool_input=tc.input,  # 直接传引用, 不 copy: tool_use 已经 append 到 SessionStore 事件日志
                           # conversation history (在 ToolExecutor 调到这一步之前),
                           # audit trail 已 frozen, hook mutation 不会回写历史
 )
@@ -710,7 +710,7 @@ self._session.queue_reminders(ctx.messages)
 ### 7.4 Hook 作者写起来
 
 ```
-~/.mustang/hooks/git-status-injector/
+~/.deepcli/hooks/git-status-injector/
 ├── HOOK.md
 └── handler.py
 ```
@@ -759,7 +759,7 @@ async def handle(ctx: HookEventCtx) -> None:
       过一遍 (尤其 `pre_compact` 是否真给阻断权 —— 当前定 True, 跟 CC 一致).
 - [ ] **配置 schema 形状**: HOOK.md frontmatter 的具体字段 (events 必填,
       `requires.bins / env / config`, `os`, `disabled` 等). 留到 implementation
-      阶段定细节; 跟 [tool-manager.md ConfigSchema](tool-manager.md) 对齐风格.
+      阶段定细节; 跟 [tool-manager.md ConfigSchema](tools.md) 对齐风格.
 - [ ] **Project 层 = `<cwd>/.mustang/hooks/`**, 无 walk-up, 无 config override.
       用户在 subdir 里跑 mustang 就在 subdir 的 .mustang/ 里找 hooks. 简单 explicit.
       跟 ConfigManager 的 project root 解析对齐 (实装阶段确认两者用同一份逻辑,

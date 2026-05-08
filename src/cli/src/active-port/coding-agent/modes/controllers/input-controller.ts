@@ -291,6 +291,7 @@ export class InputController {
 							},
 							{ streamingBehavior: "followUp" },
 						);
+						await this.ctx.refreshWelcomeRecentSessions();
 					} catch (err) {
 						this.ctx.showError(`Failed to load skill: ${err instanceof Error ? err.message : String(err)}`);
 					}
@@ -352,6 +353,7 @@ export class InputController {
 				const images = inputImages && inputImages.length > 0 ? [...inputImages] : undefined;
 				this.ctx.pendingImages = [];
 				await this.ctx.session.prompt(text, { streamingBehavior: "steer", images });
+				await this.ctx.refreshWelcomeRecentSessions();
 				this.ctx.updatePendingMessagesDisplay();
 				this.ctx.ui.requestRender();
 				return;
@@ -433,6 +435,7 @@ export class InputController {
 			this.ctx.editor.addToHistory(text);
 			this.ctx.editor.setText("");
 			await this.ctx.session.prompt(text, { streamingBehavior: "followUp" });
+			await this.ctx.refreshWelcomeRecentSessions();
 			this.ctx.updatePendingMessagesDisplay();
 			this.ctx.ui.requestRender();
 			return;
@@ -442,6 +445,7 @@ export class InputController {
 		this.ctx.editor.addToHistory(text);
 		this.ctx.editor.setText("");
 		await this.ctx.session.prompt(text);
+		await this.ctx.refreshWelcomeRecentSessions();
 	}
 
 	restoreQueuedMessagesToEditor(options?: { abort?: boolean; currentText?: string }): number {

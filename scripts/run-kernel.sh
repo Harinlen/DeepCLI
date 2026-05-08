@@ -5,15 +5,6 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 
-if [ -z "${MUSTANG_FLAGS_PATH:-}" ]; then
-  dev_flags_path="$repo_root/src/.mustang-dev-flags.yaml"
-  cat > "$dev_flags_path" <<'YAML'
-transport:
-  stack: acp
-YAML
-  export MUSTANG_FLAGS_PATH="$dev_flags_path"
-fi
-
 cd "$repo_root/src/kernel"
 
 if [ "$#" -eq 0 ]; then

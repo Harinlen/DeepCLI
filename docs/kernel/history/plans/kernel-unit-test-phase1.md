@@ -2,7 +2,7 @@
 
 状态: completed — owned Phase 1 coverage goals met; residual misses assigned
 创建: 2026-05-01
-所属计划: [`full-system-test-plan.md`](full-system-test-plan.md)
+所属计划: [`full-system-test-plan.md`](../../../plans/full-system-test-plan.md)
 范围: `src/kernel/kernel/` 与 `tests/kernel/`
 
 ## 目标

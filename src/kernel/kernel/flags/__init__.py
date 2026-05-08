@@ -1,7 +1,7 @@
 """Feature flag subsystem.
 
 FlagManager is the earliest-loaded bootstrap service in the kernel.
-It owns ``~/.mustang/flags.yaml`` and hands out strongly-typed,
+It owns ``~/.deepcli/config/flags.yaml`` and hands out strongly-typed,
 runtime-frozen Pydantic instances for each registered section.
 Runtime-mutable configuration lives in ``kernel.config`` instead.
 """

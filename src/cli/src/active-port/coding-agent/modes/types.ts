@@ -137,6 +137,7 @@ export interface InteractiveModeContext {
 	showError(message: string): void;
 	showWarning(message: string): void;
 	showNewVersionNotification(newVersion: string): void;
+	refreshWelcomeRecentSessions(): Promise<void>;
 	clearEditor(): void;
 	updatePendingMessagesDisplay(): void;
 	queueCompactionMessage(text: string, mode: "steer" | "followUp"): void;

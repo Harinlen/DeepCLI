@@ -74,6 +74,17 @@ class UserExecutionEvent:
 
 
 @dataclass
+class UsageEvent:
+    """Current context snapshot from a ``usage_update`` notification."""
+
+    input_tokens: int
+    output_tokens: int
+    used: int
+    size: int | None = None
+    duration_ms: int | None = None
+
+
+@dataclass
 class PermissionRequest:
     """Kernel asks the client whether a tool call is allowed.
 
@@ -104,6 +115,7 @@ Event = (
     | ToolCallEvent
     | ToolCallUpdate
     | UserExecutionEvent
+    | UsageEvent
     | PermissionRequest
     | TurnComplete
 )
@@ -431,7 +443,9 @@ class ProbeClient:
         )
         return result
 
-    async def list_sessions(self, *, cursor: str | None = None, cwd: str | None = None) -> dict[str, Any]:
+    async def list_sessions(
+        self, *, cursor: str | None = None, cwd: str | None = None
+    ) -> dict[str, Any]:
         """List persisted sessions through ACP."""
         result: dict[str, Any] = await self._request(
             "session/list",
@@ -742,6 +756,15 @@ def _parse_update(msg: dict[str, Any]) -> Event | None:
             tool_call_id=update["toolCallId"],
             status=update.get("status", ""),
             meta=update.get("_meta") or update.get("meta"),
+        )
+
+    if kind == "usage_update":
+        return UsageEvent(
+            input_tokens=int(update.get("inputTokens") or update.get("input_tokens") or 0),
+            output_tokens=int(update.get("outputTokens") or update.get("output_tokens") or 0),
+            used=int(update.get("used") or 0),
+            size=update.get("size"),
+            duration_ms=update.get("durationMs") or update.get("duration_ms"),
         )
 
     return None  # unknown / unhandled update type

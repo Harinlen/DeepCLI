@@ -4,7 +4,7 @@ Loaded by ``LLMManager.startup()`` via::
 
     config_mgr.get_section(file="kernel", section="llm", schema=LLMConfig)
 
-User config example (``~/.mustang/config/kernel.yaml``):
+User config example (``~/.deepcli/config/kernel.yaml``):
 
 .. code-block:: yaml
 

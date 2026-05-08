@@ -294,7 +294,7 @@ Architecture.md 说"多连接同一 session"是允许的。transport 层本身
 Transport 通过 FlagManager 绑定自己的 flag section：
 
 ```yaml
-# ~/.mustang/flags.yaml
+# ~/.deepcli/config/flags.yaml
 transport:
   stack: acp
 ```

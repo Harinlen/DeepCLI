@@ -36,7 +36,7 @@ DeepCLI 的用户 slash path 是 Kernel-owned：
   `SkillManager.activate()`，记录 invoked skill 用于 compaction，然后把
   skill body 作为本轮 prompt 的 active instructions
 
-CLI 不扫描 `~/.mustang/skills` 或 `.mustang/skills`；避免 Access/CLI 与
+CLI 不扫描 `~/.deepcli/skills` 或 `.mustang/skills`；避免 Access/CLI 与
 Primary Runtime 在 router mode 下看到不同 Skill 状态。
 
 ---
@@ -51,7 +51,7 @@ Primary Runtime 在 router mode 下看到不同 Skill 状态。
 - `${SKILL_DIR}` 替换需要 base directory
 
 ```
-~/.mustang/skills/
+~/.deepcli/skills/
 ├── my-skill/
 │   ├── SKILL.md          # 必须，skill 定义
 │   ├── references/       # 可选，参考文档（LLM 可按需 Read）
@@ -155,7 +155,7 @@ Claude Code 四层 + Hermes external dirs + Claude Code 兼容层：
 | 0 | project | `.mustang/skills/` | 项目级 skill |
 | 0 | project-compat | `.claude/skills/` | **Claude Code 兼容 (opt-in)**：仅 `skills.claude_compat=true` 时扫 |
 | 1 | external | config.yaml `skills.external_dirs` | 来自 Hermes：团队共享目录 |
-| 2 | user | `~/.mustang/skills/` | 用户级 skill |
+| 2 | user | `~/.deepcli/skills/` | 用户级 skill |
 | 2 | user-compat | `~/.claude/skills/` | **Claude Code 兼容 (opt-in)**：仅 `skills.claude_compat=true` 时扫 |
 | 3 | bundled | `kernel/skills/bundled/` | 内置 skill |
 | 4 | MCP | MCPManager 提供 | MCP server 暴露的 skill |
@@ -195,7 +195,7 @@ DeepCLI **可选**同时扫描 `.mustang/skills/` 和 `.claude/skills/`，
 Claude Code 用户级 skill 的话显式 opt-in：
 
 ```yaml
-# ~/.mustang/config/skills.yaml
+# ~/.deepcli/config/skills.yaml
 skills:
   claude_compat: true    # default: false
 ```
@@ -482,7 +482,7 @@ def discover(
     project_dir: Path | None,           # .mustang/skills/
     project_compat_dir: Path | None,    # .claude/skills/ (Claude Code 兼容)
     external_dirs: list[Path],           # config.yaml skills.external_dirs（来自 Hermes）
-    user_dir: Path,                      # ~/.mustang/skills/
+    user_dir: Path,                      # ~/.deepcli/skills/
     user_compat_dir: Path | None,        # ~/.claude/skills/ (Claude Code 兼容)
     bundled_skills: list[LoadedSkill],   # 内置注册
 ) -> tuple[list[LoadedSkill], list[LoadedSkill]]:
@@ -686,7 +686,7 @@ class SkillManager(Subsystem):
         project_dir = _resolve_project_skills_dir(config)         # .mustang/skills/
         project_compat_dir = _resolve_claude_skills_dir() if claude_compat else None  # .claude/skills/
         external_dirs = _resolve_external_dirs(config)             # 来自 Hermes
-        user_dir = _resolve_user_skills_dir(config)                # ~/.mustang/skills/
+        user_dir = _resolve_user_skills_dir(config)                # ~/.deepcli/skills/
         user_compat_dir = _resolve_claude_user_skills_dir() if claude_compat else None  # ~/.claude/skills/
         bundled = _load_bundled_skills()
 
@@ -852,7 +852,7 @@ Skill "my-skill" requires environment setup:
   MODEL_NAME (optional, default: gpt-4o)
     Which model to use?
 
-Set these in your environment or ~/.mustang/config.yaml, then retry.
+Set these in your environment or ~/.deepcli/config.yaml, then retry.
 ```
 
 `secret: true` 的变量不在对话中回显值。
@@ -1000,7 +1000,7 @@ class BundledSkillDef:
 ```
 
 Bundled skills 有 `files` 字段时，首次调用时解压到
-`~/.mustang/bundled-skills/<name>/`，并注入 `Base directory for this
+`~/.deepcli/bundled-skills/<name>/`，并注入 `Base directory for this
 skill: <dir>` 前缀。
 
 ---
@@ -1127,7 +1127,7 @@ SkillManager 是 Subsystem #8（在 ToolManager 之后、HookManager 之前）�
 ```yaml
 # config.yaml
 skills:
-  user_dir: "~/.mustang/skills"        # default
+  user_dir: "~/.deepcli/skills"        # default
   project_enabled: true                 # 是否加载 project-layer skills
   listing_budget_percent: 0.01          # context window 的百分比
   max_listing_desc_chars: 250           # 单条描述上限
@@ -1182,7 +1182,7 @@ Subsystem 生命周期天然提供内存缓存）：
 ### Layer 2: 磁盘 snapshot（加速冷启动）
 
 首次 startup 完成后，将 skill manifest 序列化到
-`~/.mustang/.skills_snapshot.json`（来自 Hermes）：
+`~/.deepcli/.skills_snapshot.json`（来自 Hermes）：
 
 ```json
 {

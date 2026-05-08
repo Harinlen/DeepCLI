@@ -658,6 +658,7 @@ export class CommandController {
 			setSessionTerminalTitle(name, this.ctx.sessionManager.getCwd(), this.ctx.sessionManager.titleSource);
 			this.ctx.statusLine.invalidate();
 			this.ctx.updateEditorBorderColor();
+			await this.ctx.refreshWelcomeRecentSessions();
 			this.ctx.showStatus(`Session renamed to "${name}".`);
 		} catch (err) {
 			this.ctx.showError(`Rename failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -768,6 +769,7 @@ export class CommandController {
 			}
 			const message = `${body}\n\n---\n\n${metaLines.join("\n")}`;
 			await this.ctx.session.prompt(message);
+			await this.ctx.refreshWelcomeRecentSessions();
 		} catch (err) {
 			this.ctx.showError(`Failed to load skill: ${err instanceof Error ? err.message : String(err)}`);
 		}

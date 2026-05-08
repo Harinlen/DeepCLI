@@ -439,7 +439,7 @@ class RuleSource(str, Enum):
 
 | 层 | 路径 | 用途 |
 |---|---|---|
-| `user` | `~/.mustang/config/config.yaml` 的 `permissions:` 段 | 个人默认规则,跨 project 复用 |
+| `user` | `~/.deepcli/config/config.yaml` 的 `permissions:` 段 | 个人默认规则,跨 project 复用 |
 | `project` | `<cwd>/.mustang/config.yaml` | 项目级规则,check in 到 git |
 | `local` | `<cwd>/.mustang/config.local.yaml` | 本地覆盖,gitignored |
 | `flag` | `--permission-rule` CLI 参数 + `MUSTANG_PERMISSION_RULES` env | 运行时 override,不落盘 |

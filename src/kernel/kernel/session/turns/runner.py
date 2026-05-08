@@ -22,7 +22,6 @@ from kernel.orchestrator.types import (
 )
 from kernel.protocol.interfaces.contracts.prompt_params import PromptParams
 from kernel.protocol.interfaces.contracts.prompt_result import PromptResult
-from kernel.protocol.acp.schemas.updates import UsageUpdate
 from kernel.session._shared.base import _SessionMixinBase
 from kernel.session.events import (
     AgentMessageEvent,
@@ -329,7 +328,8 @@ class SessionTurnRunnerMixin(_SessionMixinBase):
             )
             await self._broadcast(
                 session,
-                UsageUpdate(
+                await self._usage_update_for_turn(
+                    session,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     duration_ms=duration_ms,

@@ -47,8 +47,8 @@ ACP surface strictly official-schema-first:
 
 Reference snapshots:
 
-- ACP: [`docs/kernel/references/acp/`](../kernel/references/acp/)
-- ACPX: [`docs/kernel/references/acpx/`](../kernel/references/acpx/)
+- ACP: [`docs/kernel/references/acp/`](../../references/acp/)
+- ACPX: [`docs/kernel/references/acpx/`](../../references/acpx/)
 
 ## Current Audit
 

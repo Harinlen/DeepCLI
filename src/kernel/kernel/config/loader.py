@@ -6,7 +6,7 @@ per-section at ``bind_section`` time.
 
 Priority order (low → high, later wins in :func:`deep_merge`):
 
-1. Global user layer       ``~/.mustang/config/<file>.yaml``
+1. Global user layer       ``~/.deepcli/config/<file>.yaml``
 2. Project layer           ``<cwd>/.mustang/config/<file>.yaml``
 3. Project local layer     ``<cwd>/.mustang/config/<file>.local.yaml``
 4. CLI overrides           ``--config <file>.<section>.<key>=<val>``

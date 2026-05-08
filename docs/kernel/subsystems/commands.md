@@ -38,7 +38,6 @@ CommandManager 是**命令目录提供者**，不是执行者。
 | `/cost` | `_mustang.agent/session/get_usage` | `SessionManager.get_usage()` | 美元价格估算待可信 pricing table |
 | `/help` | 本地渲染（从 catalog 生成） | 本地渲染 | 无 |
 | `/memory` | 本地渲染 + file I/O | 同左 | 无 |
-| `/auth` | `secrets/auth` | `SecretManager` API | 无 |
 
 ---
 
@@ -183,10 +182,10 @@ provider/model pricing table。
 
 | 问题 | 决定 |
 |---|---|
-| UsageStats 持久化方式 | 扩展 `TurnCompletedEvent` + `IndexEntry`，不新增事件类型 |
+| UsageStats 持久化方式 | 扩展 `TurnCompletedEvent` 并累加到 SQLite `sessions` 行，不新增事件类型 |
 | `/session clear` 内核支持 | 否，客户端循环调用 `session/delete` |
 | compact 遇到 in-flight turn | 返回 `InvalidRequest`，客户端 turn 结束后重试 |
-| index.json 未来方向 | 迁移至 SQLite（session-storage-sqlite.md），CommandManager 依赖迁移后的 IndexEntry |
+| session metadata 来源 | 读取 SessionManager / SessionStore 的当前 SQLite 视图，不维护 `index.json` |
 
 ---
 

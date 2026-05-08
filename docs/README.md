@@ -3,10 +3,12 @@
 Single navigation hub for all project documentation.  Agents should
 consult this file first, then go directly to the file(s) they need.
 
-> **Active codebase**: `src/kernel/` only.
+> **Active code**: `src/kernel/` (Kernel, Supervisor, Access Agent, Agent Hub,
+> Primary Runtime), `src/cli/` (thin ACP client), `src/probe/` (ACP probe),
+> and `src/launcher/` (user-local launchers and release packaging).
 > `archive/daemon/` is **read-only reference code** — no new development,
 > no bug fixes, no modifications.
-> All new work targets `src/kernel/`.  See [`archive/README.md`](../archive/README.md).
+> See [`archive/README.md`](../archive/README.md).
 
 > **Bootstrap 服务 vs Subsystem**：FlagManager / ConfigManager 是
 > bootstrap 服务（启动失败即 abort kernel，不继承 `Subsystem`）；
@@ -30,7 +32,7 @@ consult this file first, then go directly to the file(s) they need.
 | 文档 | 内容 |
 |---|---|
 | [kernel/overview.md](kernel/overview.md) | 项目目标、设计原则、技术栈 |
-| [kernel/architecture.md](kernel/architecture.md) | 子系统清单、WebSocket 三层分工（transport / protocol / session）、ACP 采用情况、lifespan 启动顺序、失败处理策略、Subsystem ABC |
+| [kernel/architecture.md](kernel/architecture.md) | 当前 runtime 拓扑：Supervisor / Agent Hub / Access Agent / Primary Runtime，以及 Primary 内部 subsystem 启动顺序 |
 | [kernel/history.md](kernel/history.md) | 已落地 kernel milestone 摘要；从 `plans/progress.md` 拆出的长期历史记录 |
 ### 子系统
 
@@ -125,15 +127,12 @@ DeepCLI 会直接实现需要的控制平面能力，不依赖 `acpx` CLI/runtim
 | **Post-impl checklist** | `workflow/code-quality.md` | After writing any code |
 | **Full-repo audit** | `workflow/code-review.md` | When user says "Code Review" |
 | **Future phases** | `plans/roadmap.md` | Planning what's next |
-| **ACP/ACPX alignment** | [`plans/acp-acpx-schema-alignment-plan.md`](plans/acp-acpx-schema-alignment-plan.md) | Before changing protocol schemas, custom methods, or ACPX-compatible control semantics |
-| **Agent Control Plane** | [`plans/agent-control-plane.md`](plans/agent-control-plane.md) | CLI/Probe/Home Screen -> Kernel and Kernel -> child Kernel / Session Agent / external ACP agent control symmetry |
 | **Full-system test plan** | [`plans/full-system-test-plan.md`](plans/full-system-test-plan.md) | 覆盖单元测试、闭合缝、真实 Supervisor E2E、CLI/PTY、Probe 验收矩阵 |
-| **Kernel unit-test Phase 1** | [`plans/kernel-unit-test-phase1.md`](plans/kernel-unit-test-phase1.md) | Kernel 每个组件的单元测试补齐任务、优先级、验收命令 |
 | **CLI pending work** | [`plans/cli-plan.md`](plans/cli-plan.md) | CLI future work, reconnect, audits |
-| **Launcher sub-repo** | [`plans/launcher-subrepo-plan.md`](plans/launcher-subrepo-plan.md) | Cross-platform `deepcli` command: background Kernel singleton + CLI handoff |
 | **CLI docs** | [`cli/README.md`](cli/README.md) | CLI implemented design facts and history |
-| **Kernel completed plans archive** | [`kernel/history/plans/`](kernel/history/plans/) | 已完成的 Kernel 计划归档，例如 Session ACP、Session module split、Orchestrator split、prompt alignment |
-| **CLI completed plans archive** | [`cli/history/plans/`](cli/history/plans/) | 已完成的 CLI 计划/审计归档，例如 active-port prune |
+| **Kernel completed plans archive** | [`kernel/history/plans/`](kernel/history/plans/) | 已完成的 Kernel 计划归档，例如 ACP alignment、Agent Control Plane、Session ACP、Orchestrator split |
+| **CLI completed plans archive** | [`cli/history/plans/`](cli/history/plans/) | 已完成的 CLI 计划/审计归档，例如 active-port prune、TUI OOBE |
+| **Launcher completed plans archive** | [`launcher/history/plans/`](launcher/history/plans/) | 已完成的 launcher / installer 计划归档 |
 | **Backlog** | `plans/backlog.md` | Deferred features from design docs |
 | **Current progress** | `plans/progress.md` | Short current status + recent log; detailed history lives in `kernel/history.md` and `cli/history/implemented-summary.md` |
 

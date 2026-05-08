@@ -8,3 +8,4 @@
 | 文档 | 归档原因 |
 |---|---|
 | `cli-active-port-prune-audit.md` | Active-port prune 已执行，运行时冗余资产已删除，结果已进入 CLI 历史。 |
+| `tui-oobe-plan.md` | TUI OOBE revision/check/save flow 和 DeepSeek preset path 已实现。 |

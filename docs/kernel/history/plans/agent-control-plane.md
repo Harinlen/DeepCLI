@@ -5,8 +5,8 @@
 相关:
 
 - [`acp-acpx-schema-alignment-plan.md`](acp-acpx-schema-alignment-plan.md)
-- [`../kernel/history/plans/agent-control-plane-notes.md`](../kernel/history/plans/agent-control-plane-notes.md) — 详细讨论记录、参考实现发现和取舍理由。
-- [`full-system-test-plan.md`](full-system-test-plan.md) — Agent Control Plane、Runtime、Permission、CLI/Probe 的全系统测试矩阵。
+- [`agent-control-plane-notes.md`](agent-control-plane-notes.md) — 详细讨论记录、参考实现发现和取舍理由。
+- [`full-system-test-plan.md`](../../../plans/full-system-test-plan.md) — Agent Control Plane、Runtime、Permission、CLI/Probe 的全系统测试矩阵。
 
 ## 目标
 
@@ -759,7 +759,7 @@ Platform Adapter：
 
 ## 实施约束
 
-- 设计背景和参考细节保存在 [`../kernel/history/plans/agent-control-plane-notes.md`](../kernel/history/plans/agent-control-plane-notes.md)；
+- 设计背景和参考细节保存在 [`agent-control-plane-notes.md`](agent-control-plane-notes.md)；
   实现时以本文为主，遇到边界不清再查 notes。
 - 第一版只做单节点网络，不实现真正多用户或 profile isolation。
 - Probe 是底层 WebSocket 闭环验证；CLI 是真实用户入口验证。任何改变
@@ -867,7 +867,7 @@ Batch 标题不是简单的线性依赖图；真实执行顺序按下面走：
 - 对齐已存在的 `agents/control_plane.py` 类型；不倒回重做已经完成的 Batch A 工作。
 - 定义默认 Primary Agent seed 和 state path。
 - 定义 Probe/CLI smoke 命令入口和 fixture 目录。
-- Baseline 命令记录在 [`../kernel/history/plans/agent-control-plane-b0-baseline.md`](../kernel/history/plans/agent-control-plane-b0-baseline.md)。
+- Baseline 命令记录在 [`agent-control-plane-b0-baseline.md`](agent-control-plane-b0-baseline.md)。
 - 确认当前 single Primary Agent 路径可作为兼容 baseline。
 
 验收：

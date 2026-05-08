@@ -54,7 +54,7 @@ class ConfigManager:
     ----------
     global_dir:
         Override the global user config directory.  Defaults to
-        ``~/.mustang/config``.  Tests pass a ``tmp_path``-based dir
+        ``~/.deepcli/config``.  Tests pass a ``tmp_path``-based dir
         to stay hermetic.
     project_dir:
         Override the project-layer directory.  Defaults to

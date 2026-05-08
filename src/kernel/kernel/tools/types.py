@@ -113,6 +113,16 @@ class ToolCallResult:
     meta: dict[str, Any] | None = None
 
 
+@dataclass(frozen=True)
+class NestedToolResult:
+    """Result returned to a tool that invokes another tool through ToolExecutor."""
+
+    tool_name: str
+    text: str
+    data: Any = None
+    is_error: bool = False
+
+
 # ``ContextModifier`` is a pure function ``ToolContext -> ToolContext``
 # applied by Orchestrator after the tool finishes.  The actual callable
 # shape is enforced at call-time; the alias here is a documentation anchor.

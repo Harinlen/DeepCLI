@@ -6,7 +6,9 @@ import pytest
 import yaml
 from pydantic import BaseModel, Field, ValidationError
 
-from kernel.flags import FlagManager, KernelFlags
+from kernel.flags import KernelFlags
+from kernel.flags import manager as flags_manager
+from kernel.flags.manager import FlagManager
 
 
 class ToolsFlags(BaseModel):
@@ -48,6 +50,41 @@ async def test_initialize_loads_existing_file(flags_path: Path) -> None:
     assert tools.bash is False
     assert tools.browser is False  # default retained
     assert tools.bash_timeout == 30
+
+
+def test_default_path_lives_under_config_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("DEEPCLI_HOME", str(tmp_path / ".deepcli"))
+    monkeypatch.delenv("DEEPCLI_FLAGS_PATH", raising=False)
+    monkeypatch.delenv("MUSTANG_FLAGS_PATH", raising=False)
+
+    assert flags_manager._resolve_default_path() == tmp_path / ".deepcli" / "config" / "flags.yaml"
+
+
+def test_deepcli_flags_path_env_overrides_legacy(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    modern_path = tmp_path / "modern-flags.yaml"
+    legacy_path = tmp_path / "legacy-flags.yaml"
+    monkeypatch.setenv("DEEPCLI_FLAGS_PATH", str(modern_path))
+    monkeypatch.setenv("MUSTANG_FLAGS_PATH", str(legacy_path))
+
+    assert flags_manager._resolve_default_path() == modern_path
+
+
+async def test_default_manager_reads_legacy_root_flags_when_canonical_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / ".deepcli"
+    legacy_flags = home / "flags.yaml"
+    legacy_flags.parent.mkdir(parents=True)
+    legacy_flags.write_text(yaml.safe_dump({"kernel": {"memory": False}}))
+    canonical_flags = home / "config" / "flags.yaml"
+    monkeypatch.setenv("DEEPCLI_HOME", str(home))
+    monkeypatch.setattr(flags_manager, "_DEFAULT_PATH", canonical_flags)
+
+    fm = FlagManager()
+    await fm.initialize()
+
+    assert fm.get_section("kernel").memory is False
 
 
 async def test_register_returns_frozen_instance(flags_path: Path) -> None:

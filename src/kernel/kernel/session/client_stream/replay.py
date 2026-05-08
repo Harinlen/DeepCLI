@@ -59,6 +59,22 @@ logger = logging.getLogger("kernel.session")
 class SessionReplayMixin(_SessionMixinBase):
     """Re-emits a session's persisted events to a freshly attached client."""
 
+    async def _usage_update_for_turn(
+        self,
+        session: Session,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        duration_ms: int | None,
+    ) -> UsageUpdate:
+        """Fallback context snapshot builder for replay-only tests."""
+        return UsageUpdate(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            used=max(0, input_tokens + output_tokens),
+            duration_ms=duration_ms,
+        )
+
     def _explicit_replay_keys(
         self, events: list[SessionEvent]
     ) -> tuple[set[str], set[str], set[str], set[str]]:
@@ -261,7 +277,8 @@ class SessionReplayMixin(_SessionMixinBase):
 
         elif isinstance(event, TurnCompletedEvent):
             await _notify(
-                UsageUpdate(
+                await self._usage_update_for_turn(
+                    session,
                     input_tokens=event.input_tokens,
                     output_tokens=event.output_tokens,
                     duration_ms=event.duration_ms,
@@ -292,7 +309,11 @@ class SessionReplayMixin(_SessionMixinBase):
                 return
             for block in content:
                 text = block.get("text")
-                if block.get("type") == "text" and isinstance(text, str) and text not in skip_user_texts:
+                if (
+                    block.get("type") == "text"
+                    and isinstance(text, str)
+                    and text not in skip_user_texts
+                ):
                     await notify(UserMessageChunk(content=AcpTextBlock(type="text", text=text)))
         elif role == "assistant":
             for block in content:
@@ -300,11 +321,15 @@ class SessionReplayMixin(_SessionMixinBase):
                 if kind == "text":
                     text = block.get("text")
                     if isinstance(text, str) and text not in skip_agent_texts:
-                        await notify(AgentMessageChunk(content=AcpTextBlock(type="text", text=text)))
+                        await notify(
+                            AgentMessageChunk(content=AcpTextBlock(type="text", text=text))
+                        )
                 elif kind == "thinking":
                     thinking = block.get("thinking", "")
                     if isinstance(thinking, str) and thinking not in skip_thought_texts:
-                        await notify(AgentThoughtChunk(content=AcpTextBlock(type="text", text=thinking)))
+                        await notify(
+                            AgentThoughtChunk(content=AcpTextBlock(type="text", text=thinking))
+                        )
                 elif (
                     kind == "tool_use"
                     and not skip_tools

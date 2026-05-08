@@ -10,7 +10,7 @@ Orchestrator 是对话引擎核心。它接收用户消息，驱动"LLM 推理 �
 
 | Session | Orchestrator |
 |---|---|
-| 持久化 conversation 到 JSONL | 在内存里跑 conversation 主循环 |
+| 通过 SessionStore 持久化 conversation 事件 | 在内存里跑 conversation 主循环 |
 | 多连接广播 | 不知道 WebSocket 的存在 |
 | In-flight task 跟踪（cancel） | 接收 `CancelledError` 自行清理 |
 | `SessionHandler` 7 个方法的业务实现 | 接受 prompt 输入、产事件输出 |
@@ -301,10 +301,10 @@ class ConversationHistory:
 - 同理 `ToolResultContent` 是唯一类型，主循环里的 `tool_results` 直接用它，
   不再有 `ToolResultBlock` 这个名字。
 
-**Session 如何重建 history**：`session/load` 时 Session 从 JSONL 重放事件
+**Session 如何重建 history**：`session/load` 时 Session 从 SessionStore 事件日志重放事件
 序列，把 user message / assistant message / tool result 按顺序重建成
 `list[Message]`，作为 `initial_history` 传给 Orchestrator 构造函数。
-Orchestrator 不关心 JSONL 格式，只接受已经重建好的 `list[Message]`。
+Orchestrator 不关心 SessionStore 的存储格式，只接受已经重建好的 `list[Message]`。
 
 ---
 
@@ -742,7 +742,7 @@ Session 创建  →  构造 Orchestrator（history 为空）
 Session 销毁  →  Orchestrator.close()，history 随之释放
 ```
 
-Session 负责把每个 `OrchestratorEvent` 落盘到 JSONL，这是持久化侧。
+Session 负责把每个 `OrchestratorEvent` 落盘到 SessionStore 事件日志，这是持久化侧。
 Orchestrator 持有内存侧的 history 用于喂给 LLM。两者互不依赖。
 
 > **差异 vs Claude Code**：Claude Code 的 `query()` 是无状态函数，
@@ -838,7 +838,7 @@ class OrchestratorDeps:
 StandardOrchestrator(
     deps:            OrchestratorDeps,
     session_id:      str,
-    initial_history: list[Message],   # session/load 时从 JSONL 重建；新建时为 []
+    initial_history: list[Message],   # session/load 时从 SessionStore 事件日志重建；新建时为 []
     config:          OrchestratorConfig,
     depth:           int = 0,         # sub-agent 时 depth > 0
 )
@@ -914,7 +914,7 @@ Orchestrator **不直接引用任何 kernel 子系统**。它只持有 `Orchestr
   执行时创建短生命周期 task（per-tool），这些 task 在 batch 结束或
   `discard()` 时被 join/cancel。`close()` 只需清理 provider 连接。
 
-- **Orchestrator 不写磁盘**：持久化全部由 Session 层的 JSONL writer 负责。
+- **Orchestrator 不写磁盘**：持久化全部由 Session 层的 SessionStore writer 负责。
   Orchestrator 只写内存 history。
 
 - **Orchestrator 不知道 session_id 用来做什么**：它只在构造时接收

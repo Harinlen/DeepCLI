@@ -91,7 +91,7 @@ MCP / hooks / session agent 扩展，而不是内建特定场景。
 
 Agent 不是每次冷启动，而是跨 session 积累用户 / 项目知识：
 
-- **Memory** — 跨 session 的长期记忆（`~/.mustang/memory/`，D17）
+- **Memory** — 跨 session 的长期记忆（`~/.deepcli/memory/`，D17）
 - **Skills** — 用户可沉淀的可复用技能（单文件 markdown，D12）
 - **Hooks** — 事件驱动的自定义行为（`session:start`、
   `tool:before_call` 等）

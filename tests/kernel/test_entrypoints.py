@@ -25,6 +25,7 @@ def test_kernel_main_version_prints_and_returns(
 
 def test_kernel_main_runs_uvicorn_and_sets_dev(monkeypatch: pytest.MonkeyPatch) -> None:
     from kernel import __main__ as kernel_main
+    from kernel.uvicorn_runtime import uvicorn_loop
 
     run = MagicMock()
     monkeypatch.setattr(sys, "argv", ["python -m kernel", "--port", "9999", "--dev"])
@@ -35,13 +36,14 @@ def test_kernel_main_runs_uvicorn_and_sets_dev(monkeypatch: pytest.MonkeyPatch) 
 
     assert run.call_args.kwargs["port"] == 9999
     assert run.call_args.kwargs["log_level"] == "info"
-    assert run.call_args.kwargs["loop"] == "uvloop"
+    assert run.call_args.kwargs["loop"] == uvicorn_loop()
     assert run.call_args.kwargs["factory"] is True
     assert run.call_args.kwargs["ws_ping_interval"] == 20.0
 
 
 def test_access_agent_main_sets_router_or_compat_env(monkeypatch: pytest.MonkeyPatch) -> None:
     from kernel.access_agent import __main__ as access_main
+    from kernel.uvicorn_runtime import uvicorn_loop
 
     run = MagicMock()
     monkeypatch.setattr(access_main, "uvicorn", MagicMock(run=run))
@@ -65,7 +67,7 @@ def test_access_agent_main_sets_router_or_compat_env(monkeypatch: pytest.MonkeyP
     assert access_main.os.environ["MUSTANG_AGENT_PROMPT_BACKEND"] == "router"
     assert access_main.os.environ["_MUSTANG_DEV"] == "1"
     assert run.call_args.kwargs["port"] == 9001
-    assert run.call_args.kwargs["loop"] == "uvloop"
+    assert run.call_args.kwargs["loop"] == uvicorn_loop()
 
     monkeypatch.setattr(
         sys,

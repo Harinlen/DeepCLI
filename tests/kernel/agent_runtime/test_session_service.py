@@ -281,11 +281,12 @@ def test_prompt_user_dirs_returns_only_existing_prompt_dirs(
 ) -> None:
     home = tmp_path / "home"
     workspace = tmp_path / "workspace"
-    home_prompt_dir = home / ".mustang" / "prompts"
+    home_prompt_dir = home / ".deepcli" / "prompts"
     workspace_prompt_dir = workspace / ".mustang" / "prompts"
     home_prompt_dir.mkdir(parents=True)
     workspace_prompt_dir.mkdir(parents=True)
     monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.delenv("DEEPCLI_HOME", raising=False)
 
     assert _prompt_user_dirs(workspace) == [home_prompt_dir, workspace_prompt_dir]
 

@@ -10,6 +10,11 @@ arch="$(uname -m)"
 uv_version="${DEEPCLI_UV_VERSION:-0.9.28}"
 python_version="${DEEPCLI_PYTHON_VERSION:-3.13}"
 
+case "$out_dir" in
+  /*) ;;
+  *) out_dir="$repo_root/$out_dir" ;;
+esac
+
 case "$arch" in
   x86_64) artifact_arch="amd64" ;;
   *) echo "Linux v1 release builds support x86_64 only. Found: $arch" >&2; exit 1 ;;

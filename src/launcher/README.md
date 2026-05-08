@@ -23,10 +23,12 @@ Linux v1:
   managed Kernel venv for the current user while preserving config, state,
   sessions, logs, and editable UI assets.
 
-Windows local install-dev is implemented for v1.0.0 development smoke:
+Windows amd64 release packaging is implemented for v1.0.0:
 
-- user-level install via `install-dev.ps1`;
-- no GitHub Release Windows package yet;
+- user-level install via `install.ps1`, with local development installs via
+  `install-dev.ps1`;
+- GitHub tag releases publish `deepcli-windows-amd64.zip`, `install.ps1`,
+  `manifest.json`, and `checksums.txt`;
 - Kernel ships as a source runtime inside a release zip and runs from a
   release-local managed Python venv;
 - CLI runs as a bundled `deepcli-cli.exe`;
@@ -56,6 +58,12 @@ On Windows:
 
 ```powershell
 .\install-dev.ps1
+```
+
+Published Windows releases can be installed from GitHub Release assets:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/Harinlen/DeepCLI/releases/latest/download/install.ps1 | iex"
 ```
 
 The root wrapper delegates to the launcher sub-repo script:

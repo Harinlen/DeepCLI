@@ -1,4 +1,4 @@
-name: Release Linux
+name: Release Packages
 
 on:
   push:
@@ -52,3 +52,46 @@ jobs:
             dist/deepcli-linux-*/install.sh
             dist/deepcli-linux-*/checksums.txt
             dist/deepcli-linux-*/manifest.json
+
+  windows-amd64:
+    runs-on: windows-latest
+    needs: linux-amd64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install CLI dependencies
+        working-directory: src/cli
+        run: bun install --frozen-lockfile
+
+      - name: Run release smoke tests
+        run: |
+          uv run pytest tests/kernel/test_entrypoints.py tests/kernel/supervisor/test_supervisor_c1.py -q
+          cd src/cli
+          bun x tsc -p tsconfig.json --noEmit
+
+      - name: Build Windows amd64 release
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $env:DEEPCLI_VERSION = $version
+          $env:DEEPCLI_RELEASE_DIR = "dist/deepcli-windows-$version"
+          .\src\launcher\packaging\windows\build-release.ps1
+
+      - name: Upload GitHub release artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/deepcli-windows-*/deepcli-windows-amd64.zip
+            dist/deepcli-windows-*/install.ps1
+            dist/deepcli-windows-*/checksums.txt
+            dist/deepcli-windows-*/manifest.json

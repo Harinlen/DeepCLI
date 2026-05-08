@@ -2,6 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $RequestedVersion = if ($env:DEEPCLI_VERSION) { $env:DEEPCLI_VERSION } else { "latest" }
 $LocalDir = $env:DEEPCLI_LOCAL_DIR
+$GithubRepository = if ($env:DEEPCLI_GITHUB_REPOSITORY) { $env:DEEPCLI_GITHUB_REPOSITORY } else { "Harinlen/DeepCLI" }
 $HomeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { [Environment]::GetFolderPath("UserProfile") }
 $InstallDir = if ($env:DEEPCLI_INSTALL_DIR) { $env:DEEPCLI_INSTALL_DIR } else { Join-Path ([Environment]::GetFolderPath("LocalApplicationData")) "DeepCLI" }
 $DeepCliHome = if ($env:DEEPCLI_HOME) { $env:DEEPCLI_HOME } else { Join-Path $HomeDir ".deepcli" }
@@ -121,16 +122,34 @@ function Restart-KernelIfNeeded {
     & (Join-Path $BinDir "deepcli.cmd") kernel start
 }
 
-function Copy-LocalArtifact([string] $Name, [string] $Destination) {
-    if (-not $LocalDir) {
-        throw "Windows install.ps1 currently requires DEEPCLI_LOCAL_DIR. Use install-dev.ps1 for local installs."
+function Get-ReleaseBaseUrl {
+    if ($env:DEEPCLI_RELEASE_BASE_URL) {
+        return $env:DEEPCLI_RELEASE_BASE_URL.TrimEnd("/")
     }
-    $source = Join-Path $LocalDir $Name
-    if (-not (Test-Path $source)) {
-        throw "Local artifact not found: $source"
+    if ($RequestedVersion -eq "latest") {
+        return "https://github.com/$GithubRepository/releases/latest/download"
     }
-    $tmp = "$Destination.tmp"
-    Copy-Item -Force -Path $source -Destination $tmp
+    $tag = if ($RequestedVersion.StartsWith("v")) { $RequestedVersion } else { "v$RequestedVersion" }
+    return "https://github.com/$GithubRepository/releases/download/$tag"
+}
+
+function Get-ReleaseArtifact([string] $Name, [string] $Destination) {
+    $tmp = "$Destination.tmp.$PID"
+    Remove-Item -Force -ErrorAction SilentlyContinue $tmp
+
+    if ($LocalDir) {
+        $source = Join-Path $LocalDir $Name
+        if (-not (Test-Path $source)) {
+            throw "Local artifact not found: $source"
+        }
+        Copy-Item -Force -Path $source -Destination $tmp
+    }
+    else {
+        $url = "$(Get-ReleaseBaseUrl)/$Name"
+        Write-Output "Downloading $Name..."
+        Invoke-WebRequest -Uri $url -OutFile $tmp
+    }
+
     Move-Item -Force -Path $tmp -Destination $Destination
 }
 
@@ -231,8 +250,8 @@ function Add-BinDirToUserPath {
 Invoke-WithInstallLock {
     Stop-RunningKernelForUpgrade
 
-    Copy-LocalArtifact $ZipName (Join-Path $DownloadsDir $ZipName)
-    Copy-LocalArtifact "checksums.txt" (Join-Path $DownloadsDir "checksums.txt")
+    Get-ReleaseArtifact $ZipName (Join-Path $DownloadsDir $ZipName)
+    Get-ReleaseArtifact "checksums.txt" (Join-Path $DownloadsDir "checksums.txt")
     Verify-Checksums (Join-Path $DownloadsDir $ZipName) (Join-Path $DownloadsDir "checksums.txt")
 
     $tmpExtract = Join-Path $DownloadsDir "extract-$PID"

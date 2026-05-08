@@ -95,3 +95,54 @@ jobs:
             dist/deepcli-windows-*/install.ps1
             dist/deepcli-windows-*/checksums.txt
             dist/deepcli-windows-*/manifest.json
+
+  macos:
+    runs-on: macos-latest
+    needs: linux-amd64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install CLI dependencies
+        working-directory: src/cli
+        run: bun install --frozen-lockfile
+
+      - name: Run release smoke tests
+        run: |
+          uv run pytest tests/kernel/test_entrypoints.py -q
+          cd src/cli
+          bun x tsc -p tsconfig.json --noEmit
+
+      - name: Build macOS releases
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          out_dir="dist/deepcli-macos-$version"
+          DEEPCLI_VERSION="$version" \
+          DEEPCLI_RELEASE_DIR="$out_dir" \
+          DEEPCLI_ARTIFACT_ARCH=amd64 \
+            src/launcher/packaging/macos/build-release.sh
+          DEEPCLI_VERSION="$version" \
+          DEEPCLI_RELEASE_DIR="$out_dir" \
+          DEEPCLI_ARTIFACT_ARCH=arm64 \
+            src/launcher/packaging/macos/build-release.sh
+
+      - name: Upload GitHub release artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/deepcli-macos-*/deepcli-macos-amd64.tar.gz
+            dist/deepcli-macos-*/deepcli-macos-arm64.tar.gz
+            dist/deepcli-macos-*/install-macos.sh
+            dist/deepcli-macos-*/checksums-macos-amd64.txt
+            dist/deepcli-macos-*/checksums-macos-arm64.txt
+            dist/deepcli-macos-*/manifest-macos-amd64.json
+            dist/deepcli-macos-*/manifest-macos-arm64.json

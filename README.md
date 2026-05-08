@@ -70,13 +70,13 @@ Active code lives under `src/`:
 - `src/kernel/` - the Mustang kernel and supervised agent-control-plane processes: Supervisor, Agent Hub, Access Agent, Primary Agent Runtime, session orchestration, tools, providers, memory, protocol handling, and runtime persistence.
 - `src/cli/` - a thin TypeScript/Bun ACP client.
 - `src/probe/` - an interactive and automated ACP test client.
-- `src/launcher/` - user-local launchers and release packaging for Linux and Windows.
+- `src/launcher/` - user-local launchers and release packaging for Linux, macOS, and Windows.
 - `archive/` - old daemon-era reference code; not active development.
 
 ## Quick Start
 
-DeepCLI is still alpha software. Linux x86_64 and Windows x86_64 have
-user-local release installers.
+DeepCLI is still alpha software. Linux x86_64, macOS x86_64 / Apple Silicon,
+and Windows x86_64 have user-local release installers.
 
 Windows PowerShell:
 
@@ -99,6 +99,11 @@ If `~/.local/bin` is not already on your shell `PATH`, add it after install:
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
+macOS:
+
+```bash
+sh -c "$(curl -fsSL https://github.com/Harinlen/DeepCLI/releases/latest/download/install-macos.sh)"
+```
 Then start DeepCLI:
 
 ```text
@@ -126,6 +131,14 @@ deepcli --uninstall
 To install the current checkout into the same user layout as a release:
 
 Linux / WSL2:
+
+```bash
+git clone https://github.com/Harinlen/DeepCLI.git deepcli
+cd deepcli
+./install-dev.sh
+```
+
+macOS:
 
 ```bash
 git clone https://github.com/Harinlen/DeepCLI.git deepcli

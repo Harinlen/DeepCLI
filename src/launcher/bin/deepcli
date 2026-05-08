@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DeepCLI Linux launcher.
+# DeepCLI POSIX launcher.
 #
 # Responsibilities:
 # - keep one user-level Supervisor runtime running in the background;
@@ -14,18 +14,47 @@ HOME_DIR="${HOME:?HOME is required}"
 DEEPCLI_HOME_DIR="${DEEPCLI_HOME:-$HOME_DIR/.deepcli}"
 STATE_DIR="${DEEPCLI_STATE_DIR:-$DEEPCLI_HOME_DIR/state}"
 CONFIG_DIR="${DEEPCLI_CONFIG_DIR:-$DEEPCLI_HOME_DIR/config}"
-INSTALL_DIR="${DEEPCLI_INSTALL_DIR:-$HOME_DIR/.local/share/deepcli}"
 RUNTIME_DIR="$STATE_DIR/runtime"
-LOCK_FILE="$STATE_DIR/launcher.lock"
+LOCK_DIR="$STATE_DIR/launcher.lock.d"
+LOCK_PID_FILE="$LOCK_DIR/pid"
 STATE_FILE="$RUNTIME_DIR/launcher-runtime.env"
 STDOUT_LOG="$RUNTIME_DIR/supervisor.stdout.log"
 STDERR_LOG="$RUNTIME_DIR/supervisor.stderr.log"
 INVOCATION_CWD="$PWD"
-SCRIPT_PATH="$(realpath "${BASH_SOURCE[0]}")"
+
+resolve_realpath() {
+  local path="$1"
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$path"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - "$path" <<'PY'
+import os
+import sys
+
+print(os.path.realpath(sys.argv[1]))
+PY
+  else
+    perl -MCwd=realpath -e 'print realpath($ARGV[0])' "$path"
+  fi
+}
+
+SCRIPT_PATH="$(resolve_realpath "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 RELEASE_DIR="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)"
+OS_NAME="$(uname -s)"
+LOCK_HELD=0
 
 mkdir -p "$STATE_DIR" "$CONFIG_DIR" "$RUNTIME_DIR"
+
+case "$OS_NAME" in
+  Darwin)
+    DEFAULT_INSTALL_DIR="$HOME_DIR/Library/Application Support/DeepCLI"
+    ;;
+  *)
+    DEFAULT_INSTALL_DIR="$HOME_DIR/.local/share/deepcli"
+    ;;
+esac
+INSTALL_DIR="${DEEPCLI_INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
 
 usage() {
   cat <<'EOF'
@@ -89,12 +118,14 @@ resolve_layout() {
     KERNEL_CWD="$DEV_ROOT/src"
     CLI_CMD=("${BUN:-bun}" "run" "src/main.ts")
     CLI_CWD="$DEV_ROOT/src/cli"
+    PORT_PYTHON="${PYTHON:-python3}"
   else
     MODE="packaged"
     KERNEL_CMD=("$RELEASE_DIR/kernel/.venv/bin/python" "-m" "kernel.supervisor")
     KERNEL_CWD="$RELEASE_DIR/kernel"
     CLI_CMD=("$RELEASE_DIR/cli/deepcli-cli")
     CLI_CWD="$PWD"
+    PORT_PYTHON="$RELEASE_DIR/kernel/.venv/bin/python"
   fi
 }
 
@@ -129,6 +160,54 @@ load_state() {
   fi
 }
 
+pid_alive() {
+  local pid_to_check="$1"
+  [[ -n "$pid_to_check" ]] && kill -0 "$pid_to_check" 2>/dev/null
+}
+
+release_runtime_lock() {
+  if [[ "$LOCK_HELD" != "1" ]]; then
+    return 0
+  fi
+  if [[ -f "$LOCK_PID_FILE" ]] && [[ "$(cat "$LOCK_PID_FILE" 2>/dev/null || true)" == "$$" ]]; then
+    rm -f "$LOCK_PID_FILE"
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+  fi
+  LOCK_HELD=0
+}
+
+cleanup_runtime_lock() {
+  release_runtime_lock
+}
+
+trap cleanup_runtime_lock EXIT
+
+acquire_runtime_lock() {
+  local timeout_seconds="${1:-30}"
+  local deadline=$((SECONDS + timeout_seconds))
+  while true; do
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+      printf '%s\n' "$$" >"$LOCK_PID_FILE"
+      LOCK_HELD=1
+      return 0
+    fi
+
+    local lock_pid=""
+    if [[ -f "$LOCK_PID_FILE" ]]; then
+      lock_pid="$(cat "$LOCK_PID_FILE" 2>/dev/null || true)"
+    fi
+    if [[ -n "$lock_pid" ]] && ! pid_alive "$lock_pid"; then
+      rm -rf "$LOCK_DIR"
+      continue
+    fi
+    if (( SECONDS >= deadline )); then
+      echo "DeepCLI launcher is busy. Stop active installs/startup and retry." >&2
+      return 1
+    fi
+    sleep 0.25
+  done
+}
+
 write_state() {
   local port="$1"
   local pid="$2"
@@ -148,7 +227,7 @@ write_state() {
 
 port_is_free() {
   local port="$1"
-  python3 - "$HOST" "$port" <<'PY'
+  "${PORT_PYTHON:-python3}" - "$HOST" "$port" <<'PY'
 import socket
 import sys
 
@@ -163,7 +242,7 @@ PY
 }
 
 free_port() {
-  python3 - "$HOST" <<'PY'
+  "${PORT_PYTHON:-python3}" - "$HOST" <<'PY'
 import socket
 import sys
 
@@ -218,14 +297,34 @@ start_supervisor() {
       export VIRTUAL_ENV="$RELEASE_DIR/kernel/.venv"
       export PATH="$VIRTUAL_ENV/bin:$PATH"
     fi
-    setsid "${KERNEL_CMD[@]}" \
+    "${PORT_PYTHON:-python3}" - "$STDOUT_LOG" "$STDERR_LOG" \
+      "${KERNEL_CMD[@]}" \
       --access-port "$port" \
       --state-dir "$RUNTIME_DIR" \
       --workspace "$INVOCATION_CWD" \
-      "${extra_args[@]}" \
-      9>&- \
-      >"$STDOUT_LOG" 2>"$STDERR_LOG" < /dev/null &
-    printf '%s\n' "$!" >"$RUNTIME_DIR/supervisor.pid"
+      "${extra_args[@]}" <<'PY' >"$RUNTIME_DIR/supervisor.pid"
+import os
+import subprocess
+import sys
+
+stdout_path = sys.argv[1]
+stderr_path = sys.argv[2]
+command = sys.argv[3:]
+
+stdin = subprocess.DEVNULL
+stdout = open(stdout_path, "ab", buffering=0)
+stderr = open(stderr_path, "ab", buffering=0)
+process = subprocess.Popen(
+    command,
+    stdin=stdin,
+    stdout=stdout,
+    stderr=stderr,
+    start_new_session=True,
+    close_fds=True,
+    env=os.environ.copy(),
+)
+print(process.pid)
+PY
   )
 
   local pid
@@ -258,25 +357,27 @@ ensure_runtime() {
     return 0
   fi
 
-  (
-    flock -x 9
-    load_state
-    if [[ -n "${DEEPCLI_RUNTIME_PORT:-}" ]] && probe_ready "$DEEPCLI_RUNTIME_PORT"; then
-      exit 0
-    fi
+  acquire_runtime_lock 30
+  load_state
+  if [[ -n "${DEEPCLI_RUNTIME_PORT:-}" ]] && probe_ready "$DEEPCLI_RUNTIME_PORT"; then
+    release_runtime_lock
+    RUNTIME_PORT="$DEEPCLI_RUNTIME_PORT"
+    return 0
+  fi
 
-    local port="$requested_port"
-    if ! port_is_free "$port"; then
-      if [[ "$requested_port" != "$DEFAULT_PORT" ]]; then
-        echo "Port $requested_port is already in use." >&2
-        exit 1
-      fi
-      port="$(free_port)"
+  local port="$requested_port"
+  if ! port_is_free "$port"; then
+    if [[ "$requested_port" != "$DEFAULT_PORT" ]]; then
+      release_runtime_lock
+      echo "Port $requested_port is already in use." >&2
+      return 1
     fi
+    port="$(free_port)"
+  fi
 
-    start_supervisor "$port"
-    wait_ready "$port"
-  ) 9>"$LOCK_FILE"
+  start_supervisor "$port"
+  wait_ready "$port"
+  release_runtime_lock
 
   load_state
   RUNTIME_PORT="${DEEPCLI_RUNTIME_PORT:-$requested_port}"
@@ -323,7 +424,7 @@ stop_runtime() {
 current_target() {
   local path="$1"
   if [[ -e "$path" || -L "$path" ]]; then
-    realpath "$path" 2>/dev/null || true
+    resolve_realpath "$path" 2>/dev/null || true
   fi
 }
 
@@ -333,31 +434,30 @@ uninstall_current_version() {
     return 1
   fi
 
-  (
-    flock -x 9
-    stop_runtime
+  acquire_runtime_lock 30
+  stop_runtime
 
-    local bin_link="$HOME_DIR/.local/bin/deepcli"
-    local self_target release_target
-    self_target="$SCRIPT_PATH"
-    release_target="$RELEASE_DIR"
+  local bin_link="$HOME_DIR/.local/bin/deepcli"
+  local self_target release_target
+  self_target="$SCRIPT_PATH"
+  release_target="$RELEASE_DIR"
 
-    if [[ -L "$bin_link" && "$(current_target "$bin_link")" == "$self_target" ]]; then
-      rm -f "$bin_link"
-    fi
-    if [[ "$release_target" == "$INSTALL_DIR/releases/"* ]]; then
-      rm -rf "$release_target"
-    fi
-    if ! find "$INSTALL_DIR/releases" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -q .; then
-      rm -rf "$INSTALL_DIR/tools/uv"
-    fi
+  if [[ -L "$bin_link" && "$(current_target "$bin_link")" == "$self_target" ]]; then
+    rm -f "$bin_link"
+  fi
+  if [[ "$release_target" == "$INSTALL_DIR/releases/"* ]]; then
+    rm -rf "$release_target"
+  fi
+  if ! find "$INSTALL_DIR/releases" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -q .; then
+    rm -rf "$INSTALL_DIR/tools/uv"
+  fi
 
-    rm -f "$STATE_FILE" "$RUNTIME_DIR/supervisor.pid"
-    echo "DeepCLI uninstalled for this user."
-    echo "Preserved config/state/assets:"
-    echo "  $CONFIG_DIR"
-    echo "  $STATE_DIR"
-  ) 9>"$LOCK_FILE"
+  rm -f "$STATE_FILE" "$RUNTIME_DIR/supervisor.pid"
+  release_runtime_lock
+  echo "DeepCLI uninstalled for this user."
+  echo "Preserved config/state/assets:"
+  echo "  $CONFIG_DIR"
+  echo "  $STATE_DIR"
 }
 
 kernel_logs() {

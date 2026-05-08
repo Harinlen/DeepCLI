@@ -302,7 +302,7 @@ start_supervisor() {
       --access-port "$port" \
       --state-dir "$RUNTIME_DIR" \
       --workspace "$INVOCATION_CWD" \
-      "${extra_args[@]}" <<'PY' >"$RUNTIME_DIR/supervisor.pid"
+      ${extra_args[@]+"${extra_args[@]}"} <<'PY' >"$RUNTIME_DIR/supervisor.pid"
 import os
 import subprocess
 import sys

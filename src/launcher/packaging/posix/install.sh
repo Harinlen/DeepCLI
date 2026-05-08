@@ -61,7 +61,7 @@ case "$target_os" in
       *) echo "DeepCLI Linux installer currently supports x86_64 only. Found: $arch" >&2; exit 1 ;;
     esac
     share_dir="${DEEPCLI_DATA_DIR:-$home_dir/.local/share/deepcli}"
-    checksums_name="checksums.txt"
+    checksums_name="checksums-linux-$artifact_arch.txt"
     ;;
   macos)
     case "$(uname -s)" in

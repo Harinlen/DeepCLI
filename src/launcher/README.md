@@ -42,7 +42,9 @@ macOS release packaging is implemented for v1.0.0:
   installs through `install-dev.sh` on macOS;
 - GitHub tag releases publish `deepcli-macos-amd64.tar.gz`,
   `deepcli-macos-arm64.tar.gz`, arch-specific manifests, and arch-specific
-  checksum files; `install-macos.sh` is kept as a compatibility alias;
+  checksum files; `install-macos.sh` is kept as a compatibility alias. Linux
+  also publishes `checksums-linux-amd64.txt`; legacy `checksums.txt` is kept
+  for the first Linux installer path.
 - Kernel ships as a source runtime inside a release tarball and runs from a
   release-local managed Python venv;
 - CLI runs as a bundled `deepcli-cli` executable compiled for the release

@@ -34,7 +34,7 @@ case "$target_os" in
     esac
     installer_name="install.sh"
     manifest_name="manifest.json"
-    checksums_name="checksums.txt"
+    checksums_name="checksums-linux-$artifact_arch.txt"
     ;;
   macos)
     case "$(uname -s)" in
@@ -135,6 +135,10 @@ EOF
 
 write_installer_asset
 
+if [[ "$target_os" == "linux" ]]; then
+  cp "$out_dir/$installer_name" "$out_dir/install-linux.sh"
+fi
+
 echo "Writing checksums..."
 (
   cd "$out_dir"
@@ -143,6 +147,9 @@ echo "Writing checksums..."
     printf '%s  %s\n' "$(sha256_file "$installer_name")" "$installer_name"
     printf '%s  %s\n' "$(sha256_file "$manifest_name")" "$manifest_name"
   } > "$checksums_name"
+  if [[ "$target_os" == "linux" ]]; then
+    cp "$checksums_name" checksums.txt
+  fi
 )
 
 echo "Release artifacts written to $out_dir"

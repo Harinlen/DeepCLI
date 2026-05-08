@@ -50,6 +50,8 @@ jobs:
           files: |
             dist/deepcli-linux-*/deepcli-linux-amd64.tar.gz
             dist/deepcli-linux-*/install.sh
+            dist/deepcli-linux-*/install-linux.sh
+            dist/deepcli-linux-*/checksums-linux-amd64.txt
             dist/deepcli-linux-*/checksums.txt
             dist/deepcli-linux-*/manifest.json
 

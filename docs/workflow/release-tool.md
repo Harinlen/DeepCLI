@@ -111,6 +111,7 @@ checksums.txt
 对应 section：
 
 - [正式发布](#正式发布)
+- [修复已存在的 bootstrap tag](#修复已存在的-bootstrap-tag)
 - [注意事项](#注意事项)
 
 ## 分支模型
@@ -202,6 +203,48 @@ scripts/release.sh tag
 
 这个命令适合第一次 bootstrap release，或给已经在 `main` 上的 final release
 commit 补 tag。常规发布仍然优先使用 [正式发布](#正式发布)。
+
+### 修复已存在的 bootstrap tag
+
+如果第一次 bootstrap release 已经 push 了 `v1.0.0`，但 CI 或 release assets
+失败，并且修复 commit 仍然属于同一个尚未对外稳定使用的版本，可以把同一个
+tag 移到当前 `main`：
+
+```bash
+git checkout main
+git pull --ff-only origin main
+scripts/release.sh fix
+```
+
+脚本会：
+
+1. 确认当前分支是 `main`。
+2. 确认 worktree 干净。
+3. 确认 Kernel version 是 final semver，例如 `1.0.0`。
+4. 确认 CLI 版本投影一致。
+5. 确认远端已经存在 `v1.0.0` tag。
+6. push 当前 `main`。
+7. 删除本地旧 tag，如果存在：
+
+   ```bash
+   git tag -d v1.0.0
+   ```
+
+8. 删除远端旧 tag：
+
+   ```bash
+   git push origin :refs/tags/v1.0.0
+   ```
+
+9. 在当前 HEAD 重建 tag 并 push：
+
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+`fix` 只用于 bootstrap / CI 失败修复。正式版本已经对外发布后，不移动 tag；
+这种情况应该发布下一个 patch 版本，例如 `1.0.1`。
 
 ## 开始 freeze
 
@@ -374,6 +417,7 @@ DEEPCLI_RELEASE_REMOTE=origin scripts/release.sh release
 - 版本号不是合法 final semver 或 prerelease semver。
 - CLI 版本投影和 Kernel 不一致。
 - `main` 不能 fast-forward 到 `freeze`。
+- `fix` 找不到对应的远端 tag。
 - push 或 tag 失败。
 
 ## 注意事项
@@ -382,5 +426,7 @@ DEEPCLI_RELEASE_REMOTE=origin scripts/release.sh release
   `push --force-with-lease origin freeze`。
 - `release` 会切换到 `main` 分支。
 - 正式 tag 在远端 `main` push 成功之后才创建并 push。
+- `fix` 会删除并重建同名 tag，只能用于 bootstrap 或尚未稳定对外使用的
+  失败 release。
 - 脚本不替代 release smoke。进入 `freeze` 后仍需按计划运行安装包
   smoke：build tarball -> isolated HOME install -> start -> readiness -> stop。

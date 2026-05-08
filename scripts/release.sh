@@ -5,6 +5,7 @@
 #   scripts/release.sh freeze [final-version]
 #   scripts/release.sh release
 #   scripts/release.sh tag
+#   scripts/release.sh fix
 #
 # Version source of truth is src/kernel/kernel/__init__.py.  This script
 # updates all release-facing projections from that Kernel version.
@@ -24,6 +25,7 @@ Usage:
   scripts/release.sh freeze [final-version]
   scripts/release.sh release
   scripts/release.sh tag
+  scripts/release.sh fix
 
 Commands:
   freeze  Run from dev.  Shows the current Kernel version, asks for
@@ -40,6 +42,10 @@ Commands:
                   final version, pushes main, tags v<version>, and pushes
                   the tag.  This is useful for the first bootstrap release
                   or for tagging an already-final release commit.
+
+  fix             Run from main.  Retargets the existing v<version> tag to
+                  the current HEAD after a failed bootstrap release CI.
+                  This deletes and recreates the local + remote tag.
 
 Environment:
   DEEPCLI_RELEASE_REMOTE  Git remote to push. Default: origin.
@@ -290,6 +296,32 @@ cmd_tag_current() {
   git -C "$repo_root" push "$remote" "v$current"
 }
 
+cmd_fix_tag() {
+  require_branch main
+  require_clean_worktree
+
+  local current head remote_tag
+  current="$(read_kernel_version)"
+  validate_final_version "$current"
+  check_versions
+  head="$(git -C "$repo_root" rev-parse HEAD)"
+
+  if ! remote_tag="$(git -C "$repo_root" ls-remote --exit-code --tags "$remote" "refs/tags/v$current" 2>/dev/null)"; then
+    die "remote tag v$current does not exist on $remote; use 'scripts/release.sh tag' instead"
+  fi
+
+  echo "Current final version: $current"
+  echo "Current HEAD: $head"
+  echo "Existing remote tag: $remote_tag"
+  confirm "Move v$current to current HEAD, deleting and recreating the local + remote tag on $remote?"
+
+  git -C "$repo_root" push "$remote" main
+  git -C "$repo_root" tag -d "v$current" >/dev/null 2>&1 || true
+  git -C "$repo_root" push "$remote" ":refs/tags/v$current"
+  git -C "$repo_root" tag "v$current"
+  git -C "$repo_root" push "$remote" "v$current"
+}
+
 case "${1:-}" in
   freeze )
     shift
@@ -304,6 +336,11 @@ case "${1:-}" in
     shift
     [ "$#" -eq 0 ] || die "tag does not accept arguments"
     cmd_tag_current
+    ;;
+  fix )
+    shift
+    [ "$#" -eq 0 ] || die "fix does not accept arguments"
+    cmd_fix_tag
     ;;
   check-version )
     check_versions

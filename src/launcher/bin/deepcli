@@ -11,9 +11,10 @@ set -euo pipefail
 DEFAULT_PORT="${DEEPCLI_DEFAULT_PORT:-8200}"
 HOST="${DEEPCLI_HOST:-127.0.0.1}"
 HOME_DIR="${HOME:?HOME is required}"
-STATE_DIR="${DEEPCLI_STATE_DIR:-$HOME_DIR/.local/state/deepcli}"
-CONFIG_DIR="${DEEPCLI_CONFIG_DIR:-$HOME_DIR/.config/deepcli}"
-DATA_DIR="${DEEPCLI_DATA_DIR:-$HOME_DIR/.local/share/deepcli}"
+DEEPCLI_HOME_DIR="${DEEPCLI_HOME:-$HOME_DIR/.deepcli}"
+STATE_DIR="${DEEPCLI_STATE_DIR:-$DEEPCLI_HOME_DIR/state}"
+CONFIG_DIR="${DEEPCLI_CONFIG_DIR:-$DEEPCLI_HOME_DIR/config}"
+INSTALL_DIR="${DEEPCLI_INSTALL_DIR:-$HOME_DIR/.local/share/deepcli}"
 RUNTIME_DIR="$STATE_DIR/runtime"
 LOCK_FILE="$STATE_DIR/launcher.lock"
 STATE_FILE="$RUNTIME_DIR/launcher-runtime.env"
@@ -213,8 +214,6 @@ start_supervisor() {
   (
     cd "$KERNEL_CWD"
     export PYTHONUNBUFFERED=1
-    export DEEPCLI_STATE_DIR="$STATE_DIR"
-    export DEEPCLI_CONFIG_DIR="$CONFIG_DIR"
     if [[ "$MODE" == "packaged" ]]; then
       export VIRTUAL_ENV="$RELEASE_DIR/kernel/.venv"
       export PATH="$VIRTUAL_ENV/bin:$PATH"
@@ -346,11 +345,11 @@ uninstall_current_version() {
     if [[ -L "$bin_link" && "$(current_target "$bin_link")" == "$self_target" ]]; then
       rm -f "$bin_link"
     fi
-    if [[ "$release_target" == "$DATA_DIR/releases/"* ]]; then
+    if [[ "$release_target" == "$INSTALL_DIR/releases/"* ]]; then
       rm -rf "$release_target"
     fi
-    if ! find "$DATA_DIR/releases" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -q .; then
-      rm -rf "$DATA_DIR/tools/uv"
+    if ! find "$INSTALL_DIR/releases" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -q .; then
+      rm -rf "$INSTALL_DIR/tools/uv"
     fi
 
     rm -f "$STATE_FILE" "$RUNTIME_DIR/supervisor.pid"
@@ -392,8 +391,6 @@ run_cli() {
     cd "$CLI_CWD"
     export DEEPCLI_TOKEN="$token"
     export MUSTANG_TOKEN="$token"
-    export DEEPCLI_CONFIG_DIR="$CONFIG_DIR"
-    export DEEPCLI_DATA_DIR="$DATA_DIR"
     export KERNEL_URL
     export KERNEL_HEALTH_URL
     KERNEL_URL="$(ws_url "$RUNTIME_PORT")"

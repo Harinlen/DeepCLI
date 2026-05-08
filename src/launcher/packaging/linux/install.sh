@@ -1,16 +1,17 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 requested_version="${DEEPCLI_VERSION:-latest}"
-github_repository="${DEEPCLI_GITHUB_REPOSITORY:-deepcli/deepcli}"
+github_repository="${DEEPCLI_GITHUB_REPOSITORY:-Harinlen/DeepCLI}"
 if [ -n "${DEEPCLI_BASE_URL:-}" ]; then
   base_url="$DEEPCLI_BASE_URL"
 elif [ "$requested_version" = "latest" ]; then
   base_url="https://github.com/$github_repository/releases/latest/download"
-elif [[ "$requested_version" = v* ]]; then
-  base_url="https://github.com/$github_repository/releases/download/$requested_version"
 else
-  base_url="https://github.com/$github_repository/releases/download/v$requested_version"
+  case "$requested_version" in
+    v*) base_url="https://github.com/$github_repository/releases/download/$requested_version" ;;
+    *) base_url="https://github.com/$github_repository/releases/download/v$requested_version" ;;
+  esac
 fi
 local_dir="${DEEPCLI_LOCAL_DIR:-}"
 home_dir="${HOME:?HOME is required}"
@@ -43,38 +44,38 @@ tarball_name="deepcli-linux-$artifact_arch.tar.gz"
 mkdir -p "$bin_dir" "$share_dir/releases" "$tools_dir" "$downloads_dir" "$runtime_dir" "$config_dir"
 
 acquire_install_lock() {
-  exec {install_lock_fd}>"$launcher_lock_file"
-  if ! flock -n "$install_lock_fd"; then
+  exec 9>"$launcher_lock_file"
+  if ! flock -n 9; then
     echo "DeepCLI launcher is busy. Stop active installs/startup and retry." >&2
     exit 1
   fi
+  install_lock_fd=9
 }
 
 release_install_lock() {
   if [ -n "$install_lock_fd" ]; then
-    flock -u "$install_lock_fd" 2>/dev/null || true
-    eval "exec ${install_lock_fd}>&-"
+    flock -u 9 2>/dev/null || true
+    exec 9>&- || true
     install_lock_fd=""
   fi
 }
 
 readiness_url() {
-  local port="$1"
-  printf 'http://127.0.0.1:%s/access/readiness\n' "$port"
+  readiness_port="$1"
+  printf 'http://127.0.0.1:%s/access/readiness\n' "$readiness_port"
 }
 
 probe_ready() {
-  local port="$1"
-  local payload
-  payload="$(curl -fsS --max-time 1 "$(readiness_url "$port")" 2>/dev/null)" || return 1
-  grep -q '"default_route_ready"[[:space:]]*:[[:space:]]*true' <<<"$payload" &&
-    grep -q '"hub_ready"[[:space:]]*:[[:space:]]*true' <<<"$payload" &&
-    grep -q '"primary_registered"[[:space:]]*:[[:space:]]*true' <<<"$payload"
+  probe_port="$1"
+  probe_payload="$(curl -fsS --max-time 1 "$(readiness_url "$probe_port")" 2>/dev/null)" || return 1
+  printf '%s\n' "$probe_payload" | grep -q '"default_route_ready"[[:space:]]*:[[:space:]]*true' &&
+    printf '%s\n' "$probe_payload" | grep -q '"hub_ready"[[:space:]]*:[[:space:]]*true' &&
+    printf '%s\n' "$probe_payload" | grep -q '"primary_registered"[[:space:]]*:[[:space:]]*true'
 }
 
 pid_alive() {
-  local pid="$1"
-  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+  pid_to_check="$1"
+  [ -n "$pid_to_check" ] && kill -0 "$pid_to_check" 2>/dev/null
 }
 
 stop_running_kernel_for_upgrade() {
@@ -85,33 +86,32 @@ stop_running_kernel_for_upgrade() {
     return 0
   fi
 
-  # shellcheck disable=SC1090
-  source "$runtime_state_file"
+  . "$runtime_state_file"
 
-  local port="${DEEPCLI_RUNTIME_PORT:-}"
-  local pid="${DEEPCLI_RUNTIME_PID:-}"
-  local pgid="${DEEPCLI_RUNTIME_PGID:-$pid}"
-  local was_running=0
-  if [ -n "$port" ] && probe_ready "$port"; then
-    was_running=1
-  elif pid_alive "$pid"; then
-    was_running=1
+  stop_port="${DEEPCLI_RUNTIME_PORT:-}"
+  stop_pid="${DEEPCLI_RUNTIME_PID:-}"
+  stop_pgid="${DEEPCLI_RUNTIME_PGID:-$stop_pid}"
+  stop_was_running=0
+  if [ -n "$stop_port" ] && probe_ready "$stop_port"; then
+    stop_was_running=1
+  elif pid_alive "$stop_pid"; then
+    stop_was_running=1
   fi
-  if [ "$was_running" -ne 1 ]; then
+  if [ "$stop_was_running" -ne 1 ]; then
     rm -f "$runtime_state_file"
     return 0
   fi
 
   restart_kernel_after_install=1
   echo "Stopping running DeepCLI Kernel before install..."
-  if [ -n "$pgid" ]; then
-    kill -TERM "-$pgid" 2>/dev/null || true
-  elif [ -n "$pid" ]; then
-    kill -TERM "$pid" 2>/dev/null || true
+  if [ -n "$stop_pgid" ]; then
+    kill -TERM "-$stop_pgid" 2>/dev/null || true
+  elif [ -n "$stop_pid" ]; then
+    kill -TERM "$stop_pid" 2>/dev/null || true
   fi
 
   for _ in $(seq 1 40); do
-    if { [ -z "$port" ] || ! probe_ready "$port"; } && ! pid_alive "$pid"; then
+    if { [ -z "$stop_port" ] || ! probe_ready "$stop_port"; } && ! pid_alive "$stop_pid"; then
       rm -f "$runtime_state_file"
       return 0
     fi
@@ -119,10 +119,10 @@ stop_running_kernel_for_upgrade() {
   done
 
   echo "Kernel did not stop cleanly; forcing shutdown..."
-  if [ -n "$pgid" ]; then
-    kill -KILL "-$pgid" 2>/dev/null || true
-  elif [ -n "$pid" ]; then
-    kill -KILL "$pid" 2>/dev/null || true
+  if [ -n "$stop_pgid" ]; then
+    kill -KILL "-$stop_pgid" 2>/dev/null || true
+  elif [ -n "$stop_pid" ]; then
+    kill -KILL "$stop_pid" 2>/dev/null || true
   fi
   rm -f "$runtime_state_file"
 }
@@ -136,39 +136,44 @@ restart_kernel_if_needed() {
 }
 
 acquire_install_lock
+trap release_install_lock EXIT
 stop_running_kernel_for_upgrade
 
 download() {
-  local name="$1"
-  local dest="$2"
-  local tmp="$dest.tmp.$$"
+  download_name="$1"
+  download_dest="$2"
+  download_tmp="$download_dest.tmp.$$"
   if [ -n "$local_dir" ]; then
-    echo "Copying $name..."
-    cp "$local_dir/$name" "$tmp"
+    echo "Copying $download_name..."
+    cp "$local_dir/$download_name" "$download_tmp"
   else
-    echo "Downloading $name..."
-    curl -fsSL "$base_url/$name" -o "$tmp"
+    echo "Downloading $download_name..."
+    curl -fsSL "$base_url/$download_name" -o "$download_tmp"
   fi
-  mv -f "$tmp" "$dest"
+  mv -f "$download_tmp" "$download_dest"
 }
 
 download_text() {
-  local name="$1"
+  download_text_name="$1"
   if [ -n "$local_dir" ]; then
-    cat "$local_dir/$name"
+    cat "$local_dir/$download_text_name"
   else
-    curl -fsSL "$base_url/$name"
+    curl -fsSL "$base_url/$download_text_name"
   fi
 }
 
 verify_checksums() {
-  local artifact_path="$1"
-  local checksums_path="$2"
-  local artifact_file
-  artifact_file="$(basename "$artifact_path")"
+  checksum_artifact_path="$1"
+  checksum_file_path="$2"
+  checksum_line=""
+  checksum_artifact_file="$(basename "$checksum_artifact_path")"
+  checksum_line="$(grep "  $checksum_artifact_file\$" "$checksum_file_path")" || {
+    echo "No checksum found for $checksum_artifact_file" >&2
+    exit 1
+  }
   (
-    cd "$(dirname "$artifact_path")"
-    grep "  $artifact_file\$" "$checksums_path" | sha256sum -c -
+    cd "$(dirname "$checksum_artifact_path")"
+    printf '%s\n' "$checksum_line" | sha256sum -c -
   )
 }
 
@@ -186,22 +191,22 @@ install_private_uv() {
     return 0
   fi
 
-  local uv_triple="x86_64-unknown-linux-gnu"
-  local uv_archive="uv-$uv_triple.tar.gz"
-  local uv_url="https://github.com/astral-sh/uv/releases/download/$uv_version/$uv_archive"
-  local tmp_dir="$downloads_dir/uv-$uv_version.$$"
-  mkdir -p "$tmp_dir"
+  private_uv_triple="x86_64-unknown-linux-gnu"
+  private_uv_archive="uv-$private_uv_triple.tar.gz"
+  private_uv_url="https://github.com/astral-sh/uv/releases/download/$uv_version/$private_uv_archive"
+  private_uv_tmp_dir="$downloads_dir/uv-$uv_version.$$"
+  mkdir -p "$private_uv_tmp_dir"
 
   echo "Downloading private uv $uv_version..."
-  curl -fsSL "$uv_url" -o "$tmp_dir/$uv_archive"
-  tar -xzf "$tmp_dir/$uv_archive" -C "$tmp_dir"
-  cp "$tmp_dir/uv-$uv_triple/uv" "$uv_bin"
+  curl -fsSL "$private_uv_url" -o "$private_uv_tmp_dir/$private_uv_archive"
+  tar -xzf "$private_uv_tmp_dir/$private_uv_archive" -C "$private_uv_tmp_dir"
+  cp "$private_uv_tmp_dir/uv-$private_uv_triple/uv" "$uv_bin"
   chmod +x "$uv_bin"
-  rm -rf "$tmp_dir"
+  rm -rf "$private_uv_tmp_dir"
 }
 
 prepare_kernel_venv() {
-  local release_dir="$1"
+  prepare_release_dir="$1"
   echo "Preparing managed Python $python_version..."
   UV_PYTHON_INSTALL_DIR="$python_install_dir" \
   UV_CACHE_DIR="$share_dir/cache/uv" \
@@ -212,7 +217,7 @@ prepare_kernel_venv() {
 
   echo "Preparing Kernel venv..."
   (
-    cd "$release_dir/kernel"
+    cd "$prepare_release_dir/kernel"
     UV_PYTHON_INSTALL_DIR="$python_install_dir" \
     UV_CACHE_DIR="$share_dir/cache/uv" \
       "$uv_bin" sync --locked --no-dev --python "$python_version" --managed-python

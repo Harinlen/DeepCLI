@@ -44,8 +44,10 @@ Active code lives under `src/`:
 
 ## Quick Start
 
-DeepCLI is still alpha software. Linux x86_64 is the first supported install
-target. Install the latest release with one command:
+DeepCLI is still alpha software. Linux x86_64 and Windows x86_64 have
+user-local release installers.
+
+Linux / WSL2:
 
 ```bash
 sh -c "$(curl -fsSL https://github.com/Harinlen/DeepCLI/releases/latest/download/install.sh)"
@@ -57,9 +59,18 @@ If `~/.local/bin` is not already on your shell `PATH`, add it after install:
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
+Windows PowerShell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/Harinlen/DeepCLI/releases/latest/download/install.ps1 | iex"
+```
+
+Open a new terminal tab after install if this shell still cannot find
+`deepcli`.
+
 Then start DeepCLI:
 
-```bash
+```text
 deepcli
 ```
 
@@ -83,15 +94,25 @@ deepcli --uninstall
 
 To install the current checkout into the same user layout as a release:
 
+Linux / WSL2:
+
 ```bash
 git clone https://github.com/Harinlen/DeepCLI.git deepcli
 cd deepcli
 ./install-dev.sh
 ```
 
+Windows PowerShell:
+
+```powershell
+git clone https://github.com/Harinlen/DeepCLI.git deepcli
+cd deepcli
+.\install-dev.ps1
+```
+
 This builds release-shaped local artifacts from the checkout, installs a
 precompiled CLI executable, prepares the Kernel runtime with DeepCLI-private
-`uv` and managed Python, and updates `~/.local/bin/deepcli`.
+`uv` and managed Python, and updates the user-local `deepcli` launcher.
 
 ## Source Development
 

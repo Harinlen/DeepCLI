@@ -464,7 +464,7 @@ export class InteractiveMode implements InteractiveModeContext {
 			recentSessions,
 			this.#getWelcomeLspServers(),
 		);
-		const insertAt = this.ui.children.indexOf(this.statusLine);
+		const insertAt = this.ui.children.indexOf(this.chatContainer);
 		const children = [new Spacer(1), this.#welcomeComponent, new Spacer(1)];
 		if (insertAt >= 0) {
 			this.ui.children.splice(insertAt, 0, ...children);

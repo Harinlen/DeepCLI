@@ -53,6 +53,9 @@ class FakeOobeKernel {
 				case "session/new":
 					this.#sessionCounter += 1;
 					return this.#result(ws, id, { sessionId: `oobe-session-${this.#sessionCounter}`, configOptions: [], modes: [{ id: "default", name: "Default" }] });
+				case "session/prompt":
+					this.#notify(ws, String(params.sessionId ?? `oobe-session-${this.#sessionCounter}`), { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `Echo: ${promptText(params.prompt)}` } });
+					return this.#result(ws, id, { stopReason: "stop" });
 				case methods.commandsList:
 					return this.#result(ws, id, { commands: [] });
 				case methods.modelProfileList:
@@ -124,6 +127,15 @@ class FakeOobeKernel {
 	#result(ws: WebSocket, id: number, result: unknown): void {
 		ws.send(JSON.stringify({ jsonrpc: "2.0", id, result }));
 	}
+
+	#notify(ws: WebSocket, sessionId: string, update: Json): void {
+		ws.send(JSON.stringify({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionId, ...update } } }));
+	}
+}
+
+function promptText(prompt: unknown): string {
+	if (!Array.isArray(prompt)) return "";
+	return prompt.map(part => typeof part?.text === "string" ? part.text : "").join("");
 }
 
 await main();
@@ -261,6 +273,18 @@ def expect_tail(label, needles, forbidden=None, timeout=1, tail_chars=6000):
     print(tail, flush=True)
     cleanup(1)
 
+def expect_tail_order(label, before, after, timeout=1, tail_chars=6000):
+    read_for(timeout)
+    text = clean()[-tail_chars:]
+    before_index = text.rfind(before)
+    after_index = text.rfind(after)
+    if before_index >= 0 and after_index >= 0 and before_index < after_index:
+        print(f"PTY PASS: {label}", flush=True)
+        return
+    print(f"PTY FAIL: {label}; expected {before!r} before {after!r}", flush=True)
+    print(text, flush=True)
+    cleanup(1)
+
 def expect_exit(label, timeout=5):
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -308,6 +332,9 @@ send("\r")
 expect("configured", ["Model configured. You can change it later with /model.", "Welcome back!", "DeepSeek V4 Pro"])
 expect_not("configured screen has selected model", "no-model")
 expect_tail("configured screen remains visible", ["Model configured. You can change it later with /model.", "Welcome back!", "DeepSeek V4 Pro"], "no-model")
+send("oobe-layout-check\r")
+expect("post-oobe prompt", ["Echo: oobe-layout-check"])
+expect_tail_order("post-oobe welcome stays above transcript", "Welcome back!", "oobe-layout-check")
 cleanup(0)
 `;
 

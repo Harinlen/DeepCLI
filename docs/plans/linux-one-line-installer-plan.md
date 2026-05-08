@@ -268,7 +268,7 @@ DeepCLI 采用三层发布流，不再直接 push 到 `main`。
 ```text
 dev
   ↓ bump prerelease version
-feature-freeze
+freeze
   ↓ promote final version
 main
   ↓ tag
@@ -280,11 +280,11 @@ GitHub Release assets
 | 分支 | 职责 | 版本形态 | 是否发正式 release |
 |---|---|---|---|
 | `dev` | 日常集成分支。所有功能、修复、文档先进入这里。 | 跟随当前 Kernel 版本，不代表发布承诺。 | 否 |
-| `feature-freeze` | 固定发布冻结分支。只允许 bug fix、验证修复、release 文档和版本 bump。 | prerelease：`1.1.0a1`、`1.1.0b1`、`1.1.0rc1`。 | 可发 prerelease assets |
+| `freeze` | 固定发布冻结分支。只允许 bug fix、验证修复、release 文档和版本 bump。 | prerelease：`1.1.0a1`、`1.1.0b1`、`1.1.0rc1`。 | 可发 prerelease assets |
 | `main` | 稳定发布分支。只接收通过 freeze 验收的最终版本。 | final：`1.1.0`。 | 是 |
 
 `main` 应开启 branch protection：禁止直接 push，只允许从对应
-`feature-freeze` 合并。
+`freeze` 合并。
 
 `dev` 是默认开发目标。日常 PR / push 进入 `dev`，不是 `main`。
 
@@ -339,10 +339,10 @@ GitHub tag
 
 ```text
 dev                         version: 1.0.0 或下一开发态
-feature-freeze              version: 1.1.0a1
-feature-freeze              version: 1.1.0a2
-feature-freeze              version: 1.1.0b1
-feature-freeze              version: 1.1.0rc1
+freeze              version: 1.1.0a1
+freeze              version: 1.1.0a2
+freeze              version: 1.1.0b1
+freeze              version: 1.1.0rc1
 main                        version: 1.1.0
 tag                         v1.1.0
 ```
@@ -361,20 +361,26 @@ scripts/release.sh
 
 - `scripts/release.sh read-version`：只读取 `src/kernel/kernel/__init__.py`。
 - `scripts/release.sh check-version`：校验 Kernel / CLI / ACP client 投影一致。
-- `scripts/release.sh feature-freeze [final-version]`：
+- `scripts/release.sh freeze [final-version]`：
   - 只能在 `dev` 上运行。
   - 自动显示当前 Kernel version。
   - 如果没有传 `final-version`，交互式询问目标 final version，例如 `1.1.0`。
   - 自动追加 `a1` 后缀，bump 到 `1.1.0a1`。
-  - 从 `dev` 重置固定分支 `feature-freeze`。
-  - commit 并 push `feature-freeze`。
+  - 从 `dev` 重置固定分支 `freeze`。
+  - commit 并 push `freeze`。
 - `scripts/release.sh release`：
-  - 只能在 `feature-freeze` 上运行。
+  - 只能在 `freeze` 上运行。
   - 自动读取当前 prerelease version，例如 `1.1.0rc2`。
   - 自动删除后缀，bump 到 final version，例如 `1.1.0`。
   - commit，fast-forward `main`，先 push `main`，再打 tag `v1.1.0` 并 push tag。
+- `scripts/release.sh tag`：
+  - 只能在 `main` 上运行。
+  - 适用于第一次 bootstrap release 或补 tag 场景。
+  - 校验当前 Kernel version 是 final semver，版本投影一致，且本地 / 远端 tag
+    不存在。
+  - push `main`，再打当前版本 tag 并 push tag。
 
-`feature-freeze` 使用固定分支名，所以脚本 push freeze 分支时使用
+`freeze` 使用固定分支名，所以脚本 push freeze 分支时使用
 `--force-with-lease`，避免旧 freeze 历史阻止下一轮发布冻结。正式 release 到
 `main` 使用 fast-forward merge；如果 `main` 不能 fast-forward，脚本失败，
 需要先人工处理分支关系。正式 tag 必须在远端 `main` push 成功之后再创建和
@@ -384,7 +390,7 @@ push，避免 tag CI 先于稳定分支更新触发。
 
 普通 CI：
 
-- `dev`、`feature-freeze`、`main` 都跑测试。
+- `dev`、`freeze`、`main` 都跑测试。
 - 所有分支都跑 `scripts/check-version.sh`。
 - `main` 上的版本必须是 final semver，不能包含 `a` / `b` / `rc`。
 
@@ -430,7 +436,7 @@ DEEPCLI_VERSION=1.1.0rc1 sh install.sh
 
 ### 冻结分支约束
 
-进入 `feature-freeze` 后：
+进入 `freeze` 后：
 
 - 不再接受新功能。
 - 只接受：

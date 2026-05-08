@@ -40,28 +40,28 @@ scripts/release.sh check-version
 - [检查版本投影](#检查版本投影)
 - [分支模型](#分支模型)
 
-### 2. 从 `dev` 进入 `feature-freeze`
+### 2. 从 `dev` 进入 `freeze`
 
 当决定准备一个新版本时，从最新 `dev` 开始冻结。
 
 ```bash
 git checkout dev
 git pull --ff-only origin dev
-scripts/release.sh feature-freeze
+scripts/release.sh freeze
 ```
 
 脚本会显示当前版本号，询问目标 final version，例如 `1.1.0`，然后自动设置为
-`1.1.0a1` 并推送固定分支 `feature-freeze`。
+`1.1.0a1` 并推送固定分支 `freeze`。
 
 对应 section：
 
-- [开始 feature freeze](#开始-feature-freeze)
+- [开始 freeze](#开始-freeze)
 - [版本号规则](#版本号规则)
 - [安全开关](#安全开关)
 
 ### 3. 冻结期只修发布问题
 
-进入 `feature-freeze` 后，不再接收新功能。只修：
+进入 `freeze` 后，不再接收新功能。只修：
 
 - bug fix
 - release blocker
@@ -69,7 +69,7 @@ scripts/release.sh feature-freeze
 - release 文档
 - 版本 bump
 
-每次修复都进入 `feature-freeze`。如果需要从 `a1` 变成 `a2`、`b1`、`rc1`，
+每次修复都进入 `freeze`。如果需要从 `a1` 变成 `a2`、`b1`、`rc1`，
 按冻结期 bump 规则处理，并重新跑安装包 smoke。
 
 对应 section：
@@ -78,13 +78,13 @@ scripts/release.sh feature-freeze
 - [失败条件](#失败条件)
 - [注意事项](#注意事项)
 
-### 4. 从 `feature-freeze` 发布到 `main`
+### 4. 从 `freeze` 发布到 `main`
 
 当当前 freeze 版本已经达到可发布状态，例如 `1.1.0rc2`，执行正式发布：
 
 ```bash
-git checkout feature-freeze
-git pull --ff-only origin feature-freeze
+git checkout freeze
+git pull --ff-only origin freeze
 scripts/release.sh release
 ```
 
@@ -120,7 +120,7 @@ DeepCLI 使用三个长期分支：
 ```text
 dev
   ↓
-feature-freeze
+freeze
   ↓
 main
 ```
@@ -128,7 +128,7 @@ main
 职责：
 
 - `dev`：日常开发集成分支。
-- `feature-freeze`：固定发布冻结分支。进入后只做 bug fix、release blocker、
+- `freeze`：固定发布冻结分支。进入后只做 bug fix、release blocker、
   installer / packaging 修复和版本 bump。
 - `main`：稳定发布分支。只接收最终 release commit。
 
@@ -169,14 +169,48 @@ src/cli/src/acp/client.ts
 version-ok 1.0.0
 ```
 
-## 开始 feature freeze
+### 给当前 main 打 tag
+
+如果当前 release commit 已经在 `main`，且 Kernel version 已经是 final version，
+可以只执行 tag 发布：
+
+```bash
+git checkout main
+git pull --ff-only origin main
+scripts/release.sh tag
+```
+
+脚本会：
+
+1. 确认当前分支是 `main`。
+2. 确认 worktree 干净。
+3. 确认 Kernel version 是 final semver，例如 `1.0.0`。
+4. 确认 CLI 版本投影一致。
+5. 确认本地和远端都不存在 `v1.0.0` tag。
+6. push `main`。
+7. 创建 tag：
+
+   ```bash
+   git tag v1.0.0
+   ```
+
+8. push tag：
+
+   ```bash
+   git push origin v1.0.0
+   ```
+
+这个命令适合第一次 bootstrap release，或给已经在 `main` 上的 final release
+commit 补 tag。常规发布仍然优先使用 [正式发布](#正式发布)。
+
+## 开始 freeze
 
 从 `dev` 进入发布冻结：
 
 ```bash
 git checkout dev
 git pull --ff-only origin dev
-scripts/release.sh feature-freeze
+scripts/release.sh freeze
 ```
 
 脚本会：
@@ -186,24 +220,24 @@ scripts/release.sh feature-freeze
 3. 显示当前 Kernel version。
 4. 询问目标 final version，例如 `1.1.0`。
 5. 自动 bump 到 `1.1.0a1`。
-6. 从 `dev` 创建 / 重置固定分支 `feature-freeze`。
+6. 从 `dev` 创建 / 重置固定分支 `freeze`。
 7. 更新 Kernel / CLI 版本投影。
 8. commit：
 
    ```text
-   release: start feature freeze 1.1.0a1
+   release: start freeze 1.1.0a1
    ```
 
 9. push：
 
    ```bash
-   git push --force-with-lease origin feature-freeze
+   git push --force-with-lease origin freeze
    ```
 
 也可以直接传 final version：
 
 ```bash
-scripts/release.sh feature-freeze 1.1.0
+scripts/release.sh freeze 1.1.0
 ```
 
 这会直接生成 `1.1.0a1`。
@@ -223,17 +257,17 @@ scripts/release.sh check-version
 
 ## 正式发布
 
-从 `feature-freeze` 发布到 `main`：
+从 `freeze` 发布到 `main`：
 
 ```bash
-git checkout feature-freeze
-git pull --ff-only origin feature-freeze
+git checkout freeze
+git pull --ff-only origin freeze
 scripts/release.sh release
 ```
 
 脚本会：
 
-1. 确认当前分支是 `feature-freeze`。
+1. 确认当前分支是 `freeze`。
 2. 确认 worktree 干净。
 3. 读取当前 prerelease version，例如：
 
@@ -254,10 +288,10 @@ scripts/release.sh release
    release: v1.1.0
    ```
 
-7. push `feature-freeze`。
+7. push `freeze`。
 8. checkout `main`。
 9. `git pull --ff-only origin main`。
-10. `git merge --ff-only feature-freeze`。
+10. `git merge --ff-only freeze`。
 11. push `main`。
 12. 创建 tag：
 
@@ -299,7 +333,7 @@ checksums.txt
 1.1.0rc2
 ```
 
-`feature-freeze` 命令只自动创建第一版 `a1`。
+`freeze` 命令只自动创建第一版 `a1`。
 
 `release` 命令只接受当前 Kernel version 是 prerelease：
 
@@ -322,7 +356,7 @@ checksums.txt
 自动确认：
 
 ```bash
-DEEPCLI_RELEASE_YES=1 scripts/release.sh feature-freeze 1.1.0
+DEEPCLI_RELEASE_YES=1 scripts/release.sh freeze 1.1.0
 ```
 
 指定 remote：
@@ -339,14 +373,14 @@ DEEPCLI_RELEASE_REMOTE=origin scripts/release.sh release
 - worktree 不干净。
 - 版本号不是合法 final semver 或 prerelease semver。
 - CLI 版本投影和 Kernel 不一致。
-- `main` 不能 fast-forward 到 `feature-freeze`。
+- `main` 不能 fast-forward 到 `freeze`。
 - push 或 tag 失败。
 
 ## 注意事项
 
-- `feature-freeze` 是固定分支，所以开始新一轮 freeze 时会
-  `push --force-with-lease origin feature-freeze`。
+- `freeze` 是固定分支，所以开始新一轮 freeze 时会
+  `push --force-with-lease origin freeze`。
 - `release` 会切换到 `main` 分支。
 - 正式 tag 在远端 `main` push 成功之后才创建并 push。
-- 脚本不替代 release smoke。进入 `feature-freeze` 后仍需按计划运行安装包
+- 脚本不替代 release smoke。进入 `freeze` 后仍需按计划运行安装包
   smoke：build tarball -> isolated HOME install -> start -> readiness -> stop。

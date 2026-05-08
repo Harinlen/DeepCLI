@@ -2,8 +2,9 @@
 # DeepCLI release branch helper.
 #
 # Usage:
-#   scripts/release.sh feature-freeze [final-version]
+#   scripts/release.sh freeze [final-version]
 #   scripts/release.sh release
+#   scripts/release.sh tag
 #
 # Version source of truth is src/kernel/kernel/__init__.py.  This script
 # updates all release-facing projections from that Kernel version.
@@ -20,19 +21,25 @@ remote="${DEEPCLI_RELEASE_REMOTE:-origin}"
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/release.sh feature-freeze [final-version]
+  scripts/release.sh freeze [final-version]
   scripts/release.sh release
+  scripts/release.sh tag
 
 Commands:
-  feature-freeze  Run from dev.  Shows the current Kernel version, asks for
+  freeze  Run from dev.  Shows the current Kernel version, asks for
                   the next final version if omitted, bumps to <version>a1,
-                  commits, resets the fixed feature-freeze branch to dev,
-                  and pushes feature-freeze.
+                  commits, resets the fixed freeze branch to dev,
+                  and pushes freeze.
 
-  release         Run from feature-freeze.  Removes the prerelease suffix
+  release         Run from freeze.  Removes the prerelease suffix
                   from the current Kernel version, commits, pushes
-                  feature-freeze, fast-forwards main, tags v<version>,
+                  freeze, fast-forwards main, tags v<version>,
                   and pushes main + tag.
+
+  tag             Run from main.  Checks the current Kernel version is a
+                  final version, pushes main, tags v<version>, and pushes
+                  the tag.  This is useful for the first bootstrap release
+                  or for tagging an already-final release commit.
 
 Environment:
   DEEPCLI_RELEASE_REMOTE  Git remote to push. Default: origin.
@@ -207,7 +214,7 @@ commit_version_bump() {
   echo "Committed version $version"
 }
 
-cmd_feature_freeze() {
+cmd_freeze() {
   require_branch dev
   require_clean_worktree
 
@@ -217,24 +224,24 @@ cmd_feature_freeze() {
 
   next_final="${1:-}"
   if [ -z "$next_final" ]; then
-    read -r -p "Feature-freeze final version (for example 1.1.0): " next_final
+    read -r -p "Freeze final version (for example 1.1.0): " next_final
   fi
   validate_final_version "$next_final"
   next_freeze="${next_final}a1"
 
   echo "Freeze version will be: $next_freeze"
-  confirm "Reset fixed branch 'feature-freeze' from dev and push $next_freeze to $remote?"
+  confirm "Reset fixed branch 'freeze' from dev and push $next_freeze to $remote?"
 
-  git -C "$repo_root" fetch "$remote" dev feature-freeze main --prune || true
-  git -C "$repo_root" checkout -B feature-freeze dev
+  git -C "$repo_root" fetch "$remote" dev freeze main --prune || true
+  git -C "$repo_root" checkout -B freeze dev
   replace_versions "$next_freeze"
   check_versions
-  commit_version_bump "$next_freeze" "release: start feature freeze $next_freeze"
-  git -C "$repo_root" push --force-with-lease "$remote" feature-freeze
+  commit_version_bump "$next_freeze" "release: start freeze $next_freeze"
+  git -C "$repo_root" push --force-with-lease "$remote" freeze
 }
 
 cmd_release() {
-  require_branch feature-freeze
+  require_branch freeze
   require_clean_worktree
 
   local current final
@@ -243,31 +250,60 @@ cmd_release() {
 
   echo "Current freeze version: $current"
   echo "Final release version will be: $final"
-  confirm "Promote feature-freeze to main, tag v$final, and push to $remote?"
+  confirm "Promote freeze to main, tag v$final, and push to $remote?"
 
-  git -C "$repo_root" fetch "$remote" main feature-freeze --prune || true
+  git -C "$repo_root" fetch "$remote" main freeze --prune || true
   replace_versions "$final"
   check_versions
   commit_version_bump "$final" "release: v$final"
-  git -C "$repo_root" push "$remote" feature-freeze
+  git -C "$repo_root" push "$remote" freeze
 
   git -C "$repo_root" checkout main
   git -C "$repo_root" pull --ff-only "$remote" main
-  git -C "$repo_root" merge --ff-only feature-freeze
+  git -C "$repo_root" merge --ff-only freeze
   git -C "$repo_root" push "$remote" main
   git -C "$repo_root" tag "v$final"
   git -C "$repo_root" push "$remote" "v$final"
 }
 
+cmd_tag_current() {
+  require_branch main
+  require_clean_worktree
+
+  local current
+  current="$(read_kernel_version)"
+  validate_final_version "$current"
+  check_versions
+
+  if git -C "$repo_root" rev-parse -q --verify "refs/tags/v$current" >/dev/null; then
+    die "tag v$current already exists locally"
+  fi
+  if git -C "$repo_root" ls-remote --exit-code --tags "$remote" "refs/tags/v$current" >/dev/null 2>&1; then
+    die "tag v$current already exists on $remote"
+  fi
+
+  echo "Current final version: $current"
+  confirm "Push main, tag v$current, and push the tag to $remote?"
+
+  git -C "$repo_root" push "$remote" main
+  git -C "$repo_root" tag "v$current"
+  git -C "$repo_root" push "$remote" "v$current"
+}
+
 case "${1:-}" in
-  feature-freeze )
+  freeze )
     shift
-    cmd_feature_freeze "$@"
+    cmd_freeze "$@"
     ;;
   release )
     shift
     [ "$#" -eq 0 ] || die "release does not accept arguments"
     cmd_release
+    ;;
+  tag )
+    shift
+    [ "$#" -eq 0 ] || die "tag does not accept arguments"
+    cmd_tag_current
     ;;
   check-version )
     check_versions

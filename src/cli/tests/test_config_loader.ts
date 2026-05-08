@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadCliConfig, parseClientConfig } from "../src/config/loader.js";
-import { defaultClientConfigPath, defaultConfigDir, defaultDataDir, defaultStateDir, defaultTokenFilePath, expandHome } from "../src/config/paths.js";
+import { defaultClientConfigPath, defaultConfigDir, defaultDataDir, defaultStateDir, defaultTokenFilePath, expandHome, legacyClientConfigPath } from "../src/config/paths.js";
 import { assert } from "./helpers.js";
 
 const missing = join(tmpdir(), `deepcli-missing-${Date.now()}.yaml`);
@@ -67,12 +67,24 @@ try {
   assert(nativeLoaded.config.kernel.token_file === join(nativeStateDir, "auth_token"), "native state dir should be default token file");
 
   const homeDir = join(dir, ".deepcli-home");
-  assert(defaultConfigDir({ DEEPCLI_HOME: homeDir }) === homeDir, "DeepCLI home should be the default config dir");
+  assert(defaultConfigDir({ DEEPCLI_HOME: homeDir }) === join(homeDir, "config"), "DeepCLI config should live under home/config");
   assert(defaultStateDir({ DEEPCLI_HOME: homeDir }) === join(homeDir, "state"), "DeepCLI state should live under home/state");
   assert(defaultDataDir({ DEEPCLI_HOME: homeDir }) === join(homeDir, "data"), "DeepCLI data should live under home/data");
-  assert(defaultClientConfigPath({ DEEPCLI_HOME: "C:\\Users\\saki\\.deepcli" }, "win32") === "C:\\Users\\saki\\.deepcli\\client.yaml", "Windows config path should use DEEPCLI_HOME when set");
+  assert(defaultClientConfigPath({ DEEPCLI_HOME: "C:\\Users\\saki\\.deepcli" }, "win32") === "C:\\Users\\saki\\.deepcli\\config\\client.yaml", "Windows config path should use DEEPCLI_HOME/config when set");
   assert(defaultTokenFilePath({ DEEPCLI_HOME: "C:\\Users\\saki\\.deepcli" }, "win32") === "C:\\Users\\saki\\.deepcli\\state\\auth_token", "Windows token path should use DEEPCLI_HOME/state when set");
   assert(expandHome("~\\AppData").includes("AppData"), "Windows-style home expansion should work");
+
+  const legacyHome = join(dir, "legacy-home");
+  mkdirSync(legacyHome, { recursive: true });
+  writeFileSync(join(legacyHome, "client.yaml"), [
+    "ui:",
+    "  theme: legacy",
+  ].join("\n"));
+  const migrated = loadCliConfig({ env: { DEEPCLI_HOME: legacyHome } });
+  assert(migrated.path === join(legacyHome, "config", "client.yaml"), "legacy config should migrate toward canonical config path");
+  assert(migrated.config.ui.theme === "legacy", "legacy client.yaml should still be read when canonical file is missing");
+  assert(migrated.warnings.length === 1, "legacy client.yaml should emit a migration warning");
+  assert(legacyClientConfigPath({ DEEPCLI_HOME: legacyHome }) === join(legacyHome, "client.yaml"), "legacy path helper should point at old root client.yaml");
 	} finally {
 	  rmSync(dir, { recursive: true, force: true });
 	}

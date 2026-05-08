@@ -261,7 +261,7 @@ CLI 展示 approve/deny 对话框，结果回传 ACP。
 ### Phase D — session 管理 + 本地配置（P2）
 
 - session 选择器（列出历史 session，可恢复）
-- `~/.deepcli/client.yaml` 配置（主题、session startup、UI 偏好；kernel
+- `~/.deepcli/config/client.yaml` 配置（主题、session startup、UI 偏好；kernel
   URL/token 在产品路径由 launcher 环境变量提供）
 - 主题支持（移植 oh-my-pi theme 系统）
 

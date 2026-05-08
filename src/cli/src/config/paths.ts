@@ -36,7 +36,8 @@ export function defaultConfigDir(
   platform: NodeJS.Platform = process.platform,
 ): string {
   if (env.DEEPCLI_CONFIG_DIR) return expandHome(env.DEEPCLI_CONFIG_DIR);
-  return defaultDeepCliHome(env);
+  const joinPath = platform === "win32" ? win32.join : join;
+  return joinPath(defaultDeepCliHome(env), "config");
 }
 
 export function defaultStateDir(
@@ -63,6 +64,14 @@ export function defaultClientConfigPath(
 ): string {
   const joinPath = platform === "win32" ? win32.join : join;
   return joinPath(defaultConfigDir(env, platform), "client.yaml");
+}
+
+export function legacyClientConfigPath(
+  env: PathEnvironment = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const joinPath = platform === "win32" ? win32.join : join;
+  return joinPath(defaultDeepCliHome(env), "client.yaml");
 }
 
 export function resolveClientConfigPath(path: string | undefined, env: PathEnvironment = process.env): string {

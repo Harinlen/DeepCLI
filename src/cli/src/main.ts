@@ -44,6 +44,9 @@ async function main(): Promise<void> {
     }
     throw error;
   }
+  for (const warning of loaded.warnings) {
+    console.error(chalk.yellow(warning));
+  }
 
   const themeResult = await applyThemeConfig(loaded.config);
   if (themeResult.warning) console.error(chalk.yellow(themeResult.warning));

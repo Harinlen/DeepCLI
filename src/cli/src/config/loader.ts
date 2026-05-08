@@ -4,6 +4,7 @@ import { cloneDefaultConfig, type CliConfig, type OobeConfig, type SessionListSc
 import {
   CLIENT_CONFIG_PATH,
   defaultTokenFilePath,
+  legacyClientConfigPath,
   resolveClientConfigPath,
 } from "@/config/paths.js";
 import type { CliArgs } from "@/startup/args.js";
@@ -42,6 +43,12 @@ export function loadCliConfig(options: {
 
   if (existsSync(path)) {
     mergeConfig(config, parseClientConfig(readFileSync(path, "utf8"), path), path);
+  } else if (!options.path && !env.DEEPCLI_CONFIG_DIR) {
+    const legacyPath = legacyClientConfigPath(env);
+    if (legacyPath !== path && existsSync(legacyPath)) {
+      mergeConfig(config, parseClientConfig(readFileSync(legacyPath, "utf8"), legacyPath), legacyPath);
+      warnings.push(`Loaded legacy client config from ${legacyPath}; future writes will use ${path}.`);
+    }
   }
 
   applyEnvironment(config, env);

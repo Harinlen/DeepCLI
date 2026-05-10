@@ -4,8 +4,8 @@ Cross-platform `deepcli` launcher. The launcher owns local runtime discovery,
 user-level singleton locking, port selection, detached Supervisor startup, and
 CLI handoff.
 
-Linux v1 is implemented as Bash to avoid adding another build toolchain before
-the Kernel Python runtime is prepared.
+Linux/macOS v1 are implemented as Bash to avoid adding another build toolchain
+before the Kernel Python runtime is prepared.
 
 Linux v1:
 
@@ -36,13 +36,31 @@ Windows amd64 release packaging is implemented for v1.0.0:
   `%LOCALAPPDATA%\DeepCLI\tools\uv\` unless overridden by `DEEPCLI_INSTALL_DIR`;
 - Supervisor is started as a hidden process and gated by `/access/readiness`.
 
+macOS release packaging is implemented for v1.0.0:
+
+- user-level install via the shared POSIX `install.sh`, with local development
+  installs through `install-dev.sh` on macOS;
+- GitHub tag releases publish `deepcli-macos-amd64.tar.gz`,
+  `deepcli-macos-arm64.tar.gz`, arch-specific manifests, and arch-specific
+  checksum files; `install-macos.sh` is kept as a compatibility alias. Linux
+  also publishes `checksums-linux-amd64.txt`; legacy `checksums.txt` is kept
+  for the first Linux installer path.
+- Kernel ships as a source runtime inside a release tarball and runs from a
+  release-local managed Python venv;
+- CLI runs as a bundled `deepcli-cli` executable compiled for the release
+  architecture;
+- `uv` is installed as a DeepCLI-private tool under
+  `~/Library/Application Support/DeepCLI/tools/uv/`;
+- Supervisor is started as a detached POSIX process and gated by
+  `/access/readiness`.
+
 ## Development
 
 From this repo:
 
 ```bash
 cd src/launcher
-bash -n bin/deepcli packaging/linux/*.sh
+bash -n bin/deepcli packaging/linux/*.sh packaging/macos/*.sh packaging/posix/*.sh
 DEEPCLI_DEV_ROOT=/path/to/mustang ./bin/deepcli status
 DEEPCLI_DEV_ROOT=/path/to/mustang ./bin/deepcli kernel start
 ```
@@ -66,10 +84,17 @@ Published Windows releases can be installed from GitHub Release assets:
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/Harinlen/DeepCLI/releases/latest/download/install.ps1 | iex"
 ```
 
+Published Linux and macOS releases share one POSIX installer:
+
+```bash
+sh -c "$(curl -fsSL https://github.com/Harinlen/DeepCLI/releases/latest/download/install.sh)"
+```
+
 The root wrapper delegates to the launcher sub-repo script:
 
 ```bash
-src/launcher/packaging/linux/install-dev.sh
+src/launcher/packaging/linux/install-dev.sh   # Linux
+src/launcher/packaging/macos/install-dev.sh   # macOS
 src/launcher/packaging/windows/install-dev.ps1
 ```
 
@@ -96,9 +121,9 @@ and `src/kernel/pyproject.toml`.
     ├── cli/deepcli-cli
     ├── launcher/deepcli
     └── assets/welcome-logo.txt
-~/.local/state/deepcli/
-└── runtime/
-~/.config/deepcli/
+~/.deepcli/
+├── config/
+└── state/runtime/
 ```
 
 `~/.local/bin/deepcli` points at the current release's
@@ -122,6 +147,24 @@ and `src/kernel/pyproject.toml`.
 
 `bin\deepcli.cmd` is a shim that points at the current release's
 `launcher\deepcli.ps1`.
+
+## Packaged macOS Layout
+
+```text
+~/.local/bin/deepcli
+~/Library/Application Support/DeepCLI/
+├── tools/uv/<uv-version>/uv
+└── releases/<version>/
+    ├── kernel/.venv/
+    ├── cli/deepcli-cli
+    ├── launcher/deepcli
+    └── assets/welcome-logo.txt
+~/.deepcli/
+└── state/runtime/
+```
+
+`~/.local/bin/deepcli` points at the current release's
+`launcher/deepcli`.
 
 ## Customization
 

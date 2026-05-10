@@ -45,6 +45,7 @@ history or design document when this table grows.
 | Date | Item | Result | Verification |
 |---|---|---|---|
 | 2026-05-10 | Kernel Agent layout refactor | Reorganized active Kernel modules into `core`, `supervisor`, `agent_hub`, `agents/access`, and `agents/mustang`; moved Agent Hub contracts under Hub; renamed resource revision tracking; updated docs and probes for the new Agent/Mustang naming. | `uv run pytest tests/kernel -q`; targeted Phase2 lifecycle and cancel E2E probes; import smoke; `git diff --check` |
+| 2026-05-09 | POSIX macOS installer path | Merged latest `origin/main`, added macOS amd64 / arm64 one-line release packaging, and collapsed Linux/macOS packaging into shared `packaging/posix` build/install implementations with thin platform wrappers. The published POSIX `install.sh` auto-detects Linux vs macOS; `install-macos.sh` remains a compatibility alias. | `bash -n src/launcher/bin/deepcli src/launcher/packaging/linux/*.sh src/launcher/packaging/macos/*.sh src/launcher/packaging/posix/*.sh install-dev.sh`; `sh -n src/launcher/packaging/linux/install.sh src/launcher/packaging/macos/install.sh src/launcher/packaging/posix/install.sh`; Ruby YAML parse for `.github/workflows/release-packages.yml`; macOS release-shaped installer smoke with temp HOME and fake private `uv` -> `installer-smoke-ok`; macOS build-script smoke with fake `uv` / `bun` for `arm64` and `amd64` -> `build-smoke-ok`; `git diff --check` |
 | 2026-05-09 | REPL non-Windows completion | Retired the old JSON batch dispatcher and tests, moved primitive allowlist to `tools/repl/primitives.py`, and reduced the REPL plan to a completed record with only Windows probe remaining. | REPL/tool focused tests `38 passed`; REPL E2E `3 passed`; `git diff --check` |
 | 2026-05-09 | Remove `/auth` slash command | Removed `auth` from the CommandManager catalog and gateway special-case handling; credential storage remains available through ACP `secrets/auth`. | `73 passed`; `git diff --check` |
 | 2026-05-08 | Config-folder path cleanup | Moved canonical flags path to `~/.deepcli/config/flags.yaml`, kept legacy root flags as read-only fallback, confirmed CLI `client.yaml` stays under `config/`, and refreshed current docs/tests. | `18 passed`; CLI config/OOBE probes; REPL E2E `3 passed`; `git diff --check` |
@@ -70,7 +71,7 @@ history or design document when this table grows.
   commands, reconnect handling, slash command catalog, and PTY probes.
 - User-local `deepcli` launcher for release-shaped runtime startup, status,
   logs, restart/stop, and uninstall.
-- Linux and Windows installer paths with private DeepCLI `uv` / managed Python
+- Linux, macOS, and Windows installer paths with private DeepCLI `uv` / managed Python
   runtime and precompiled CLI artifact.
 
 ## Update Rules

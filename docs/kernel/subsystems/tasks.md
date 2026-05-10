@@ -7,8 +7,8 @@ Status: **draft** — 参考 Claude Code main 源码设计，尚未实装。
 > - Claude Code `src/tasks/LocalShellTask/`, `src/tasks/LocalAgentTask/`
 > - Claude Code `src/tools/AgentTool/`, `src/tools/TaskOutputTool/`, `src/tools/TaskStopTool/`
 > - Claude Code `src/utils/task/framework.ts`, `src/utils/task/TaskOutput.ts`, `src/utils/task/diskOutput.ts`
-> - DeepCLI `src/kernel/kernel/orchestrator/orchestrator.py` (query loop, step 6d TODO)
-> - DeepCLI `src/kernel/kernel/tools/context.py` (`ToolContext.tasks` stub)
+> - DeepCLI `src/kernel/kernel/agents/mustang/orchestrator/orchestrator.py` (query loop, step 6d TODO)
+> - DeepCLI `src/kernel/kernel/agents/mustang/tools/context.py` (`ToolContext.tasks` stub)
 > - DeepCLI `docs/kernel/subsystems/orchestrator.md` (Sub-agent 章节)
 
 ---

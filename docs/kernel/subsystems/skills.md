@@ -201,7 +201,7 @@ skills:
 ```
 
 配置走 `ConfigManager.bind_section(file="skills", section="skills",
-schema=SkillsConfig)`，schema 在 [`src/kernel/kernel/skills/config.py`](../../../src/kernel/kernel/skills/config.py)。
+schema=SkillsConfig)`，schema 在 [`src/kernel/kernel/agents/mustang/skills/config.py`](../../../src/kernel/kernel/agents/mustang/skills/config.py)。
 构造器 kwarg `claude_compat=...` 优先级高于 config（测试用途）。
 
 ### External dirs（来自 Hermes）

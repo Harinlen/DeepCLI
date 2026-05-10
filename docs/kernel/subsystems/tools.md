@@ -494,8 +494,8 @@ Deferred 层已激活：ToolManager 按 `Tool.should_defer` 自动路由到 `def
 ### 4.5 REPL Tool
 
 `REPL` 不是旧的 JSON batch dispatcher。当前实现位于
-[`src/kernel/kernel/tools/builtin/repl_python.py`](../../../src/kernel/kernel/tools/builtin/repl_python.py)，
-执行层位于 [`src/kernel/kernel/tools/repl/`](../../../src/kernel/kernel/tools/repl/)。
+[`src/kernel/kernel/agents/mustang/tools/builtin/repl_python.py`](../../../src/kernel/kernel/agents/mustang/tools/builtin/repl_python.py)，
+执行层位于 [`src/kernel/kernel/agents/mustang/tools/repl/`](../../../src/kernel/kernel/agents/mustang/tools/repl/)。
 
 运行模型：
 
@@ -619,7 +619,7 @@ mustang 的 ToolContext **刻意窄**：
 
 ## 6. 执行流水（Orchestrator.ToolExecutor 的改写）
 
-当前 [`src/kernel/kernel/orchestrator/tool_executor.py`](../../../src/kernel/kernel/orchestrator/tool_executor.py) 是 Phase 1 stub。真实实现分四段：
+当前 [`src/kernel/kernel/agents/mustang/orchestrator/tool_executor.py`](../../../src/kernel/kernel/agents/mustang/orchestrator/tool_executor.py) 是 Phase 1 stub。真实实现分四段：
 
 ```python
 async def _run_impl(self, tool_calls, on_permission, plan_mode):
@@ -2880,12 +2880,12 @@ Status: **landed** — 全部实装。
 > - Claude Code `src/tools/AgentTool/resumeAgent.ts`
 > - Claude Code `src/tasks/LocalAgentTask/LocalAgentTask.tsx` (`queuePendingMessage`, `drainPendingMessages`)
 > - Claude Code `src/utils/attachments.ts` (`getAgentPendingMessageAttachments`)
-> - DeepCLI `src/kernel/kernel/tools/builtin/agent.py` (现有 AgentTool)
-> - DeepCLI `src/kernel/kernel/tasks/types.py` (`AgentTaskState.pending_messages` 已定义)
-> - DeepCLI `src/kernel/kernel/tasks/registry.py` (现有 TaskRegistry)
-> - DeepCLI `src/kernel/kernel/orchestrator/orchestrator.py` (query loop, step 0/6d)
-> - DeepCLI `src/kernel/kernel/orchestrator/history.py` (`ConversationHistory`)
-> - DeepCLI `src/kernel/kernel/session/__init__.py` (SessionManager, sub-agent event handling)
+> - DeepCLI `src/kernel/kernel/agents/mustang/tools/builtin/agent.py` (现有 AgentTool)
+> - DeepCLI `src/kernel/kernel/agents/mustang/tasks/types.py` (`AgentTaskState.pending_messages` 已定义)
+> - DeepCLI `src/kernel/kernel/agents/mustang/tasks/registry.py` (现有 TaskRegistry)
+> - DeepCLI `src/kernel/kernel/agents/mustang/orchestrator/orchestrator.py` (query loop, step 0/6d)
+> - DeepCLI `src/kernel/kernel/agents/mustang/orchestrator/history.py` (`ConversationHistory`)
+> - DeepCLI `src/kernel/kernel/agents/mustang/sessions/__init__.py` (SessionManager, sub-agent event handling)
 > - DeepCLI `docs/plans/task-manager.md` (Task framework 设计)
 
 ---

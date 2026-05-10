@@ -44,7 +44,7 @@ CommandManager 是**命令目录提供者**，不是执行者。
 ## 目录结构
 
 ```
-src/kernel/kernel/commands/
+src/kernel/kernel/agents/mustang/commands/
 ├── types.py      ← CommandDef
 ├── registry.py   ← CommandRegistry（register + lookup + list）
 └── manager.py    ← CommandManager（Subsystem，注册内置命令）

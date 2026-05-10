@@ -407,7 +407,7 @@ self._current_used = self._current_used.model_copy(update={role: resolved})
 | `session/__init__.py` | L1499 `llm_manager.default_model` → `llm_manager.model_for("default")` |
 | `gateways/base.py` | L324 `key == llm.default_model` → `key == llm.model_for("default")` |
 
-### 协议层（src/kernel/kernel/protocol）
+### 协议层（src/kernel/kernel/core/protocol）
 
 | 文件 | 变更 |
 |------|------|

@@ -40,7 +40,7 @@ Discord  ──DiscordAdapter──►  SessionManager  ──►  Session.orche
 ## Directory Layout
 
 ```
-src/kernel/kernel/gateways/
+src/kernel/kernel/agents/mustang/gateways/
 ├── base.py           ← GatewayAdapter ABC + InboundMessage
 ├── manager.py        ← GatewayManager (Subsystem)
 └── discord/
@@ -52,7 +52,7 @@ src/kernel/kernel/gateways/
 Webhook-based platforms (WhatsApp, LINE) also need a FastAPI router:
 
 ```
-src/kernel/kernel/routes/
+src/kernel/kernel/agents/access/routes/
 └── gateways.py       ← POST /gateways/{adapter_id}/webhook
                          registered by GatewayManager at startup
 ```

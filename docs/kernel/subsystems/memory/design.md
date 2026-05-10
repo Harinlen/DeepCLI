@@ -680,7 +680,7 @@ class MemorySource(Protocol):
 遵守 D18（prompt 文本外置到 `.txt`）：
 
 ```
-src/kernel/kernel/memory/
+src/kernel/kernel/agents/mustang/memory/
 ├── __init__.py              # MemoryManager (Subsystem)
 ├── store.py                 # MemoryStore (IO layer, atomic write)
 ├── index.py                 # MemoryIndex (in-memory frontmatter cache)

@@ -492,7 +492,7 @@ class PermissionsSection(BaseModel):
 ```
 
 **注**:LLMJudge 用**哪个模型**不在 PermissionsSection 里配置,而是通过 LLMManager 的
-`current_used` role 机制([llm/config.py](../../../src/kernel/kernel/llm/config.py) 的
+`current_used` role 机制([llm/config.py](../../../src/kernel/kernel/agents/mustang/llm/config.py) 的
 `CurrentUsedConfig.bash_judge`)。用户在 `kernel.yaml` 里写:
 
 ```yaml

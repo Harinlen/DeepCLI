@@ -50,8 +50,8 @@ targets.
 |---|---|---|---|
 | Supervisor | `kernel.supervisor` | Child process lifecycle, restart budget, control socket, runtime files under `~/.deepcli/state/supervisor/`. | ACP session handling, LLM/tool execution. |
 | Agent Hub | `kernel.agent_hub` | Router, Manager, runtime registration, routing snapshots, shared resource revision boundary. | FastAPI edge, user auth, agent loop. |
-| Access Agent | `kernel.access_agent` + `kernel.app` | Loopback FastAPI edge, `/session`, readiness, connection auth, operator ACP methods, platform ingress/reply sinks. | Durable session truth, tool execution. |
-| Primary Agent Runtime | `kernel.agent_runtime` | `AgentSessionRuntimeService`, `SessionManager`, `SessionStore`, Orchestrator, LLM/tools/memory/hooks/MCP path for `primary`. | User-facing socket, process supervision. |
+| Access Agent | `kernel.agents.access` + `kernel.agents.access.app` | Loopback FastAPI edge, `/session`, readiness, connection auth, operator ACP methods, platform ingress/reply sinks. | Durable session truth, tool execution. |
+| Primary Agent Runtime | `kernel.agents.mustang.runtime` | `AgentSessionRuntimeService`, `SessionManager`, `SessionStore`, Orchestrator, LLM/tools/memory/hooks/MCP path for `primary`. | User-facing socket, process supervision. |
 | CLI / Probe | `src/cli`, `src/probe` | Thin ACP clients and TUI/probe rendering. | Kernel internals, SQLite/state files, process supervision. |
 
 ## Wire Boundary
@@ -73,7 +73,7 @@ unprefixed extension aliases are not part of the active protocol.
 
 ## Primary Runtime Bootstrap
 
-Inside the Primary Agent Runtime, `kernel.app:create_app` still builds a
+Inside the Primary Agent Runtime, `kernel.agents.access.app:create_app` still builds a
 `KernelModuleTable` and starts bootstrap services plus subsystems.  The
 important split is:
 
@@ -84,7 +84,7 @@ important split is:
 - **Transport** is bound to FastAPI and selected by flags; production uses the
   ACP stack.
 
-Startup order in `kernel.app`:
+Startup order in `kernel.agents.access.app`:
 
 ```text
 0. FlagManager

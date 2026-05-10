@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from kernel.git import GitManager
-from kernel.git.types import WorktreeSession
+from kernel.agents.mustang.git import GitManager
+from kernel.agents.mustang.git.types import WorktreeSession
 
 
 def _make_module_table(state_dir: Path) -> MagicMock:
@@ -82,10 +82,10 @@ class TestStartupGC:
 
         with (
             patch(
-                "kernel.git.count_changes", new_callable=AsyncMock
+                "kernel.agents.mustang.git.count_changes", new_callable=AsyncMock
             ) as mock_count,
             patch(
-                "kernel.git.remove_worktree", new_callable=AsyncMock
+                "kernel.agents.mustang.git.remove_worktree", new_callable=AsyncMock
             ) as mock_remove,
         ):
             mock_count.return_value = 0
@@ -108,7 +108,7 @@ class TestStartupGC:
         await mgr._store.insert(ws)
 
         with patch(
-            "kernel.git.count_changes", new_callable=AsyncMock
+            "kernel.agents.mustang.git.count_changes", new_callable=AsyncMock
         ) as mock_count:
             mock_count.return_value = 5
             await mgr._gc_stale_worktrees()

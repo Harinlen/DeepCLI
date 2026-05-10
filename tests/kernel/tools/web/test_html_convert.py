@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kernel.tools.web.html_convert import html_to_markdown
+from kernel.agents.mustang.tools.web.html_convert import html_to_markdown
 
 
 def test_basic_heading():

@@ -730,7 +730,7 @@ metadata:
 ```python
 # handler.py
 import subprocess
-from kernel.hooks import HookEventCtx, HookBlock
+from kernel.agents.mustang.hooks import HookEventCtx, HookBlock
 
 async def handle(ctx: HookEventCtx) -> None:
     # OpenClaw style: handler 自己 if 判断 (无 if_ DSL)

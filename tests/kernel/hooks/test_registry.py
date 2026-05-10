@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from kernel.hooks.registry import HookRegistry
-from kernel.hooks.types import HookEvent
+from kernel.agents.mustang.hooks.registry import HookRegistry
+from kernel.agents.mustang.hooks.types import HookEvent
 
 
 def test_get_empty_returns_empty_list() -> None:

@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from kernel.llm_provider import LLMProviderManager, _create_provider
-from kernel.llm_provider.deepseek import DeepSeekProvider
-from kernel.llm_provider.nvidia import NvidiaProvider
-from kernel.llm_provider.openai_compatible import OpenAICompatibleProvider
+from kernel.agents.mustang.llm_provider import LLMProviderManager, _create_provider
+from kernel.agents.mustang.llm_provider.deepseek import DeepSeekProvider
+from kernel.agents.mustang.llm_provider.nvidia import NvidiaProvider
+from kernel.agents.mustang.llm_provider.openai_compatible import OpenAICompatibleProvider
 
 
 async def test_manager_caches_by_full_credential_tuple() -> None:
@@ -74,7 +74,7 @@ def test_create_provider_rejects_unknown_type() -> None:
 
 
 def test_create_provider_bedrock_passes_aws_credentials() -> None:
-    with patch("kernel.llm_provider.bedrock.AsyncAnthropicBedrock") as cls:
+    with patch("kernel.agents.mustang.llm_provider.bedrock.AsyncAnthropicBedrock") as cls:
         provider = _create_provider(
             provider_type="bedrock",
             api_key="aws-key",
@@ -92,7 +92,7 @@ def test_create_provider_bedrock_passes_aws_credentials() -> None:
 
 
 async def test_bedrock_context_window_strips_region_prefix() -> None:
-    with patch("kernel.llm_provider.bedrock.AsyncAnthropicBedrock"):
+    with patch("kernel.agents.mustang.llm_provider.bedrock.AsyncAnthropicBedrock"):
         provider = _create_provider(
             provider_type="bedrock",
             api_key=None,

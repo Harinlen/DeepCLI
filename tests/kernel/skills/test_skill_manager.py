@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.skills import SkillManager
+from kernel.agents.mustang.skills import SkillManager
 
 
 def _write_skill(base: Path, name: str, description: str = "test", **extras) -> Path:

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from kernel.agent_runtime import ExternalAcpRuntimeAdapter
+from kernel.agents.mustang.runtime import ExternalAcpRuntimeAdapter
 
 
 @pytest.mark.asyncio

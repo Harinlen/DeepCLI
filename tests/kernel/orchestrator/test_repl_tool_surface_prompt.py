@@ -7,10 +7,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from kernel.llm.config import ModelRef
-from kernel.llm.types import PromptSection, ToolSchema
-from kernel.orchestrator.loop.steps import build_prompt
-from kernel.tools.registry import ToolSnapshot
+from kernel.agents.mustang.llm.config import ModelRef
+from kernel.agents.mustang.llm.types import PromptSection, ToolSchema
+from kernel.agents.mustang.orchestrator.loop.steps import build_prompt
+from kernel.agents.mustang.tools.registry import ToolSnapshot
 
 
 class _PromptBuilder:

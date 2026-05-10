@@ -9,9 +9,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from kernel.tools.builtin.web_fetch import WebFetchTool, _make_secondary_model_prompt
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
+from kernel.agents.mustang.tools.builtin.web_fetch import WebFetchTool, _make_secondary_model_prompt
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
 
 
 def _ctx(tmp_path: Path, summarise: Any = None) -> ToolContext:
@@ -46,7 +46,7 @@ class TestWebFetchSecondaryModel:
         tool = WebFetchTool()
 
         with patch(
-            "kernel.tools.web.fetch_backends.fetch_with_fallback",
+            "kernel.agents.mustang.tools.web.fetch_backends.fetch_with_fallback",
             new=AsyncMock(return_value=(_FakeResult("https://x", "raw page body"), "httpx")),
         ):
             results = []
@@ -71,7 +71,7 @@ class TestWebFetchSecondaryModel:
         tool = WebFetchTool()
 
         with patch(
-            "kernel.tools.web.fetch_backends.fetch_with_fallback",
+            "kernel.agents.mustang.tools.web.fetch_backends.fetch_with_fallback",
             new=AsyncMock(return_value=(_FakeResult("https://x", "raw body"), "httpx")),
         ):
             results = []
@@ -92,7 +92,7 @@ class TestWebFetchSecondaryModel:
         tool = WebFetchTool()
 
         with patch(
-            "kernel.tools.web.fetch_backends.fetch_with_fallback",
+            "kernel.agents.mustang.tools.web.fetch_backends.fetch_with_fallback",
             new=AsyncMock(return_value=(_FakeResult("https://x", "raw body"), "httpx")),
         ):
             results = []
@@ -114,7 +114,7 @@ class TestWebFetchSecondaryModel:
         tool = WebFetchTool()
 
         with patch(
-            "kernel.tools.web.fetch_backends.fetch_with_fallback",
+            "kernel.agents.mustang.tools.web.fetch_backends.fetch_with_fallback",
             new=AsyncMock(return_value=(_FakeResult("https://x", "raw body"), "httpx")),
         ):
             results = []

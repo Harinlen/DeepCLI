@@ -6,11 +6,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.tasks.registry import TaskRegistry
-from kernel.tasks.types import ShellTaskState, TaskStatus
-from kernel.tools.builtin.task_stop import TaskStopTool
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
+from kernel.agents.mustang.tasks.registry import TaskRegistry
+from kernel.agents.mustang.tasks.types import ShellTaskState, TaskStatus
+from kernel.agents.mustang.tools.builtin.task_stop import TaskStopTool
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
 
 
 def _ctx(tmp_path: Path) -> ToolContext:

@@ -80,18 +80,18 @@ uv run pytest --cov=kernel --cov-report=term-missing ../../tests/kernel
 | 模块 | 状态 | 已补内容 |
 |---|---|---|
 | `kernel.agent_runtime.session_service` | `needs edge coverage` | `CollectingRuntimeSender.notify/request`、无 client peer 错误、runtime client request frame shape、service 未启动错误、session connection 绑定/复用、prompt dir 发现 |
-| `kernel.session.client_stream.event_mapper` | `needs edge coverage` | `TextDelta`、`ToolCallStart`、`ToolCallResult` spill/broadcast 分离、`ToolCallLocations`、`ModeChanged`、`ConfigOptionChanged`、`SessionInfoChanged` user title guard |
-| `kernel.protocol.acp.event_mapper` | `sufficient for current config path` | 修正 config option update 断言，匹配当前 `ConfigOptionDescriptor` 列表形态 |
+| `kernel.agents.mustang.sessions.client_stream.event_mapper` | `needs edge coverage` | `TextDelta`、`ToolCallStart`、`ToolCallResult` spill/broadcast 分离、`ToolCallLocations`、`ModeChanged`、`ConfigOptionChanged`、`SessionInfoChanged` user title guard |
+| `kernel.core.protocol.acp.event_mapper` | `sufficient for current config path` | 修正 config option update 断言，匹配当前 `ConfigOptionDescriptor` 列表形态 |
 
 下一轮 P0 缺口：
 
 | 模块 | 当前覆盖率 | 需要补齐 |
 |---|---:|---|
-| `kernel.session.orchestration.factory` | `13%` | dependency closure 组装、缺失 subsystem 降级、permission/summarise/git/memory/tool 闭包调用形状 |
+| `kernel.agents.mustang.sessions.orchestration.factory` | `13%` | dependency closure 组装、缺失 subsystem 降级、permission/summarise/git/memory/tool 闭包调用形状 |
 | `kernel.supervisor.runtime` | `51%` | child exit handling、runtime file cleanup、port allocation failure、token propagation、shutdown race |
-| `kernel.session.runtime.helpers` | `43%` | git branch edge cases、cursor decode bad input、stop reason fallback、summarise closure chunk variants/error path |
-| `kernel.session.client_stream.replay` | `49%` | replay ordering、permission request exclusion、tool update/session info/config replay |
-| `kernel.session.api.gateway` | `44%` | gateway send failure、unknown session、router unavailable degradation |
+| `kernel.agents.mustang.sessions.runtime.helpers` | `43%` | git branch edge cases、cursor decode bad input、stop reason fallback、summarise closure chunk variants/error path |
+| `kernel.agents.mustang.sessions.client_stream.replay` | `49%` | replay ordering、permission request exclusion、tool update/session info/config replay |
+| `kernel.agents.mustang.sessions.api.gateway` | `44%` | gateway send failure、unknown session、router unavailable degradation |
 
 已知测试环境警告：
 
@@ -141,13 +141,13 @@ P0 收敛结果：
 
 | 模块 | 完成后覆盖率 | 状态 |
 |---|---:|---|
-| `kernel.session.api.gateway` | `100%` | sufficient |
-| `kernel.session.runtime.helpers` | `100%` | sufficient |
+| `kernel.agents.mustang.sessions.api.gateway` | `100%` | sufficient |
+| `kernel.agents.mustang.sessions.runtime.helpers` | `100%` | sufficient |
 | `kernel.supervisor.runtime` | `98%` | sufficient |
-| `kernel.session.orchestration.factory` | `92%` | sufficient |
-| `kernel.session.client_stream.replay` | `87%` | sufficient |
+| `kernel.agents.mustang.sessions.orchestration.factory` | `92%` | sufficient |
+| `kernel.agents.mustang.sessions.client_stream.replay` | `87%` | sufficient |
 | `kernel.agent_runtime.session_service` | covered by targeted tests | sufficient for current runtime bridge |
-| `kernel.session.client_stream.event_mapper` | covered by targeted tests | sufficient for current event families |
+| `kernel.agents.mustang.sessions.client_stream.event_mapper` | covered by targeted tests | sufficient for current event families |
 
 剩余非阻塞风险：
 
@@ -180,7 +180,7 @@ P0 收敛结果：
 本轮测试发现并修复的真实问题：
 
 - `kernel.agents.schema.AgentRuntimeSpec` 的 process-backed runtime command 校验因字段顺序未生效；已改为 `model_validator(mode="after")`。
-- `kernel.tools.web.search_backends.perplexity.PerplexitySearchBackend` 在 `citations` 存在但 `choices=[]` 时会先索引空列表崩溃；已改为先返回 citations，再安全读取 fallback content。
+- `kernel.agents.mustang.tools.web.search_backends.perplexity.PerplexitySearchBackend` 在 `citations` 存在但 `choices=[]` 时会先索引空列表崩溃；已改为先返回 citations，再安全读取 fallback content。
 
 本轮门禁结果：
 
@@ -203,15 +203,15 @@ cd src/kernel && uv run mypy kernel
 
 | 模块 | 当前覆盖率 | 缺口性质 |
 |---|---:|---|
-| `kernel.gateways.base` | `57%` | 平台 adapter 生命周期、reply sink、router/fallback、错误隔离 |
-| `kernel.gateways.discord.*` | `25%–40%` | Discord gateway/adapter 事件解析、连接生命周期、发送失败 |
-| `kernel.mcp.__init__` / `client` / OAuth / HTTP/SSE transport | `19%–65%` | 远端 transport、OAuth、重连、工具/资源同步错误路径 |
-| `kernel.memory.background` / `selector` / `store` | `34%–75%` | 后台刷新、LLM selector、索引/存储边界与坏数据 |
+| `kernel.agents.mustang.gateways.base` | `57%` | 平台 adapter 生命周期、reply sink、router/fallback、错误隔离 |
+| `kernel.agents.mustang.gateways.discord.*` | `25%–40%` | Discord gateway/adapter 事件解析、连接生命周期、发送失败 |
+| `kernel.agents.mustang.mcp.__init__` / `client` / OAuth / HTTP/SSE transport | `19%–65%` | 远端 transport、OAuth、重连、工具/资源同步错误路径 |
+| `kernel.agents.mustang.memory.background` / `selector` / `store` | `34%–75%` | 后台刷新、LLM selector、索引/存储边界与坏数据 |
 | `kernel.agent_runtime.session_service` | `50%` | list/load/prompt 转换边界、未启动/坏 schema、runtime sender replay |
-| `kernel.schedule.scheduler` / `delivery` / manager | `49%–61%` | claim/heartbeat/reaper/delivery 多分支 |
-| `kernel.tools.builtin.mcp_auth/read_mcp_resource/list_mcp_resources` | `20%–38%` | MCP tool auth flow、resource list/read 成功/失败 |
-| `kernel.tools.web.fetch_backends.httpx_html/readability/playwright` | `0%–33%` | SSRF redirect、HTTP fallback、optional dependency fetch |
-| `kernel.session.*` remaining gaps | `57%–87%` | lifecycle load/runtime、event writer、permission runner、user REPL |
+| `kernel.agents.mustang.schedule.scheduler` / `delivery` / manager | `49%–61%` | claim/heartbeat/reaper/delivery 多分支 |
+| `kernel.agents.mustang.tools.builtin.mcp_auth/read_mcp_resource/list_mcp_resources` | `20%–38%` | MCP tool auth flow、resource list/read 成功/失败 |
+| `kernel.agents.mustang.tools.web.fetch_backends.httpx_html/readability/playwright` | `0%–33%` | SSRF redirect、HTTP fallback、optional dependency fetch |
+| `kernel.agents.mustang.sessions.*` remaining gaps | `57%–87%` | lifecycle load/runtime、event writer、permission runner、user REPL |
 
 历史继续推进规则（已由 2026-05-03 收敛记录完成/取代）：
 
@@ -269,26 +269,26 @@ Coverage movement on previously named gaps:
 | 模块 | 上轮 | 本轮 | 状态 |
 |---|---:|---:|---|
 | `kernel.agent_runtime.session_service` | `46%–50%` | `74%` | sufficient for ACP contract conversion and runtime sender replay |
-| `kernel.gateways.manager` | `49%` | `100%` | sufficient |
-| `kernel.gateways.base` | `57%` | `65%` | base routing/permission/lifecycle covered; concrete platform API remains integration/platform scope |
-| `kernel.schedule.delivery` | `61%` | `88%` | sufficient |
-| `kernel.tools.builtin.list_mcp_resources` | `38%` | `100%` | sufficient |
-| `kernel.tools.builtin.read_mcp_resource` | `28%` | `89%` | sufficient |
-| `kernel.tools.builtin.mcp_auth` | `20%` | `75%` | sufficient for foreground OAuth branches; background token exchange/reconnect remains Probe/integration scope |
-| `kernel.tools.web.fetch_backends.__init__` | `77%` | `96%` | sufficient |
-| `kernel.tools.web.fetch_backends.readability_be` | `0%` | `94%` | sufficient |
-| `kernel.tools.web.search_backends.__init__` | `61%` | `97%` | sufficient |
-| `kernel.tools.web.search_backends.duckduckgo` | `33%` | `96%` | sufficient |
+| `kernel.agents.mustang.gateways.manager` | `49%` | `100%` | sufficient |
+| `kernel.agents.mustang.gateways.base` | `57%` | `65%` | base routing/permission/lifecycle covered; concrete platform API remains integration/platform scope |
+| `kernel.agents.mustang.schedule.delivery` | `61%` | `88%` | sufficient |
+| `kernel.agents.mustang.tools.builtin.list_mcp_resources` | `38%` | `100%` | sufficient |
+| `kernel.agents.mustang.tools.builtin.read_mcp_resource` | `28%` | `89%` | sufficient |
+| `kernel.agents.mustang.tools.builtin.mcp_auth` | `20%` | `75%` | sufficient for foreground OAuth branches; background token exchange/reconnect remains Probe/integration scope |
+| `kernel.agents.mustang.tools.web.fetch_backends.__init__` | `77%` | `96%` | sufficient |
+| `kernel.agents.mustang.tools.web.fetch_backends.readability_be` | `0%` | `94%` | sufficient |
+| `kernel.agents.mustang.tools.web.search_backends.__init__` | `61%` | `97%` | sufficient |
+| `kernel.agents.mustang.tools.web.search_backends.duckduckgo` | `33%` | `96%` | sufficient |
 
 剩余已归属缺口：
 
 | 模块 | 当前覆盖率 | 归属 |
 |---|---:|---|
-| `kernel.gateways.discord.*` | `25%–40%` | concrete Discord SDK/event-loop behavior；需要 platform fixture 或 adapter-level integration，不阻塞 Phase 1 owned unit goals |
-| `kernel.mcp.transport.http` / `sse` | `26%–28%` | streaming remote transport/OAuth header/session-expiry matrix；属于 MCP transport integration suite |
-| `kernel.memory.background` / `selector` | `34%–63%` | background refresh + LLM selector paths；已有 store/tool/index 单测，剩余进入 memory hardening tranche |
-| `kernel.schedule.scheduler` | `49%` | long-running scheduler loop/claim/reaper timing branches；已有 store/executor/delivery 单测，剩余需要 scheduler-focused tranche |
-| `kernel.tools.web.fetch_backends.httpx_html` / `playwright_be` | `57%` / `54%` | live HTTP response decoding and optional browser execution；真实 backend coverage belongs to external integration matrix |
+| `kernel.agents.mustang.gateways.discord.*` | `25%–40%` | concrete Discord SDK/event-loop behavior；需要 platform fixture 或 adapter-level integration，不阻塞 Phase 1 owned unit goals |
+| `kernel.agents.mustang.mcp.transport.http` / `sse` | `26%–28%` | streaming remote transport/OAuth header/session-expiry matrix；属于 MCP transport integration suite |
+| `kernel.agents.mustang.memory.background` / `selector` | `34%–63%` | background refresh + LLM selector paths；已有 store/tool/index 单测，剩余进入 memory hardening tranche |
+| `kernel.agents.mustang.schedule.scheduler` | `49%` | long-running scheduler loop/claim/reaper timing branches；已有 store/executor/delivery 单测，剩余需要 scheduler-focused tranche |
+| `kernel.agents.mustang.tools.web.fetch_backends.httpx_html` / `playwright_be` | `57%` / `54%` | live HTTP response decoding and optional browser execution；真实 backend coverage belongs to external integration matrix |
 
 闭合缝清单：
 

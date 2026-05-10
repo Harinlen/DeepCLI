@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from kernel.agents import RouterFrame, RoutingSnapshot
+from kernel.agent_hub.contracts import RouterFrame, RoutingSnapshot
 
 
 @dataclass(frozen=True)

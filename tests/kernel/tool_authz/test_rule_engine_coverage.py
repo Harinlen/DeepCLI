@@ -11,12 +11,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from kernel.tool_authz.rule_engine import RuleEngine, _is_mcp_server_rule, _rule_matches_tool
-from kernel.tool_authz.rule_parser import parse_rule
-from kernel.tool_authz.types import RuleSource
-from kernel.tools.tool import Tool
-from kernel.tools.types import PermissionSuggestion, ToolCallResult
-from kernel.orchestrator.types import ToolKind
+from kernel.agents.mustang.tool_authz.rule_engine import RuleEngine, _is_mcp_server_rule, _rule_matches_tool
+from kernel.agents.mustang.tool_authz.rule_parser import parse_rule
+from kernel.agents.mustang.tool_authz.types import RuleSource
+from kernel.agents.mustang.tools.tool import Tool
+from kernel.agents.mustang.tools.types import PermissionSuggestion, ToolCallResult
+from kernel.agents.mustang.orchestrator.types import ToolKind
 
 
 # ---------------------------------------------------------------------------

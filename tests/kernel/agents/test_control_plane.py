@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import get_type_hints
 
-from kernel.agents import (
+from kernel.agent_hub.contracts import (
     ACP_METHOD_BY_OPERATION,
     MUSTANG_METHOD_BY_OPERATION,
     AgentControlOperation,
@@ -18,7 +18,7 @@ from kernel.agents import (
     RuntimeTarget,
     StatusSnapshot,
 )
-from kernel.protocol.acp.namespaces import AcpMethod, MustangMethod
+from kernel.core.protocol.acp.namespaces import AcpMethod, MustangMethod
 
 
 def test_runtime_kinds_cover_planned_backends() -> None:

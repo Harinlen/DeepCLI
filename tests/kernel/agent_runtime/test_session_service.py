@@ -7,19 +7,19 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic import BaseModel
 
-from kernel.agent_runtime.session_service import (
+from kernel.agents.mustang.runtime.session_service import (
     AgentSessionRuntimeService,
     CollectingRuntimeSender,
     _prompt_user_dirs,
 )
-from kernel.protocol.acp.schemas.content import AcpTextBlock
-from kernel.protocol.acp.schemas.permission import (
+from kernel.core.protocol.acp.schemas.content import AcpTextBlock
+from kernel.core.protocol.acp.schemas.permission import (
     PermissionOption,
     RequestPermissionRequest,
     RequestPermissionResponse,
     ToolCallUpdate,
 )
-from kernel.protocol.acp.schemas.session import (
+from kernel.core.protocol.acp.schemas.session import (
     CloseSessionRequest,
     ExecuteShellRequest,
     ListSessionsRequest,
@@ -29,7 +29,7 @@ from kernel.protocol.acp.schemas.session import (
     ResumeSessionRequest,
     SetSessionModeRequest,
 )
-from kernel.protocol.acp.schemas.updates import AgentMessageChunk, SessionUpdateNotification
+from kernel.core.protocol.acp.schemas.updates import AgentMessageChunk, SessionUpdateNotification
 
 
 class _DumpableResult:

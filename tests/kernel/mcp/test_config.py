@@ -1,4 +1,4 @@
-"""Tests for kernel.mcp.config — config loading, merging, policy."""
+"""Tests for kernel.agents.mustang.mcp.config — config loading, merging, policy."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 
-from kernel.mcp.config import (
+from kernel.agents.mustang.mcp.config import (
     HTTPServerConfig,
     MCPConfig,
     MCPPolicyConfig,

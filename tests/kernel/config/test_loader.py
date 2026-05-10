@@ -1,4 +1,4 @@
-"""Tests for :mod:`kernel.config.loader`.
+"""Tests for :mod:`kernel.core.config.loader`.
 
 Loader is all pure functions, so the tests exercise each layer in
 isolation (``deep_merge``, CLI parsing, file scanning) plus an
@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from kernel.config import loader
+from kernel.core.config import loader
 
 
 # --------------------------------------------------------------------

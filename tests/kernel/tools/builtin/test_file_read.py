@@ -10,15 +10,15 @@ from unittest.mock import patch
 
 import pytest
 
-from kernel.llm.types import ImageContent, TextContent
-from kernel.tools.builtin.file_read import (
+from kernel.agents.mustang.llm.types import ImageContent, TextContent
+from kernel.agents.mustang.tools.builtin.file_read import (
     FileReadTool,
     _format_page_list,
     _parse_pages,
 )
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
-from kernel.tools.types import FileDisplay, ToolCallResult, ToolInputError
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
+from kernel.agents.mustang.tools.types import FileDisplay, ToolCallResult, ToolInputError
 
 
 # ---------------------------------------------------------------------------

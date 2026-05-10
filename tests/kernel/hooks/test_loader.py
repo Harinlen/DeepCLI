@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from kernel.hooks.loader import discover
+from kernel.agents.mustang.hooks.loader import discover
 
 
 def _write_hook(

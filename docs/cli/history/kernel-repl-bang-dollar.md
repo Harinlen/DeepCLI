@@ -186,10 +186,10 @@ Request or notification:
 不要另起一套 `session/repl/bash.py` / `session/repl/powershell.py` executor。Kernel
 已经有：
 
-- `kernel.tools.builtin.repl.ReplTool`：LLM 侧批量执行 primitive tools 的 wrapper。
-- `kernel.tools.builtin.bash.BashTool`：POSIX shell executor、风险判断、后台任务支持。
-- `kernel.tools.builtin.powershell.PowerShellTool`：Windows shell executor、PowerShell 风险判断。
-- `kernel.tools.platform.use_powershell_tool()`：平台级 Bash / PowerShell 选择。
+- `kernel.agents.mustang.tools.builtin.repl.ReplTool`：LLM 侧批量执行 primitive tools 的 wrapper。
+- `kernel.agents.mustang.tools.builtin.bash.BashTool`：POSIX shell executor、风险判断、后台任务支持。
+- `kernel.agents.mustang.tools.builtin.powershell.PowerShellTool`：Windows shell executor、PowerShell 风险判断。
+- `kernel.agents.mustang.tools.platform.use_powershell_tool()`：平台级 Bash / PowerShell 选择。
 - `ToolRegistry.lookup()`：即使 REPL mode 隐藏 primitive tools，也保留 lookup 供内部 dispatch。
 
 因此本计划的 kernel 侧新增能力应是 **user REPL façade**，而不是第二套 shell
@@ -230,7 +230,7 @@ src/kernel/kernel/session/user_repl/
 - `UserReplService` 负责用户输入层的直接执行。
 - 两者必须共享 primitive tool 实现，不能复制 Bash/PowerShell/Python 执行逻辑。
 - 如果发现 `ReplTool._run_one()` 中有可复用逻辑，应下沉成公共 helper（例如
-  `kernel.tools.dispatch.call_tool_for_repl()`），供 `ReplTool` 和 `UserReplService`
+  `kernel.agents.mustang.tools.dispatch.call_tool_for_repl()`），供 `ReplTool` 和 `UserReplService`
   共同使用；不要让 `UserReplService` 调 private `_run_one()`。
 
 ### Shell execution
@@ -242,7 +242,7 @@ src/kernel/kernel/session/user_repl/
 - Windows 走现有 `PowerShellTool`；该 tool 已有 `aliases = ("Bash",)`，兼容通过
   `"Bash"` lookup 的调用。
 - 新增 `CmdTool` 作为 Windows `cmd.exe` backend，并统一接入 ToolManager。
-- shell backend 选择优先复用并扩展 `kernel.tools.platform` 和 builtin registration 逻辑：
+- shell backend 选择优先复用并扩展 `kernel.agents.mustang.tools.platform` 和 builtin registration 逻辑：
   - POSIX：注册 `BashTool`。
   - Windows + PowerShell 可用：注册 `PowerShellTool`。
   - Windows + PowerShell 不可用 + `cmd.exe` 可用：注册 `CmdTool`，并提供 `aliases = ("Bash", "PowerShell")`
@@ -373,7 +373,7 @@ src/cli/src/modes/interactive.ts
 - `BashTool` 改为使用公共 helper。
 - `PowerShellTool` 改为使用公共 helper。
 - 新增 `CmdTool`，使用 `cmd.exe /d /s /c <command>`。
-- 扩展 `kernel.tools.platform`：
+- 扩展 `kernel.agents.mustang.tools.platform`：
   - `has_cmd()`
   - shell tool selection 覆盖 Bash / PowerShell / cmd。
 - 更新 builtin tool registration。

@@ -9,9 +9,9 @@ from kernel.agent_hub import (
     AgentHub,
     AgentHubManager,
     AgentHubRouter,
-    GlobalResourceMonitor,
+    ResourceRevisionTracker,
 )
-from kernel.agents import (
+from kernel.agent_hub.contracts import (
     AgentBindings,
     AgentDefinition,
     AgentPolicy,
@@ -27,7 +27,7 @@ from kernel.agents import (
     RouterTarget,
     default_primary_agent_definition,
 )
-from kernel.config import ConfigManager
+from kernel.core.config import ConfigManager
 
 
 def _caller() -> CallerIdentity:
@@ -168,8 +168,8 @@ def test_router_rejects_targets_not_in_durable_snapshot(tmp_path: Path) -> None:
     assert router.route_message(frame) is None
 
 
-def test_global_resource_monitor_validates_capability() -> None:
-    monitor = GlobalResourceMonitor()
+def test_resource_revision_tracker_validates_capability() -> None:
+    monitor = ResourceRevisionTracker()
     caller = _caller()
 
     event = monitor.write(

@@ -21,10 +21,10 @@ import yaml
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from kernel import app as app_module
-from kernel.connection_auth.password import hash_password
-from kernel.config import ConfigManager
-from kernel.flags import FlagManager
+from kernel.agents.access import app as app_module
+from kernel.agents.access.security.password import hash_password
+from kernel.core.config import ConfigManager
+from kernel.core.flags import FlagManager
 
 _CLOSE_AUTH_FAILED = 4003
 _CLOSE_INTERNAL_ERROR = 1011
@@ -41,7 +41,7 @@ def mustang_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
       their default user-home paths at *module import time*, so
       patching ``Path.home`` after import is useless — the module
       already captured the real user path.  We shim the factories
-      the lifespan uses in :mod:`kernel.app` so they receive
+      the lifespan uses in :mod:`kernel.agents.access.app` so they receive
       explicit tmp paths.
     - :class:`ConnectionAuthenticator` reads its state dir from the module
       table at *runtime* inside the lifespan, and the lifespan
@@ -59,7 +59,7 @@ def mustang_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     monkeypatch.setattr(app_module, "FlagManager", lambda: FlagManager(path=flags_path))
 
-    from kernel.secrets import SecretManager
+    from kernel.core.secrets import SecretManager
 
     monkeypatch.setattr(
         app_module, "SecretManager",

@@ -353,7 +353,7 @@ class ModelHandler(Protocol):
 
 `ModelHandler` 和 `SessionHandler` 共享 `HandlerContext`（连接上下文），但 `model/*` 方法的实现不使用 `ctx.sender` 发送 notification ——  它们是简单的 request/response 操作。`HandlerContext` 统一传入是为了保持接口一致性，方便未来按需扩展（例如 model 操作的 audit log）。
 
-isolation 保证同 SessionHandler：`LLMManager` 不 import 任何 `kernel.protocol.acp` 内容，只见 Pydantic contract 类型。
+isolation 保证同 SessionHandler：`LLMManager` 不 import 任何 `kernel.core.protocol.acp` 内容，只见 Pydantic contract 类型。
 
 `model/provider_list` exposes all configured provider models, provider
 metadata, role refs via `currentUsed`, per-model `contextWindows`,
@@ -575,7 +575,7 @@ INFO 级足够回答 95% 的诊断问题（"哪条消息丢了"、"哪个 method
 
 ### DEBUG 级的开启方式
 
-- 通过标准 Python logging 配置：`logging.getLogger("kernel.protocol").setLevel(logging.DEBUG)`
+- 通过标准 Python logging 配置：`logging.getLogger("kernel.core.protocol").setLevel(logging.DEBUG)`
 - 文档里明确警告："DEBUG 级日志会记录原始用户 prompt / 工具参数 / LLM 响应内容，请仅在隔离环境启用，不要在生产环境开启"
 - 不提供 config.yaml 入口 —— 故意让开启这件事需要"改代码 / 改环境变量"的门槛，避免用户误触
 

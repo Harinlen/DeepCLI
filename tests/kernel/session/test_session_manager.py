@@ -23,29 +23,29 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from kernel.llm.config import ModelRef
-from kernel.llm.types import AssistantMessage, TextContent
-from kernel.orchestrator.config import OrchestratorConfig
-from kernel.orchestrator.events import HistoryAppend, TextDelta
-from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
-from kernel.protocol.interfaces.contracts.archive_session_params import ArchiveSessionParams
-from kernel.protocol.interfaces.contracts.close_session_params import CloseSessionParams
-from kernel.protocol.interfaces.contracts.delete_session_params import DeleteSessionParams
-from kernel.protocol.interfaces.contracts.get_usage_params import GetUsageParams
-from kernel.protocol.interfaces.contracts.list_sessions_params import ListSessionsParams
-from kernel.protocol.interfaces.contracts.load_session_params import LoadSessionParams
-from kernel.protocol.interfaces.contracts.new_session_params import NewSessionParams
-from kernel.protocol.interfaces.contracts.prompt_params import PromptParams
-from kernel.protocol.interfaces.contracts.rename_session_params import RenameSessionParams
-from kernel.protocol.interfaces.contracts.resume_session_params import ResumeSessionParams
-from kernel.protocol.interfaces.contracts.set_config_option_params import SetConfigOptionParams
-from kernel.protocol.interfaces.contracts.set_mode_params import SetModeParams
-from kernel.protocol.interfaces.contracts.text_block import TextBlock
-from kernel.protocol.interfaces.errors import InvalidParams, InvalidRequest, ResourceNotFoundError
-from kernel.session import AgentContext, SessionManager
-from kernel.session.events import UserMessageEvent
-from kernel.session.runtime.state import Session
-from kernel.session.store import SessionStore
+from kernel.agents.mustang.llm.config import ModelRef
+from kernel.agents.mustang.llm.types import AssistantMessage, TextContent
+from kernel.agents.mustang.orchestrator.config import OrchestratorConfig
+from kernel.agents.mustang.orchestrator.events import HistoryAppend, TextDelta
+from kernel.core.protocol.interfaces.contracts.handler_context import HandlerContext
+from kernel.core.protocol.interfaces.contracts.archive_session_params import ArchiveSessionParams
+from kernel.core.protocol.interfaces.contracts.close_session_params import CloseSessionParams
+from kernel.core.protocol.interfaces.contracts.delete_session_params import DeleteSessionParams
+from kernel.core.protocol.interfaces.contracts.get_usage_params import GetUsageParams
+from kernel.core.protocol.interfaces.contracts.list_sessions_params import ListSessionsParams
+from kernel.core.protocol.interfaces.contracts.load_session_params import LoadSessionParams
+from kernel.core.protocol.interfaces.contracts.new_session_params import NewSessionParams
+from kernel.core.protocol.interfaces.contracts.prompt_params import PromptParams
+from kernel.core.protocol.interfaces.contracts.rename_session_params import RenameSessionParams
+from kernel.core.protocol.interfaces.contracts.resume_session_params import ResumeSessionParams
+from kernel.core.protocol.interfaces.contracts.set_config_option_params import SetConfigOptionParams
+from kernel.core.protocol.interfaces.contracts.set_mode_params import SetModeParams
+from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
+from kernel.core.protocol.interfaces.errors import InvalidParams, InvalidRequest, ResourceNotFoundError
+from kernel.agents.mustang.sessions import AgentContext, SessionManager
+from kernel.agents.mustang.sessions.events import UserMessageEvent
+from kernel.agents.mustang.sessions.runtime.state import Session
+from kernel.agents.mustang.sessions.store import SessionStore
 
 # Mark every async test in this module to run under anyio (asyncio backend).
 pytestmark = pytest.mark.anyio
@@ -176,7 +176,7 @@ async def test_new_writes_session_created_event(manager: SessionManager, tmp_pat
 
     events = await manager._store.read_events(result.session_id)
     assert len(events) == 1
-    from kernel.session.events import SessionCreatedEvent
+    from kernel.agents.mustang.sessions.events import SessionCreatedEvent
 
     assert isinstance(events[0], SessionCreatedEvent)
 
@@ -666,8 +666,8 @@ async def test_resume_session_replays_usage_snapshot(
     result = await manager.new(_make_ctx(), NewSessionParams(cwd=str(tmp_path)))
     sid = result.session_id
 
-    from kernel.session.events import TurnCompletedEvent as TCE
-    from kernel.session.models import TokenUsageUpdate
+    from kernel.agents.mustang.sessions.events import TurnCompletedEvent as TCE
+    from kernel.agents.mustang.sessions.models import TokenUsageUpdate
 
     await manager._store.append_event(
         sid,
@@ -939,8 +939,8 @@ async def test_token_deltas_persist_across_turns(manager: SessionManager, tmp_pa
     result = await manager.new(ctx, NewSessionParams(cwd=str(tmp_path)))
     sid = result.session_id
 
-    from kernel.session.events import TurnCompletedEvent as TCE
-    from kernel.session.models import TokenUsageUpdate
+    from kernel.agents.mustang.sessions.events import TurnCompletedEvent as TCE
+    from kernel.agents.mustang.sessions.models import TokenUsageUpdate
 
     base_fields = dict(
         parent_id=None,
@@ -974,8 +974,8 @@ async def test_get_usage_returns_cost_panel_data(manager: SessionManager, tmp_pa
     result = await manager.new(ctx, NewSessionParams(cwd=str(tmp_path)))
     sid = result.session_id
 
-    from kernel.session.events import AgentMessageEvent, ToolCallEvent, TurnCompletedEvent
-    from kernel.session.models import TokenUsageUpdate
+    from kernel.agents.mustang.sessions.events import AgentMessageEvent, ToolCallEvent, TurnCompletedEvent
+    from kernel.agents.mustang.sessions.models import TokenUsageUpdate
 
     base_fields = dict(
         parent_id=None,
@@ -1043,8 +1043,8 @@ async def test_get_usage_returns_cost_panel_data(manager: SessionManager, tmp_pa
 
 async def test_orchestrator_last_turn_usage_resets_each_query() -> None:
     """last_turn_usage resets to (0, 0) at the start of a new query."""
-    from kernel.orchestrator.orchestrator import StandardOrchestrator
-    from kernel.orchestrator.types import OrchestratorDeps, PermissionCallback
+    from kernel.agents.mustang.orchestrator.orchestrator import StandardOrchestrator
+    from kernel.agents.mustang.orchestrator.types import OrchestratorDeps, PermissionCallback
 
     # Build a minimal orchestrator with a mock provider.
     mock_provider = MagicMock()

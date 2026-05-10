@@ -9,9 +9,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from kernel.tasks.id import generate_task_id
-from kernel.tasks.registry import TaskRegistry
-from kernel.tasks.types import (
+from kernel.agents.mustang.tasks.id import generate_task_id
+from kernel.agents.mustang.tasks.registry import TaskRegistry
+from kernel.agents.mustang.tasks.types import (
     MonitorTaskState,
     ShellTaskState,
     TaskStatus,
@@ -176,8 +176,8 @@ class TestMonitorToolCall:
     @pytest.mark.asyncio
     async def test_spawn_and_read_output(self) -> None:
         """Monitor a command that emits 3 lines, verify buffer fills."""
-        from kernel.tools.builtin.monitor import MonitorTool
-        from kernel.tools.types import ToolCallResult
+        from kernel.agents.mustang.tools.builtin.monitor import MonitorTool
+        from kernel.agents.mustang.tools.types import ToolCallResult
 
         reg = TaskRegistry()
 
@@ -194,7 +194,7 @@ class TestMonitorToolCall:
         # Use a temp dir for task output files.
         with tempfile.TemporaryDirectory() as tmpdir:
             # Patch get_task_output_dir to use tmpdir.
-            import kernel.tasks.output as output_mod
+            import kernel.agents.mustang.tasks.output as output_mod
 
             original_fn = output_mod.get_task_output_dir
             output_mod.get_task_output_dir = lambda sid: _ensure_dir(tmpdir)
@@ -242,8 +242,8 @@ class TestMonitorToolCall:
     @pytest.mark.asyncio
     async def test_error_when_no_task_system(self) -> None:
         """MonitorTool returns error when task system is unavailable."""
-        from kernel.tools.builtin.monitor import MonitorTool
-        from kernel.tools.types import ToolCallResult
+        from kernel.agents.mustang.tools.builtin.monitor import MonitorTool
+        from kernel.agents.mustang.tools.types import ToolCallResult
 
         ctx = MagicMock()
         ctx.tasks = None

@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from kernel.tools.builtin.enter_worktree import EnterWorktreeTool
-from kernel.tools.types import ToolCallResult, ToolInputError
+from kernel.agents.mustang.tools.builtin.enter_worktree import EnterWorktreeTool
+from kernel.agents.mustang.tools.types import ToolCallResult, ToolInputError
 
 
 def _make_ctx(
@@ -54,12 +54,12 @@ class TestEnterWorktree:
 
         with (
             patch(
-                "kernel.tools.builtin.enter_worktree.find_git_root",
+                "kernel.agents.mustang.tools.builtin.enter_worktree.find_git_root",
                 new_callable=AsyncMock,
                 return_value=tmp_path,
             ),
             patch(
-                "kernel.tools.builtin.enter_worktree.create_worktree",
+                "kernel.agents.mustang.tools.builtin.enter_worktree.create_worktree",
                 new_callable=AsyncMock,
                 return_value=(wt_path, "worktree-feat"),
             ),
@@ -114,7 +114,7 @@ class TestEnterWorktree:
     async def test_not_git_repo_error(self) -> None:
         ctx = _make_ctx()
         with patch(
-            "kernel.tools.builtin.enter_worktree.find_git_root",
+            "kernel.agents.mustang.tools.builtin.enter_worktree.find_git_root",
             new_callable=AsyncMock,
             side_effect=ToolInputError("not in a git repository"),
         ):
@@ -139,17 +139,17 @@ class TestEnterWorktree:
 
         with (
             patch(
-                "kernel.tools.builtin.enter_worktree.find_git_root",
+                "kernel.agents.mustang.tools.builtin.enter_worktree.find_git_root",
                 new_callable=AsyncMock,
                 return_value=tmp_path,
             ),
             patch(
-                "kernel.tools.builtin.enter_worktree.create_worktree",
+                "kernel.agents.mustang.tools.builtin.enter_worktree.create_worktree",
                 new_callable=AsyncMock,
                 return_value=(wt_path, "worktree-feat"),
             ),
             patch(
-                "kernel.tools.builtin.enter_worktree.setup_sparse_checkout",
+                "kernel.agents.mustang.tools.builtin.enter_worktree.setup_sparse_checkout",
                 new_callable=AsyncMock,
             ) as mock_sparse,
         ):
@@ -169,12 +169,12 @@ class TestEnterWorktree:
 
         with (
             patch(
-                "kernel.tools.builtin.enter_worktree.find_git_root",
+                "kernel.agents.mustang.tools.builtin.enter_worktree.find_git_root",
                 new_callable=AsyncMock,
                 return_value=tmp_path,
             ),
             patch(
-                "kernel.tools.builtin.enter_worktree.create_worktree",
+                "kernel.agents.mustang.tools.builtin.enter_worktree.create_worktree",
                 new_callable=AsyncMock,
                 return_value=(wt_path, "worktree-feat"),
             ),
@@ -184,8 +184,8 @@ class TestEnterWorktree:
 
         modifier = results[0].context_modifier
         # Build a minimal ToolContext-like object to test the modifier.
-        from kernel.tools.context import ToolContext
-        from kernel.tools.file_state import FileStateCache
+        from kernel.agents.mustang.tools.context import ToolContext
+        from kernel.agents.mustang.tools.file_state import FileStateCache
 
         old_ctx = ToolContext(
             session_id="s1",

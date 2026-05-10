@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.commands import CommandManager, CommandDef, CommandRegistry
-from kernel.protocol.acp.namespaces import MustangMethod
+from kernel.agents.mustang.commands import CommandManager, CommandDef, CommandRegistry
+from kernel.core.protocol.acp.namespaces import MustangMethod
 
 
 # ---------------------------------------------------------------------------
@@ -164,12 +164,12 @@ class _FakeModuleTable:
         self.skills = skills
 
     def has(self, cls: object) -> bool:
-        from kernel.skills import SkillManager
+        from kernel.agents.mustang.skills import SkillManager
 
         return cls is SkillManager
 
     def get(self, cls: object) -> object:
-        from kernel.skills import SkillManager
+        from kernel.agents.mustang.skills import SkillManager
 
         if cls is SkillManager:
             return self.skills

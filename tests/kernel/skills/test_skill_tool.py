@@ -12,8 +12,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.tools.builtin.skill_tool import SkillTool
-from kernel.tools.types import TextDisplay, ToolCallResult, ToolInputError
+from kernel.agents.mustang.tools.builtin.skill_tool import SkillTool
+from kernel.agents.mustang.tools.types import TextDisplay, ToolCallResult, ToolInputError
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +87,7 @@ def _make_skill(
     skill = MagicMock()
     skill.manifest = manifest
 
-    from kernel.skills.types import ActivationResult
+    from kernel.agents.mustang.skills.types import ActivationResult
 
     result = ActivationResult(
         body=body,

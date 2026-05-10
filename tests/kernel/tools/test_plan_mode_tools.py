@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from kernel.tools.builtin.enter_plan_mode import EnterPlanModeTool
-from kernel.tools.builtin.exit_plan_mode import ExitPlanModeTool
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
-from kernel.tools.registry import ToolRegistry
-from kernel.tools.types import ToolCallResult
+from kernel.agents.mustang.tools.builtin.enter_plan_mode import EnterPlanModeTool
+from kernel.agents.mustang.tools.builtin.exit_plan_mode import ExitPlanModeTool
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
+from kernel.agents.mustang.tools.registry import ToolRegistry
+from kernel.agents.mustang.tools.types import ToolCallResult
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +133,7 @@ class TestExitPlanModeTool:
     async def test_returns_plan_content(self, tmp_path, monkeypatch):
         """Gap 12: ExitPlanMode returns plan file content."""
         monkeypatch.setenv("MUSTANG_PLANS_DIR", str(tmp_path))
-        from kernel.plans import clear_slug_cache, get_plan_file_path
+        from kernel.agents.mustang.plans import clear_slug_cache, get_plan_file_path
 
         clear_slug_cache()
         sid = "test-plan-return"

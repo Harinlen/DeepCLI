@@ -3,8 +3,8 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from kernel.access_agent import AccessAgentState
-from kernel.access_agent.routes import router
+from kernel.agents.access import AccessAgentState
+from kernel.agents.access.routes import router
 
 
 def _app(state: AccessAgentState) -> FastAPI:

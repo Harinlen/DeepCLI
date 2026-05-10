@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from kernel.schedule.delivery import DeliveryRouter, _IDEMPOTENCY_MAX_ENTRIES, _IDEMPOTENCY_TTL_S
-from kernel.schedule.types import (
+from kernel.agents.mustang.schedule.delivery import DeliveryRouter, _IDEMPOTENCY_MAX_ENTRIES, _IDEMPOTENCY_TTL_S
+from kernel.agents.mustang.schedule.types import (
     CronExecution,
     CronTask,
     DeliveryConfig,
@@ -267,7 +267,7 @@ class TestDeliveryEdges:
                 raise RuntimeError("network error while sending")
             return "ok"
 
-        monkeypatch.setattr("kernel.schedule.delivery.asyncio.sleep", _sleep)
+        monkeypatch.setattr("kernel.agents.mustang.schedule.delivery.asyncio.sleep", _sleep)
 
         assert await router._retry_transient(_flaky, delays=[0.25]) == "ok"
         assert sleeps == [0.25]

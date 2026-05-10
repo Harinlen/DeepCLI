@@ -19,9 +19,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from kernel.llm_provider.anthropic import AnthropicProvider
-from kernel.llm_provider.errors import ProviderError
-from kernel.llm.types import (
+from kernel.agents.mustang.llm_provider.anthropic import AnthropicProvider
+from kernel.agents.mustang.llm_provider.errors import ProviderError
+from kernel.agents.mustang.llm.types import (
     PromptSection,
     StreamError,
     TextChunk,

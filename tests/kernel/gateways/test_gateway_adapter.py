@@ -19,15 +19,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from kernel.gateways.base import GatewayAdapter, InboundMessage, _YES_WORDS
-from kernel.gateways.discord.adapter import _chunk_text
-from kernel.gateways.manager import (
+from kernel.agents.mustang.gateways.base import GatewayAdapter, InboundMessage, _YES_WORDS
+from kernel.agents.mustang.gateways.discord.adapter import _chunk_text
+from kernel.agents.mustang.gateways.manager import (
     GatewayManager,
     GatewayManagerConfig,
     _create_adapter,
 )
-from kernel.orchestrator.types import PermissionRequest, PermissionResponse
-from kernel.protocol.acp.schemas.permission import (
+from kernel.agents.mustang.orchestrator.types import PermissionRequest, PermissionResponse
+from kernel.core.protocol.acp.schemas.permission import (
     PermissionOption,
     RequestPermissionRequest,
     ToolCallUpdate,
@@ -79,8 +79,8 @@ def module_table() -> MagicMock:
     cmd_mgr.lookup.return_value = None  # unknown command by default
 
     def _get(cls: type) -> Any:
-        from kernel.session import SessionManager
-        from kernel.commands import CommandManager
+        from kernel.agents.mustang.sessions import SessionManager
+        from kernel.agents.mustang.commands import CommandManager
 
         if cls is SessionManager:
             return session_mgr
@@ -108,7 +108,7 @@ def _msg(text: str = "hello", peer: str = "u1", thread: str | None = "ch1") -> I
 
 async def test_permission_reply_yes_resolves_future(adapter: _StubAdapter) -> None:
     key = ("u1", "ch1")
-    fut: asyncio.Future[PermissionResponse] = asyncio.get_event_loop().create_future()
+    fut: asyncio.Future[PermissionResponse] = asyncio.get_running_loop().create_future()
     adapter._pending_permissions[key] = fut
 
     await adapter._handle(_msg("yes"))
@@ -120,7 +120,7 @@ async def test_permission_reply_yes_resolves_future(adapter: _StubAdapter) -> No
 @pytest.mark.parametrize("word", sorted(_YES_WORDS))
 async def test_all_yes_words_resolve_allow(adapter: _StubAdapter, word: str) -> None:
     key = ("u1", "ch1")
-    fut: asyncio.Future[PermissionResponse] = asyncio.get_event_loop().create_future()
+    fut: asyncio.Future[PermissionResponse] = asyncio.get_running_loop().create_future()
     adapter._pending_permissions[key] = fut
 
     await adapter._handle(_msg(word))
@@ -129,7 +129,7 @@ async def test_all_yes_words_resolve_allow(adapter: _StubAdapter, word: str) -> 
 
 async def test_permission_reply_no_resolves_reject(adapter: _StubAdapter) -> None:
     key = ("u1", "ch1")
-    fut: asyncio.Future[PermissionResponse] = asyncio.get_event_loop().create_future()
+    fut: asyncio.Future[PermissionResponse] = asyncio.get_running_loop().create_future()
     adapter._pending_permissions[key] = fut
 
     await adapter._handle(_msg("no"))
@@ -139,7 +139,7 @@ async def test_permission_reply_no_resolves_reject(adapter: _StubAdapter) -> Non
 
 async def test_permission_reply_gibberish_resolves_reject(adapter: _StubAdapter) -> None:
     key = ("u1", "ch1")
-    fut: asyncio.Future[PermissionResponse] = asyncio.get_event_loop().create_future()
+    fut: asyncio.Future[PermissionResponse] = asyncio.get_running_loop().create_future()
     adapter._pending_permissions[key] = fut
 
     await adapter._handle(_msg("maybe later"))
@@ -150,10 +150,10 @@ async def test_permission_reply_does_not_start_turn(
     adapter: _StubAdapter, module_table: MagicMock
 ) -> None:
     """A permission reply must not trigger a new LLM turn."""
-    from kernel.session import SessionManager
+    from kernel.agents.mustang.sessions import SessionManager
 
     key = ("u1", "ch1")
-    fut: asyncio.Future[PermissionResponse] = asyncio.get_event_loop().create_future()
+    fut: asyncio.Future[PermissionResponse] = asyncio.get_running_loop().create_future()
     adapter._pending_permissions[key] = fut
 
     await adapter._handle(_msg("yes"))
@@ -169,7 +169,7 @@ async def test_permission_reply_does_not_start_turn(
 async def test_normal_message_creates_session_and_runs_turn(
     adapter: _StubAdapter, module_table: MagicMock
 ) -> None:
-    from kernel.session import SessionManager
+    from kernel.agents.mustang.sessions import SessionManager
 
     await adapter._handle(_msg("hello world"))
 
@@ -182,7 +182,7 @@ async def test_normal_message_creates_session_and_runs_turn(
 
 async def test_empty_reply_is_not_sent(adapter: _StubAdapter, module_table: MagicMock) -> None:
     """Tool-only turns return '' — must not call send()."""
-    from kernel.session import SessionManager
+    from kernel.agents.mustang.sessions import SessionManager
 
     module_table.get(SessionManager).run_turn_for_gateway = AsyncMock(return_value="")
     await adapter._handle(_msg("run tool"))
@@ -192,7 +192,7 @@ async def test_empty_reply_is_not_sent(adapter: _StubAdapter, module_table: Magi
 async def test_session_reused_across_messages(
     adapter: _StubAdapter, module_table: MagicMock
 ) -> None:
-    from kernel.session import SessionManager
+    from kernel.agents.mustang.sessions import SessionManager
 
     await adapter._handle(_msg("first"))
     await adapter._handle(_msg("second"))
@@ -343,7 +343,7 @@ async def test_platform_permission_request_maps_allow_and_reject(adapter: _StubA
 
 
 async def test_handle_hub_client_request_rejects_unknown_method(adapter: _StubAdapter) -> None:
-    from kernel.agents import HubFrame, HubFrameType
+    from kernel.agent_hub.contracts import HubFrame, HubFrameType
 
     frame = HubFrame(
         frame_id="f-1",
@@ -478,7 +478,7 @@ async def test_gateway_manager_startup_skips_missing_type_and_failed_adapter(
     )
     mt.config.get_section.return_value = section
     monkeypatch.setattr(
-        "kernel.gateways.manager._build_adapter_registry",
+        "kernel.agents.mustang.gateways.manager._build_adapter_registry",
         lambda: {"bad": _BadManagerAdapter, "good": _GoodManagerAdapter},
     )
     manager = GatewayManager(mt)

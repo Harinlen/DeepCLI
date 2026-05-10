@@ -9,9 +9,9 @@ import pytest
 import yaml
 from pydantic import BaseModel
 
-from kernel.config import ConfigManager
-from kernel.secrets import SecretManager
-from kernel.secrets.types import SecretNotFoundError
+from kernel.core.config import ConfigManager
+from kernel.core.secrets import SecretManager
+from kernel.core.secrets.types import SecretNotFoundError
 
 
 # ---------------------------------------------------------------------------

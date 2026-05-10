@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from kernel.orchestrator.compactor import create_skill_attachment
-from kernel.skills.types import InvokedSkillInfo
+from kernel.agents.mustang.orchestrator.compactor import create_skill_attachment
+from kernel.agents.mustang.skills.types import InvokedSkillInfo
 
 
 def _mock_skills_manager(

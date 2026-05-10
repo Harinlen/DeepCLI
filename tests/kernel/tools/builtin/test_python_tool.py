@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from kernel.tools.builtin.python_tool import PythonTool, shutdown_python_worker
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
-from kernel.tools.types import ToolCallResult
+from kernel.agents.mustang.tools.builtin.python_tool import PythonTool, shutdown_python_worker
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
+from kernel.agents.mustang.tools.types import ToolCallResult
 
 
 def _ctx(tmp_path: Path, session_id: str = "py-test") -> ToolContext:

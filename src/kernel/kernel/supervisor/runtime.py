@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from kernel.paths import user_path
+from kernel.core.paths import user_path
 from kernel.supervisor.control import SupervisorControlConfig, SupervisorControlServer
 
 RESTART_BUDGET_WINDOW_SECONDS = 60
@@ -110,7 +110,7 @@ class SupervisorRuntime:
                 command=[
                     python,
                     "-m",
-                    "kernel.access_agent",
+                    "kernel.agents.access",
                     "--host",
                     self.config.host,
                     "--port",
@@ -132,7 +132,7 @@ class SupervisorRuntime:
                 command=[
                     python,
                     "-m",
-                    "kernel.agent_runtime",
+                    "kernel.agents.mustang.runtime",
                     "--agent-id",
                     "primary",
                     "--host",

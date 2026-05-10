@@ -37,13 +37,13 @@ notification/hook/sub-agent helper modules.
 
 这些 import path 必须继续可用：
 
-- `from kernel.orchestrator import Orchestrator, OrchestratorConfig, OrchestratorDeps`
-- `from kernel.orchestrator.orchestrator import StandardOrchestrator`
-- `from kernel.orchestrator.tool_executor import ToolExecutor, partition_tool_calls`
-- `from kernel.orchestrator.compactor import Compactor, create_skill_attachment`
-- `from kernel.orchestrator.history import ConversationHistory`
-- `from kernel.orchestrator.events import ...`
-- `from kernel.orchestrator.types import ...`
+- `from kernel.agents.mustang.orchestrator import Orchestrator, OrchestratorConfig, OrchestratorDeps`
+- `from kernel.agents.mustang.orchestrator.orchestrator import StandardOrchestrator`
+- `from kernel.agents.mustang.orchestrator.tool_executor import ToolExecutor, partition_tool_calls`
+- `from kernel.agents.mustang.orchestrator.compactor import Compactor, create_skill_attachment`
+- `from kernel.agents.mustang.orchestrator.history import ConversationHistory`
+- `from kernel.agents.mustang.orchestrator.events import ...`
+- `from kernel.agents.mustang.orchestrator.types import ...`
 
 做法：先把实现移到新文件，再在旧文件保留薄 re-export。等全仓 import
 收敛后，旧文件仍可作为稳定兼容层保留。

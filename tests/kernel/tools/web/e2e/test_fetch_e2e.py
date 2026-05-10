@@ -9,8 +9,8 @@ import os
 
 import pytest
 
-from kernel.tools.web.fetch_backends import fetch_with_fallback
-from kernel.tools.web.fetch_backends.httpx_html import HttpxFetchBackend
+from kernel.agents.mustang.tools.web.fetch_backends import fetch_with_fallback
+from kernel.agents.mustang.tools.web.fetch_backends.httpx_html import HttpxFetchBackend
 
 pytestmark = pytest.mark.e2e
 
@@ -53,7 +53,7 @@ class TestHttpxFetchBackend:
 )
 class TestFirecrawlFetchBackend:
     async def test_fetch(self):
-        from kernel.tools.web.fetch_backends.firecrawl import FirecrawlFetchBackend
+        from kernel.agents.mustang.tools.web.fetch_backends.firecrawl import FirecrawlFetchBackend
 
         be = FirecrawlFetchBackend()
         result = await be.fetch("https://example.com")
@@ -70,7 +70,7 @@ class TestFirecrawlFetchBackend:
 )
 class TestExaFetchBackend:
     async def test_fetch(self):
-        from kernel.tools.web.fetch_backends.exa import ExaFetchBackend
+        from kernel.agents.mustang.tools.web.fetch_backends.exa import ExaFetchBackend
 
         be = ExaFetchBackend()
         result = await be.fetch("https://docs.python.org/3/")
@@ -87,7 +87,7 @@ class TestExaFetchBackend:
 )
 class TestTavilyFetchBackend:
     async def test_fetch(self):
-        from kernel.tools.web.fetch_backends.tavily import TavilyFetchBackend
+        from kernel.agents.mustang.tools.web.fetch_backends.tavily import TavilyFetchBackend
 
         be = TavilyFetchBackend()
         result = await be.fetch("https://example.com")
@@ -103,7 +103,7 @@ class TestTavilyFetchBackend:
 )
 class TestParallelFetchBackend:
     async def test_fetch(self):
-        from kernel.tools.web.fetch_backends.parallel import ParallelFetchBackend
+        from kernel.agents.mustang.tools.web.fetch_backends.parallel import ParallelFetchBackend
 
         be = ParallelFetchBackend()
         result = await be.fetch("https://example.com")

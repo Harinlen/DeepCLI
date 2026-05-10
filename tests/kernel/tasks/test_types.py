@@ -1,6 +1,6 @@
-"""Tests for kernel.tasks.types."""
+"""Tests for kernel.agents.mustang.tasks.types."""
 
-from kernel.tasks.types import (
+from kernel.agents.mustang.tasks.types import (
     AgentProgress,
     AgentTaskState,
     ShellTaskState,

@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from kernel.protocol.acp.codec import (
+from kernel.core.protocol.acp.codec import (
     AcpCodec,
     AcpInboundNotification,
     AcpInboundRequest,
@@ -15,7 +15,7 @@ from kernel.protocol.acp.codec import (
     AcpOutboundNotification,
     AcpOutboundResponse,
 )
-from kernel.protocol.interfaces.errors import InvalidRequest, ParseError
+from kernel.core.protocol.interfaces.errors import InvalidRequest, ParseError
 
 
 @pytest.fixture
@@ -223,8 +223,8 @@ class TestEncode:
         assert obj["params"]["value"] == 42
 
     def test_encode_meta_as_wire_meta(self, codec: AcpCodec) -> None:
-        from kernel.protocol.acp.schemas.updates import AgentMessageChunk, SessionUpdateNotification
-        from kernel.protocol.acp.schemas.content import AcpTextBlock
+        from kernel.core.protocol.acp.schemas.updates import AgentMessageChunk, SessionUpdateNotification
+        from kernel.core.protocol.acp.schemas.content import AcpTextBlock
 
         msg = AcpOutboundNotification(
             method="session/update",
@@ -252,7 +252,7 @@ class TestEncode:
 
     def test_encode_error_internal_generic_message(self, codec: AcpCodec) -> None:
         """Internal errors MUST NOT leak the specific message."""
-        from kernel.protocol.interfaces.errors import InternalError
+        from kernel.core.protocol.interfaces.errors import InternalError
 
         exc = InternalError("secret db password revealed")
         raw = codec.encode_error(exc)

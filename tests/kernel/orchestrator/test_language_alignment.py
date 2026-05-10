@@ -25,12 +25,12 @@ from __future__ import annotations
 
 import pytest
 
-from kernel.llm.config import ModelRef
-from kernel.llm.types import PromptSection
-from kernel.orchestrator import OrchestratorConfig, OrchestratorDeps
-from kernel.orchestrator.orchestrator import StandardOrchestrator
-from kernel.orchestrator.prompt_builder import PromptBuilder
-from kernel.prompts.manager import PromptManager
+from kernel.agents.mustang.llm.config import ModelRef
+from kernel.agents.mustang.llm.types import PromptSection
+from kernel.agents.mustang.orchestrator import OrchestratorConfig, OrchestratorDeps
+from kernel.agents.mustang.orchestrator.orchestrator import StandardOrchestrator
+from kernel.agents.mustang.orchestrator.prompt_builder import PromptBuilder
+from kernel.agents.mustang.prompts.manager import PromptManager
 
 # Re-use the FakeLLMProvider fixture from conftest.
 from tests.kernel.orchestrator.conftest import FakeLLMProvider
@@ -176,7 +176,7 @@ class TestSectionInjection:
 
 class TestConfigPatch:
     def test_patch_language_updates_config(self, prompts: PromptManager) -> None:
-        from kernel.orchestrator import OrchestratorConfigPatch
+        from kernel.agents.mustang.orchestrator import OrchestratorConfigPatch
 
         orch = _make_orchestrator(prompts, language=None)
         assert orch._config.language is None
@@ -188,7 +188,7 @@ class TestConfigPatch:
         """``patch.language=None`` means "leave unchanged" — consistent
         with how ``model`` / ``temperature`` / ``streaming_tools`` already
         behave in ``set_config``."""
-        from kernel.orchestrator import OrchestratorConfigPatch
+        from kernel.agents.mustang.orchestrator import OrchestratorConfigPatch
 
         orch = _make_orchestrator(prompts, language="English")
         orch.set_config(OrchestratorConfigPatch(language=None))

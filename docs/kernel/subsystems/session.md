@@ -72,7 +72,7 @@ referenced from events.  This preserves SQLite as the metadata/event store
 without putting large blobs into the database.
 
 Migrations are startup-owned by `SessionStore.open()` through
-`kernel.session.migrations.apply()`.  Current unreleased baseline is schema
+`kernel.agents.mustang.sessions.migrations.apply()`.  Current unreleased baseline is schema
 version 1.
 
 ## Runtime State
@@ -159,7 +159,7 @@ CLI/Probe or platform reply sink.
 ## Public Surface
 
 Primary session methods are implemented in
-`kernel.session.api.handlers.SessionHandlerMixin` and routed through protocol
+`kernel.agents.mustang.sessions.api.handlers.SessionHandlerMixin` and routed through protocol
 handlers.  Active surfaces include:
 
 - ACP: `session/new`, `session/load`, `session/resume`, `session/list`,

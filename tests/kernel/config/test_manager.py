@@ -1,4 +1,4 @@
-"""End-to-end tests for :class:`kernel.config.ConfigManager`.
+"""End-to-end tests for :class:`kernel.core.config.ConfigManager`.
 
 Covers the invariants that subsystems rely on:
 
@@ -22,7 +22,7 @@ import pytest
 import yaml
 from pydantic import BaseModel, Field, ValidationError
 
-from kernel.config import ConfigManager, MutableSection, ReadOnlySection
+from kernel.core.config import ConfigManager, MutableSection, ReadOnlySection
 
 
 class ToolsConfig(BaseModel):

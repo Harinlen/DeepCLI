@@ -1,7 +1,7 @@
 # GatewayManager — Design
 
 Status: **superseded for future work**. This document records the older
-GatewayManager design; any current `kernel.gateways` code should be treated as
+GatewayManager design; any current `kernel.agents.mustang.gateways` code should be treated as
 legacy/transition code until it is migrated into the Access Agent Platform
 Adapter model.
 

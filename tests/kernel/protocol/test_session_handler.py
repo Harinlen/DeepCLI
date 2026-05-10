@@ -17,26 +17,26 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from kernel.connection_auth.context import AuthContext
-from kernel.protocol.acp.namespaces import AcpMethod, MustangMethod
-from kernel.protocol.acp.codec import AcpCodec
-from kernel.protocol.acp.session_handler import AcpSessionHandler
-from kernel.protocol.acp.schemas.permission import (
+from kernel.agents.access.security.context import AuthContext
+from kernel.core.protocol.acp.namespaces import AcpMethod, MustangMethod
+from kernel.core.protocol.acp.codec import AcpCodec
+from kernel.core.protocol.acp.session_handler import AcpSessionHandler
+from kernel.core.protocol.acp.schemas.permission import (
     PermissionOutcomeSelected,
     RequestPermissionResponse,
 )
-from kernel.protocol.interfaces.contracts.list_sessions_result import (
+from kernel.core.protocol.interfaces.contracts.list_sessions_result import (
     ListSessionsResult,
 )
-from kernel.protocol.interfaces.contracts.delete_session_result import DeleteSessionResult
-from kernel.protocol.interfaces.contracts.close_session_result import CloseSessionResult
-from kernel.protocol.interfaces.contracts.new_session_result import (
+from kernel.core.protocol.interfaces.contracts.delete_session_result import DeleteSessionResult
+from kernel.core.protocol.interfaces.contracts.close_session_result import CloseSessionResult
+from kernel.core.protocol.interfaces.contracts.new_session_result import (
     NewSessionResult,
 )
-from kernel.protocol.interfaces.contracts.resume_session_result import ResumeSessionResult
-from kernel.protocol.interfaces.contracts.prompt_result import PromptResult
-from kernel.protocol.interfaces.contracts.execution_result import ExecutionResult
-from kernel.agents import HubFrame, HubFrameType
+from kernel.core.protocol.interfaces.contracts.resume_session_result import ResumeSessionResult
+from kernel.core.protocol.interfaces.contracts.prompt_result import PromptResult
+from kernel.core.protocol.interfaces.contracts.execution_result import ExecutionResult
+from kernel.agent_hub.contracts import HubFrame, HubFrameType
 
 
 # ---------------------------------------------------------------------------
@@ -612,7 +612,7 @@ class TestHubRoutingRetries:
         mt.agent_hub_endpoint = "ws://hub.test"
         dispatcher = AcpSessionHandler(mt)
         monkeypatch.setattr(
-            "kernel.protocol.acp.session_handler._HUB_RUNTIME_RETRY_DELAY_SECONDS",
+            "kernel.core.protocol.acp.session_handler._HUB_RUNTIME_RETRY_DELAY_SECONDS",
             0,
         )
         calls = 0

@@ -79,7 +79,7 @@ important split is:
 
 - **Bootstrap services** are fatal on startup failure and are not
   `Subsystem` subclasses.
-- **Regular subsystems** inherit `kernel.subsystem.Subsystem` and degrade on
+- **Regular subsystems** inherit `kernel.core.lifecycle.Subsystem` and degrade on
   startup failure unless explicitly required by a caller.
 - **Transport** is bound to FastAPI and selected by flags; production uses the
   ACP stack.

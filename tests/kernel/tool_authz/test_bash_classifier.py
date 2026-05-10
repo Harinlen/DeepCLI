@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from kernel.tool_authz.bash_classifier import (
+from kernel.agents.mustang.tool_authz.bash_classifier import (
     MAX_CONSECUTIVE,
     MAX_TOTAL,
     BashClassifier,

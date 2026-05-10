@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from kernel.hooks.eligibility import is_eligible
-from kernel.hooks.manifest import HookManifest, HookRequires
+from kernel.agents.mustang.hooks.eligibility import is_eligible
+from kernel.agents.mustang.hooks.manifest import HookManifest, HookRequires
 
 
 def _make(

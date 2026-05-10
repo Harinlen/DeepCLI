@@ -7,8 +7,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from kernel.memory.selector import BM25Index, RelevanceSelector, build_manifest
-from kernel.memory.types import MemoryHeader, ScoredMemory
+from kernel.agents.mustang.memory.selector import BM25Index, RelevanceSelector, build_manifest
+from kernel.agents.mustang.memory.types import MemoryHeader, ScoredMemory
 
 
 def _make_header(
@@ -123,7 +123,7 @@ class TestRelevanceSelectorRanking:
         expected = 4 * salience * time_decay * source_weight
 
         # Use selector's internal ranking
-        from kernel.memory.index import MemoryIndex
+        from kernel.agents.mustang.memory.index import MemoryIndex
 
         idx = MemoryIndex()
         selector = RelevanceSelector(memory_index=idx)
@@ -138,7 +138,7 @@ class TestRelevanceSelectorRanking:
         sm_young = ScoredMemory(header=h_young, relevance=3, reason="", final_score=0.0)
         sm_old = ScoredMemory(header=h_old, relevance=3, reason="", final_score=0.0)
 
-        from kernel.memory.index import MemoryIndex
+        from kernel.agents.mustang.memory.index import MemoryIndex
 
         idx = MemoryIndex()
         selector = RelevanceSelector(memory_index=idx)
@@ -154,7 +154,7 @@ class TestRelevanceSelectorRanking:
         sm_low = ScoredMemory(header=h_low, relevance=3, reason="", final_score=0.0)
         sm_high = ScoredMemory(header=h_high, relevance=3, reason="", final_score=0.0)
 
-        from kernel.memory.index import MemoryIndex
+        from kernel.agents.mustang.memory.index import MemoryIndex
 
         idx = MemoryIndex()
         selector = RelevanceSelector(memory_index=idx)

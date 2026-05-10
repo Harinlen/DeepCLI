@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from kernel.llm.types import (
+from kernel.agents.mustang.llm.types import (
     LLMChunk,
     Message,
     PromptSection,
@@ -22,10 +22,10 @@ from kernel.llm.types import (
     ToolUseChunk,
     UsageChunk,
 )
-from kernel.llm.config import ModelRef
-from kernel.orchestrator import OrchestratorConfig, OrchestratorDeps
-from kernel.orchestrator.orchestrator import StandardOrchestrator
-from kernel.orchestrator.types import PermissionResponse
+from kernel.agents.mustang.llm.config import ModelRef
+from kernel.agents.mustang.orchestrator import OrchestratorConfig, OrchestratorDeps
+from kernel.agents.mustang.orchestrator.orchestrator import StandardOrchestrator
+from kernel.agents.mustang.orchestrator.types import PermissionResponse
 
 
 # ---------------------------------------------------------------------------

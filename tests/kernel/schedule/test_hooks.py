@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kernel.hooks.types import EVENT_SPECS, HookEvent
+from kernel.agents.mustang.hooks.types import EVENT_SPECS, HookEvent
 
 
 class TestCronHookEvents:

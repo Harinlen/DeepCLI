@@ -7,10 +7,10 @@ from typing import Any
 import pytest
 import subprocess
 
-from kernel.llm.config import ModelRef
-from kernel.llm.types import TextChunk
-from kernel.orchestrator.types import StopReason
-from kernel.session.runtime.helpers import (
+from kernel.agents.mustang.llm.config import ModelRef
+from kernel.agents.mustang.llm.types import TextChunk
+from kernel.agents.mustang.orchestrator.types import StopReason
+from kernel.agents.mustang.sessions.runtime.helpers import (
     decode_cursor,
     encode_cursor,
     get_git_branch,

@@ -1,4 +1,4 @@
-"""Tests for kernel.mcp.MCPManager subsystem."""
+"""Tests for kernel.agents.mustang.mcp.MCPManager subsystem."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from kernel.config import ConfigManager
-from kernel.flags import FlagManager
-from kernel.mcp import MCPManager
-from kernel.mcp.config import HTTPServerConfig
-from kernel.mcp.types import ConnectedServer, FailedServer, McpError
-from kernel.module_table import KernelModuleTable
+from kernel.core.config import ConfigManager
+from kernel.core.flags import FlagManager
+from kernel.agents.mustang.mcp import MCPManager
+from kernel.agents.mustang.mcp.config import HTTPServerConfig
+from kernel.agents.mustang.mcp.types import ConnectedServer, FailedServer, McpError
+from kernel.agents.mustang.module_table import KernelModuleTable
 
 
 @pytest.fixture
@@ -73,13 +73,13 @@ async def test_startup_with_failed_server(
     )
 
     mgr = MCPManager(module_table)
-    with patch("kernel.mcp.Path") as mock_path_cls:
+    with patch("kernel.agents.mustang.mcp.Path") as mock_path_cls:
         # Make Path.cwd() return tmp_path so .mcp.json is found.
         mock_path_cls.cwd.return_value = tmp_path
         mock_path_cls.side_effect = Path  # allow Path(...) to work normally
         # Patch at the module level where it's used.
-        with patch("kernel.mcp.load_mcp_json") as mock_load:
-            from kernel.mcp.config import load_mcp_json as real_load
+        with patch("kernel.agents.mustang.mcp.load_mcp_json") as mock_load:
+            from kernel.agents.mustang.mcp.config import load_mcp_json as real_load
 
             mock_load.return_value = real_load(mcp_json)
             await mgr.startup()
@@ -141,7 +141,7 @@ async def test_connect_failure_warning_rate_limited(
     """
     import logging
 
-    from kernel.mcp import _FAIL_LOG_LIMIT
+    from kernel.agents.mustang.mcp import _FAIL_LOG_LIMIT
 
     mgr = MCPManager(module_table)
     await mgr.startup()
@@ -151,8 +151,8 @@ async def test_connect_failure_warning_rate_limited(
 
     # Fail N+2 times — warnings should cap at _FAIL_LOG_LIMIT.
     failure_attempts = _FAIL_LOG_LIMIT + 2
-    with patch("kernel.mcp.create_transport", side_effect=McpError("boom")):
-        caplog.set_level(logging.WARNING, logger="kernel.mcp")
+    with patch("kernel.agents.mustang.mcp.create_transport", side_effect=McpError("boom")):
+        caplog.set_level(logging.WARNING, logger="kernel.agents.mustang.mcp")
         for _ in range(failure_attempts):
             await mgr.reconnect("flaky")
 
@@ -166,15 +166,15 @@ async def test_connect_failure_warning_rate_limited(
 
     # Simulate recovery: _connect_one should log INFO and reset the counter.
     caplog.clear()
-    caplog.set_level(logging.INFO, logger="kernel.mcp")
+    caplog.set_level(logging.INFO, logger="kernel.agents.mustang.mcp")
     fake_transport = AsyncMock()
     fake_client = AsyncMock()
     fake_client.connect.return_value = {}
     fake_client.server_info = {}
     fake_client.instructions = None
     with (
-        patch("kernel.mcp.create_transport", return_value=fake_transport),
-        patch("kernel.mcp.McpClient", return_value=fake_client),
+        patch("kernel.agents.mustang.mcp.create_transport", return_value=fake_transport),
+        patch("kernel.agents.mustang.mcp.McpClient", return_value=fake_client),
     ):
         conn = await mgr.reconnect("flaky")
 

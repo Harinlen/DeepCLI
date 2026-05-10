@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from kernel.tool_authz.rule_parser import parse_rule
-from kernel.tool_authz.types import RuleSource
+from kernel.agents.mustang.tool_authz.rule_parser import parse_rule
+from kernel.agents.mustang.tool_authz.types import RuleSource
 
 
 def test_tool_only_rule() -> None:

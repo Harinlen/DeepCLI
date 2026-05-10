@@ -1,4 +1,4 @@
-"""Tests for kernel.git.store — WorktreeStore SQLite persistence."""
+"""Tests for kernel.agents.mustang.git.store — WorktreeStore SQLite persistence."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from kernel.git.store import WorktreeStore
-from kernel.git.types import WorktreeSession
+from kernel.agents.mustang.git.store import WorktreeStore
+from kernel.agents.mustang.git.types import WorktreeSession
 
 
 def _make_ws(

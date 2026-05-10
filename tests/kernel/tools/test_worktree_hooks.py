@@ -13,14 +13,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.hooks.types import (
+from kernel.agents.mustang.hooks.types import (
     EVENT_SPECS,
     HookEvent,
     HookEventCtx,
 )
-from kernel.tools.builtin.enter_worktree import EnterWorktreeTool
-from kernel.tools.builtin.exit_worktree import ExitWorktreeTool
-from kernel.tools.types import ToolCallResult, ToolInputError
+from kernel.agents.mustang.tools.builtin.enter_worktree import EnterWorktreeTool
+from kernel.agents.mustang.tools.builtin.exit_worktree import ExitWorktreeTool
+from kernel.agents.mustang.tools.types import ToolCallResult, ToolInputError
 
 
 def _make_ctx(

@@ -9,20 +9,20 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.hooks import EVENT_SPECS, HookBlock, HookEvent, HookEventCtx
-from kernel.llm.types import ToolUseContent
-from kernel.orchestrator.events import ToolCallError
-from kernel.orchestrator.events import ToolCallResult as ToolCallResultEvent
-from kernel.orchestrator.events import ToolCallStart
-from kernel.orchestrator.tool_executor import ToolExecutor
-from kernel.orchestrator.types import OrchestratorDeps, ToolKind
-from kernel.tool_authz.types import (
+from kernel.agents.mustang.hooks import EVENT_SPECS, HookBlock, HookEvent, HookEventCtx
+from kernel.agents.mustang.llm.types import ToolUseContent
+from kernel.agents.mustang.orchestrator.events import ToolCallError
+from kernel.agents.mustang.orchestrator.events import ToolCallResult as ToolCallResultEvent
+from kernel.agents.mustang.orchestrator.events import ToolCallStart
+from kernel.agents.mustang.orchestrator.tool_executor import ToolExecutor
+from kernel.agents.mustang.orchestrator.types import OrchestratorDeps, ToolKind
+from kernel.agents.mustang.tool_authz.types import (
     AuthorizeContext,
     PermissionAllow,
     ReasonDefaultRisk,
 )
-from kernel.tools.tool import Tool
-from kernel.tools.types import (
+from kernel.agents.mustang.tools.tool import Tool
+from kernel.agents.mustang.tools.types import (
     PermissionSuggestion,
     ToolCallProgress,
     ToolCallResult,
@@ -51,9 +51,9 @@ class _EchoTool(Tool[dict[str, Any], str]):
     async def call(
         self, input: dict[str, Any], ctx: Any
     ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
-        from kernel.protocol.interfaces.contracts.text_block import TextBlock
+        from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
 
-        from kernel.tools.types import TextDisplay
+        from kernel.agents.mustang.tools.types import TextDisplay
 
         text = f"echoed: {input.get('text', '')}"
         yield ToolCallResult(

@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from kernel.skills.snapshot import load_snapshot, validate_snapshot, write_snapshot
-from kernel.skills.types import LoadedSkill, SkillManifest, SkillSource
+from kernel.agents.mustang.skills.snapshot import load_snapshot, validate_snapshot, write_snapshot
+from kernel.agents.mustang.skills.types import LoadedSkill, SkillManifest, SkillSource
 
 
 def _make_skill(base: Path, name: str) -> LoadedSkill:

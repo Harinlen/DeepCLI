@@ -172,7 +172,7 @@ Probe hierarchy:
 
 Deliverables:
 
-- Add `kernel.protocol.acp.namespaces` or equivalent constants for official
+- Add `kernel.core.protocol.acp.namespaces` or equivalent constants for official
   method names, DeepCLI extension method names, and temporary legacy aliases.
   Avoid scattering string literals such as `session/execute_shell` across
   routing, handlers, tests, CLI, and probe code.

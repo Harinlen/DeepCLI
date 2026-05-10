@@ -1,14 +1,14 @@
-"""Tests for kernel.llm_provider.format.anthropic — pure format conversion."""
+"""Tests for kernel.agents.mustang.llm_provider.format.anthropic — pure format conversion."""
 
 from __future__ import annotations
 
 
-from kernel.llm_provider.format.anthropic import (
+from kernel.agents.mustang.llm_provider.format.anthropic import (
     messages_to_anthropic,
     schemas_to_anthropic,
     sections_to_anthropic,
 )
-from kernel.llm.types import (
+from kernel.agents.mustang.llm.types import (
     AssistantMessage,
     ImageContent,
     PromptSection,

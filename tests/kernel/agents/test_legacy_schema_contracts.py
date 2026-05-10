@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from kernel.agents.control_plane import AgentRuntimeKind, AgentStatus
-from kernel.agents.schema import (
+from kernel.agent_hub.contracts.control_plane import AgentRuntimeKind, AgentStatus
+from kernel.agent_hub.contracts.schema import (
     AgentBindingSpec,
     AgentDefinition,
     AgentPolicySpec,

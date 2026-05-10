@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.tools.builtin.web_search import WebSearchTool
-from kernel.tools.types import ToolInputError
+from kernel.agents.mustang.tools.builtin.web_search import WebSearchTool
+from kernel.agents.mustang.tools.types import ToolInputError
 
 
 @pytest.fixture

@@ -9,21 +9,21 @@ from typing import Any
 
 import pytest
 
-from kernel.llm.types import ToolUseContent
-from kernel.orchestrator.events import ToolCallResult as ToolCallResultEvent
-from kernel.orchestrator.tool_executor import ToolExecutor
-from kernel.orchestrator.types import (
+from kernel.agents.mustang.llm.types import ToolUseContent
+from kernel.agents.mustang.orchestrator.events import ToolCallResult as ToolCallResultEvent
+from kernel.agents.mustang.orchestrator.tool_executor import ToolExecutor
+from kernel.agents.mustang.orchestrator.types import (
     OrchestratorDeps,
     PermissionRequest,
     PermissionRequestOption,
     ToolKind,
 )
-from kernel.protocol.interfaces.contracts.text_block import TextBlock
-from kernel.session.runtime.state import Session
-from kernel.session.turns.permission import SessionPermissionMixin
-from kernel.tool_authz.types import PermissionAsk, PermissionSuggestionBtn, ReasonDefaultRisk
-from kernel.tools.tool import Tool
-from kernel.tools.types import PermissionSuggestion, TextDisplay, ToolCallProgress, ToolCallResult
+from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
+from kernel.agents.mustang.sessions.runtime.state import Session
+from kernel.agents.mustang.sessions.turns.permission import SessionPermissionMixin
+from kernel.agents.mustang.tool_authz.types import PermissionAsk, PermissionSuggestionBtn, ReasonDefaultRisk
+from kernel.agents.mustang.tools.tool import Tool
+from kernel.agents.mustang.tools.types import PermissionSuggestion, TextDisplay, ToolCallProgress, ToolCallResult
 
 
 class _Sender:

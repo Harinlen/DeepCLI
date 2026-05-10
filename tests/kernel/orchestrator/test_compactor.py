@@ -8,16 +8,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from kernel.llm.types import (
+from kernel.agents.mustang.llm.types import (
     AssistantMessage,
     TextContent,
     ToolResultContent,
     ToolUseContent,
     UserMessage,
 )
-from kernel.orchestrator.compactor import Compactor
-from kernel.orchestrator.history import ConversationHistory
-from kernel.orchestrator.types import ToolKind
+from kernel.agents.mustang.orchestrator.compactor import Compactor
+from kernel.agents.mustang.orchestrator.history import ConversationHistory
+from kernel.agents.mustang.orchestrator.types import ToolKind
 
 
 def _make_history_with_tool_pairs(
@@ -250,7 +250,7 @@ class TestMicrocompact:
 
 class TestToolResultBudget:
     def test_truncates_oversized_string_result(self) -> None:
-        from kernel.orchestrator.tool_executor import _apply_result_budget
+        from kernel.agents.mustang.orchestrator.tool_executor import _apply_result_budget
 
         big = "x" * 200
         result = _apply_result_budget(big, budget=100)
@@ -260,14 +260,14 @@ class TestToolResultBudget:
         assert "200 chars" in result
 
     def test_passes_through_under_budget(self) -> None:
-        from kernel.orchestrator.tool_executor import _apply_result_budget
+        from kernel.agents.mustang.orchestrator.tool_executor import _apply_result_budget
 
         small = "hello"
         result = _apply_result_budget(small, budget=100)
         assert result == "hello"
 
     def test_passes_through_list_content(self) -> None:
-        from kernel.orchestrator.tool_executor import _apply_result_budget
+        from kernel.agents.mustang.orchestrator.tool_executor import _apply_result_budget
 
         blocks = [{"type": "text", "text": "x" * 200}]
         result = _apply_result_budget(blocks, budget=10)

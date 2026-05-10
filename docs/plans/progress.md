@@ -44,6 +44,7 @@ history or design document when this table grows.
 
 | Date | Item | Result | Verification |
 |---|---|---|---|
+| 2026-05-10 | Kernel Agent layout refactor | Reorganized active Kernel modules into `core`, `supervisor`, `agent_hub`, `agents/access`, and `agents/mustang`; moved Agent Hub contracts under Hub; renamed resource revision tracking; updated docs and probes for the new Agent/Mustang naming. | `uv run pytest tests/kernel -q`; targeted Phase2 lifecycle and cancel E2E probes; import smoke; `git diff --check` |
 | 2026-05-09 | REPL non-Windows completion | Retired the old JSON batch dispatcher and tests, moved primitive allowlist to `tools/repl/primitives.py`, and reduced the REPL plan to a completed record with only Windows probe remaining. | REPL/tool focused tests `38 passed`; REPL E2E `3 passed`; `git diff --check` |
 | 2026-05-09 | Remove `/auth` slash command | Removed `auth` from the CommandManager catalog and gateway special-case handling; credential storage remains available through ACP `secrets/auth`. | `73 passed`; `git diff --check` |
 | 2026-05-08 | Config-folder path cleanup | Moved canonical flags path to `~/.deepcli/config/flags.yaml`, kept legacy root flags as read-only fallback, confirmed CLI `client.yaml` stays under `config/`, and refreshed current docs/tests. | `18 passed`; CLI config/OOBE probes; REPL E2E `3 passed`; `git diff --check` |

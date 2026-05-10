@@ -1,4 +1,4 @@
-"""Tests for kernel.tools.builtin.send_message.SendMessageTool."""
+"""Tests for kernel.agents.mustang.tools.builtin.send_message.SendMessageTool."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.tasks.registry import TaskRegistry
-from kernel.tasks.types import AgentTaskState, TaskStatus
-from kernel.tools.builtin.send_message import SendMessageTool
-from kernel.tools.types import ToolCallResult
+from kernel.agents.mustang.tasks.registry import TaskRegistry
+from kernel.agents.mustang.tasks.types import AgentTaskState, TaskStatus
+from kernel.agents.mustang.tools.builtin.send_message import SendMessageTool
+from kernel.agents.mustang.tools.types import ToolCallResult
 
 
 def _agent(task_id: str = "a00000001", **kw: object) -> AgentTaskState:
@@ -200,7 +200,7 @@ class TestInSessionAgentPath:
     @pytest.mark.asyncio
     async def test_non_agent_task(self) -> None:
         """Sending to a shell task should fail."""
-        from kernel.tasks.types import ShellTaskState
+        from kernel.agents.mustang.tasks.types import ShellTaskState
 
         tool = SendMessageTool()
         reg = TaskRegistry()

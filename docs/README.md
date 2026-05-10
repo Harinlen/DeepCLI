@@ -66,7 +66,7 @@ consult this file first, then go directly to the file(s) they need.
 所有注册的 Subsystem 均有完整的 `startup`/`shutdown` 实现，无骨架残留。
 
 Protocol 层：生产路径只注册 `acp` stack
-（`kernel.protocol.build_protocol_stack`）。`TransportFlags.stack`
+（`kernel.core.protocol.build_protocol_stack`）。`TransportFlags.stack`
 默认值为 `acp`，`flags.yaml` 中的未知 stack 名称会在启动期校验失败。
 
 ### 接口层

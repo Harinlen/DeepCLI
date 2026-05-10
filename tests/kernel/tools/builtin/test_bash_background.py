@@ -6,16 +6,16 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from kernel.tasks.registry import TaskRegistry
-from kernel.tasks.types import TaskStatus
-from kernel.tools.builtin.bash import (
+from kernel.agents.mustang.tasks.registry import TaskRegistry
+from kernel.agents.mustang.tasks.types import TaskStatus
+from kernel.agents.mustang.tools.builtin.bash import (
     BashTool,
     _looks_like_prompt,
     _wait_and_notify,
 )
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
-from kernel.tools.types import ToolCallResult
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
+from kernel.agents.mustang.tools.types import ToolCallResult
 
 
 def _make_ctx(tmp_path: Path) -> ToolContext:
@@ -88,7 +88,7 @@ class TestWaitAndNotify:
     @pytest.mark.asyncio
     async def test_success(self) -> None:
         registry = TaskRegistry()
-        from kernel.tasks.types import ShellTaskState
+        from kernel.agents.mustang.tasks.types import ShellTaskState
 
         task = ShellTaskState(
             id="b_test1", status=TaskStatus.running,
@@ -108,7 +108,7 @@ class TestWaitAndNotify:
     @pytest.mark.asyncio
     async def test_failure(self) -> None:
         registry = TaskRegistry()
-        from kernel.tasks.types import ShellTaskState
+        from kernel.agents.mustang.tasks.types import ShellTaskState
 
         task = ShellTaskState(
             id="b_test2", status=TaskStatus.running,
@@ -127,7 +127,7 @@ class TestWaitAndNotify:
     @pytest.mark.asyncio
     async def test_timeout_kills(self) -> None:
         registry = TaskRegistry()
-        from kernel.tasks.types import ShellTaskState
+        from kernel.agents.mustang.tasks.types import ShellTaskState
 
         task = ShellTaskState(
             id="b_test3", status=TaskStatus.running,

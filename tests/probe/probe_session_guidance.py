@@ -75,7 +75,7 @@ class _CapturingProvider:
 
     async def stream(self, **kwargs: Any) -> AsyncGenerator[Any, None]:
         self.calls.append(kwargs)
-        from kernel.llm.types import TextChunk, UsageChunk
+        from kernel.agents.mustang.llm.types import TextChunk, UsageChunk
 
         async def _emit() -> AsyncGenerator[Any, None]:
             yield TextChunk(content="ok")
@@ -102,15 +102,15 @@ async def no_permission(_req: Any) -> Any:  # pragma: no cover — never called
 
 
 async def run() -> int:  # noqa: C901 — long, but flat
-    from kernel.config import ConfigManager
-    from kernel.flags import FlagManager
-    from kernel.llm.config import ModelRef
-    from kernel.llm.types import PromptSection, TextContent
-    from kernel.module_table import KernelModuleTable
-    from kernel.orchestrator import OrchestratorConfig, OrchestratorDeps
-    from kernel.orchestrator.orchestrator import StandardOrchestrator
-    from kernel.prompts.manager import PromptManager
-    from kernel.tools import ToolManager
+    from kernel.core.config import ConfigManager
+    from kernel.core.flags import FlagManager
+    from kernel.agents.mustang.llm.config import ModelRef
+    from kernel.agents.mustang.llm.types import PromptSection, TextContent
+    from kernel.agents.mustang.module_table import KernelModuleTable
+    from kernel.agents.mustang.orchestrator import OrchestratorConfig, OrchestratorDeps
+    from kernel.agents.mustang.orchestrator.orchestrator import StandardOrchestrator
+    from kernel.agents.mustang.prompts.manager import PromptManager
+    from kernel.agents.mustang.tools import ToolManager
 
     # ── 0. Scratch workspace so we never touch ~/.mustang. ──────────
     scratch = Path(tempfile.mkdtemp(prefix="probe-session-guidance-"))

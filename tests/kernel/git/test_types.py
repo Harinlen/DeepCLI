@@ -1,9 +1,9 @@
-"""Tests for kernel.git.types."""
+"""Tests for kernel.agents.mustang.git.types."""
 
 from datetime import datetime, timezone
 from pathlib import Path
 
-from kernel.git.types import GitContext, GitTimeoutError, WorktreeSession
+from kernel.agents.mustang.git.types import GitContext, GitTimeoutError, WorktreeSession
 
 
 class TestGitContext:

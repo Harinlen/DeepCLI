@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 
-from kernel.skills.loader import activate_conditional, discover, discover_for_paths
-from kernel.skills.types import SkillSource
+from kernel.agents.mustang.skills.loader import activate_conditional, discover, discover_for_paths
+from kernel.agents.mustang.skills.types import SkillSource
 
 
 def _write_skill(base: Path, name: str, description: str = "test") -> Path:

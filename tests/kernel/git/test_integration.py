@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from kernel.git import GitManager
-from kernel.git.types import GitConfig, GitContext
+from kernel.agents.mustang.git import GitManager
+from kernel.agents.mustang.git.types import GitConfig, GitContext
 
 
 def _make_module_table(
@@ -49,7 +49,7 @@ class TestEnterExitRoundTrip:
 
         from datetime import datetime, timezone
 
-        from kernel.git.types import WorktreeSession
+        from kernel.agents.mustang.git.types import WorktreeSession
 
         ws = WorktreeSession(
             session_id="s1",
@@ -90,7 +90,7 @@ class TestContextRefreshAfterEnter:
             call_count += 1
             return ctx1 if call_count == 1 else ctx2
 
-        with patch("kernel.git.build_git_context", side_effect=_build):
+        with patch("kernel.agents.mustang.git.build_git_context", side_effect=_build):
             r1 = await mgr.get_context(Path("/repo"), "s1")
             assert r1.branch == "main"
 

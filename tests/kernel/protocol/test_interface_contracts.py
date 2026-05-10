@@ -6,13 +6,13 @@ from pydantic import BaseModel
 
 from datetime import datetime, timezone
 
-from kernel.connection_auth.context import AuthContext
-from kernel.protocol.interfaces.client_sender import ClientSender
-from kernel.protocol.interfaces.contracts.connection_context import ConnectionContext
-from kernel.protocol.interfaces.contracts.remove_profile_params import RemoveProfileParams
-from kernel.protocol.interfaces.contracts.remove_profile_result import RemoveProfileResult
-from kernel.protocol.interfaces.event_mapper import EventMapper
-from kernel.protocol.interfaces.handshake import Handshake
+from kernel.agents.access.security.context import AuthContext
+from kernel.core.protocol.interfaces.client_sender import ClientSender
+from kernel.core.protocol.interfaces.contracts.connection_context import ConnectionContext
+from kernel.core.protocol.interfaces.contracts.remove_profile_params import RemoveProfileParams
+from kernel.core.protocol.interfaces.contracts.remove_profile_result import RemoveProfileResult
+from kernel.core.protocol.interfaces.event_mapper import EventMapper
+from kernel.core.protocol.interfaces.handshake import Handshake
 
 
 class _Params(BaseModel):

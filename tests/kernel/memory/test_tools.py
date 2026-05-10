@@ -8,17 +8,17 @@ from typing import Any
 
 import pytest
 
-from kernel.memory.index import MemoryIndex
-from kernel.memory.selector import RelevanceSelector
-from kernel.memory.store import ensure_directory_tree, read_memory, write_memory
-from kernel.memory.tools import (
+from kernel.agents.mustang.memory.index import MemoryIndex
+from kernel.agents.mustang.memory.selector import RelevanceSelector
+from kernel.agents.mustang.memory.store import ensure_directory_tree, read_memory, write_memory
+from kernel.agents.mustang.memory.tools import (
     MemoryAppendTool,
     MemoryDeleteTool,
     MemoryListTool,
     MemoryWriteTool,
     _configure,
 )
-from kernel.memory.types import MemoryHeader
+from kernel.agents.mustang.memory.types import MemoryHeader
 
 
 @pytest.fixture()

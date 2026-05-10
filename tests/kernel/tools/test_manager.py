@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from kernel.config import ConfigManager
-from kernel.flags import FlagManager
-from kernel.module_table import KernelModuleTable
-from kernel.prompts.manager import PromptManager
-from kernel.tools import ToolManager
+from kernel.core.config import ConfigManager
+from kernel.core.flags import FlagManager
+from kernel.agents.mustang.module_table import KernelModuleTable
+from kernel.agents.mustang.prompts.manager import PromptManager
+from kernel.agents.mustang.tools import ToolManager
 
 
 @pytest.fixture

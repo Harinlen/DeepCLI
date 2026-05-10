@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from kernel.protocol.acp.event_mapper import AcpEventMapper
+from kernel.core.protocol.acp.event_mapper import AcpEventMapper
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ class _StopReason(str, Enum):
 
 
 # We import the real event types to test with actual classes.
-from kernel.orchestrator.events import (  # noqa: E402
+from kernel.agents.mustang.orchestrator.events import (  # noqa: E402
     AvailableCommandsChanged,
     CancelledEvent,
     CompactionEvent,
@@ -54,7 +54,7 @@ from kernel.orchestrator.events import (  # noqa: E402
     ToolCallStart,
     UserPromptBlocked,
 )
-from kernel.orchestrator.types import StopReason, ToolKind  # noqa: E402
+from kernel.agents.mustang.orchestrator.types import StopReason, ToolKind  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

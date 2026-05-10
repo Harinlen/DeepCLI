@@ -8,18 +8,18 @@ from pathlib import Path
 import pytest
 
 from kernel.agent_hub import AgentHubManager
-from kernel.agents import (
+from kernel.agent_hub.contracts import (
     AgentQueueState,
     AgentStatus,
     default_primary_agent_definition,
 )
-from kernel.protocol.interfaces.contracts.prompt_params import PromptParams
-from kernel.protocol.interfaces.contracts.text_block import TextBlock
-from kernel.session.agent_projection import (
+from kernel.core.protocol.interfaces.contracts.prompt_params import PromptParams
+from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
+from kernel.agents.mustang.sessions.agent_projection import (
     project_session_agent_status,
     snapshot_to_task_identity,
 )
-from kernel.session.runtime.state import QueuedTurn, Session, TurnState
+from kernel.agents.mustang.sessions.runtime.state import QueuedTurn, Session, TurnState
 
 
 class _NoopOrchestrator:

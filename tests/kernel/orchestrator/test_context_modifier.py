@@ -10,16 +10,16 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from kernel.orchestrator.tool_executor import ToolExecutor
-from kernel.orchestrator.types import OrchestratorDeps, ToolKind
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
-from kernel.tools.types import (
+from kernel.agents.mustang.orchestrator.tool_executor import ToolExecutor
+from kernel.agents.mustang.orchestrator.types import OrchestratorDeps, ToolKind
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
+from kernel.agents.mustang.tools.types import (
     ToolCallResult,
     TextDisplay,
 )
-from kernel.protocol.interfaces.contracts.text_block import TextBlock
-from kernel.llm.types import ToolUseContent
+from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
+from kernel.agents.mustang.llm.types import ToolUseContent
 
 
 def _make_deps(**overrides: Any) -> OrchestratorDeps:
@@ -56,7 +56,7 @@ def _make_tool_ctx(cwd: Path = Path("/cwd")) -> ToolContext:
 
 
 def _make_auth_ctx() -> Any:
-    from kernel.tool_authz.types import AuthorizeContext
+    from kernel.agents.mustang.tool_authz.types import AuthorizeContext
 
     return AuthorizeContext(
         session_id="s1",
@@ -68,7 +68,7 @@ def _make_auth_ctx() -> Any:
 
 
 def _make_authorizer() -> MagicMock:
-    from kernel.tool_authz.types import PermissionAllow, ReasonMode
+    from kernel.agents.mustang.tool_authz.types import PermissionAllow, ReasonMode
 
     auth = MagicMock()
     allow = PermissionAllow(

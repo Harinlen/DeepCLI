@@ -1,4 +1,4 @@
-"""Unit tests for kernel.plans — plan file management."""
+"""Unit tests for kernel.agents.mustang.plans — plan file management."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from kernel.plans import (
+from kernel.agents.mustang.plans import (
     clear_slug_cache,
     get_plan,
     get_plan_file_path,

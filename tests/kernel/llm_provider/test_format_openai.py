@@ -1,15 +1,15 @@
-"""Tests for kernel.llm_provider.format.openai — pure format conversion."""
+"""Tests for kernel.agents.mustang.llm_provider.format.openai — pure format conversion."""
 
 from __future__ import annotations
 
 import orjson
 
-from kernel.llm_provider.format.openai import (
+from kernel.agents.mustang.llm_provider.format.openai import (
     messages_to_openai,
     schemas_to_openai,
     sections_to_openai_system,
 )
-from kernel.llm.types import (
+from kernel.agents.mustang.llm.types import (
     AssistantMessage,
     ImageContent,
     PromptSection,

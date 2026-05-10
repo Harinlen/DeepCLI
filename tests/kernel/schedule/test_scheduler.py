@@ -10,9 +10,9 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from kernel.schedule.scheduler import CronScheduler
-from kernel.schedule.store import CronStore
-from kernel.schedule.types import CronExecution, CronTask, Schedule, ScheduleKind
+from kernel.agents.mustang.schedule.scheduler import CronScheduler
+from kernel.agents.mustang.schedule.store import CronStore
+from kernel.agents.mustang.schedule.types import CronExecution, CronTask, Schedule, ScheduleKind
 
 
 @pytest_asyncio.fixture
@@ -81,7 +81,7 @@ async def test_session_reaper_does_not_count_missing_sessions(
         session_retention_hours=24,
     )
 
-    with caplog.at_level(logging.INFO, logger="kernel.schedule.scheduler"):
+    with caplog.at_level(logging.INFO, logger="kernel.agents.mustang.schedule.scheduler"):
         await scheduler._reap_sessions()
 
     assert session_manager.deleted_session_ids == []
@@ -112,7 +112,7 @@ async def test_session_reaper_counts_existing_sessions(
         session_retention_hours=24,
     )
 
-    with caplog.at_level(logging.INFO, logger="kernel.schedule.scheduler"):
+    with caplog.at_level(logging.INFO, logger="kernel.agents.mustang.schedule.scheduler"):
         await scheduler._reap_sessions()
 
     assert session_manager.deleted_session_ids == ["cron-session"]

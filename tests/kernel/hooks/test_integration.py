@@ -8,15 +8,15 @@ from pathlib import Path
 import pytest
 import yaml
 
-from kernel.config import ConfigManager
-from kernel.flags import FlagManager
-from kernel.hooks import (
+from kernel.core.config import ConfigManager
+from kernel.core.flags import FlagManager
+from kernel.agents.mustang.hooks import (
     AmbientContext,
     HookEvent,
     HookEventCtx,
     HookManager,
 )
-from kernel.module_table import KernelModuleTable
+from kernel.agents.mustang.module_table import KernelModuleTable
 
 
 @pytest.fixture

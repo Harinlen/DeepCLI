@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from kernel.skills.setup import check_setup
-from kernel.skills.types import SkillManifest, SkillSetup, SkillSetupEnvVar
+from kernel.agents.mustang.skills.setup import check_setup
+from kernel.agents.mustang.skills.types import SkillManifest, SkillSetup, SkillSetupEnvVar
 
 
 def _manifest(setup: SkillSetup | None = None) -> SkillManifest:

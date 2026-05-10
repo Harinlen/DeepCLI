@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from kernel.orchestrator.events import (
+from kernel.agents.mustang.orchestrator.events import (
     ConfigOptionChanged,
     ModeChanged,
     QueryError,
@@ -17,8 +17,8 @@ from kernel.orchestrator.events import (
     ToolCallResult,
     ToolCallStart,
 )
-from kernel.orchestrator.tool_kinds import ToolKind
-from kernel.protocol.acp.schemas.updates import (
+from kernel.agents.mustang.orchestrator.tool_kinds import ToolKind
+from kernel.core.protocol.acp.schemas.updates import (
     AgentMessageChunk,
     ConfigOptionUpdate,
     CurrentModeUpdate,
@@ -27,16 +27,16 @@ from kernel.protocol.acp.schemas.updates import (
     ToolCallStart as AcpToolCallStart,
     ToolCallUpdateNotification,
 )
-from kernel.protocol.interfaces.contracts.text_block import TextBlock
-from kernel.session.client_stream.event_mapper import SessionEventMapperMixin
-from kernel.session.events import (
+from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
+from kernel.agents.mustang.sessions.client_stream.event_mapper import SessionEventMapperMixin
+from kernel.agents.mustang.sessions.events import (
     ConfigOptionChangedEvent,
     ModeChangedEvent,
     SessionInfoChangedEvent,
     ToolCallEvent,
     ToolCallUpdateEvent,
 )
-from kernel.session.runtime.state import Session
+from kernel.agents.mustang.sessions.runtime.state import Session
 
 
 @dataclass

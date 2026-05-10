@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from kernel.agents import AgentDefinition
+from kernel.agent_hub.contracts import AgentDefinition
 
 
 class AgentDefinitionsConfig(BaseModel):

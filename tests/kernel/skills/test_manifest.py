@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from kernel.skills.manifest import ManifestError, parse_skill_manifest, strip_frontmatter
+from kernel.agents.mustang.skills.manifest import ManifestError, parse_skill_manifest, strip_frontmatter
 
 
 def _write_skill(

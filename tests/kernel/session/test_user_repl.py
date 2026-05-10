@@ -9,17 +9,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.orchestrator.types import ToolKind
-from kernel.llm.types import TextContent, UserMessage
-from kernel.protocol.interfaces.contracts.execute_shell_params import ExecuteShellParams
-from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
-from kernel.protocol.interfaces.contracts.text_block import TextBlock
-from kernel.session.runtime.state import Session
-from kernel.session.user_repl.service import UserReplMixin
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
-from kernel.tools.tool import Tool
-from kernel.tools.types import TextDisplay, ToolCallProgress, ToolCallResult
+from kernel.agents.mustang.orchestrator.types import ToolKind
+from kernel.agents.mustang.llm.types import TextContent, UserMessage
+from kernel.core.protocol.interfaces.contracts.execute_shell_params import ExecuteShellParams
+from kernel.core.protocol.interfaces.contracts.handler_context import HandlerContext
+from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
+from kernel.agents.mustang.sessions.runtime.state import Session
+from kernel.agents.mustang.sessions.user_repl.service import UserReplMixin
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
+from kernel.agents.mustang.tools.tool import Tool
+from kernel.agents.mustang.tools.types import TextDisplay, ToolCallProgress, ToolCallResult
 
 
 class _StreamingShellTool(Tool[dict[str, Any], str]):

@@ -5,9 +5,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from kernel.llm.config import ModelRef
-from kernel.session.orchestration.factory import SessionOrchestratorFactoryMixin
-from kernel.session.runtime.state import Session
+from kernel.agents.mustang.llm.config import ModelRef
+from kernel.agents.mustang.sessions.orchestration.factory import SessionOrchestratorFactoryMixin
+from kernel.agents.mustang.sessions.runtime.state import Session
 
 
 class _ModuleTable:
@@ -116,8 +116,8 @@ def test_optional_subsystem_returns_none_when_import_or_registration_missing() -
     factory = _Factory(_ModuleTable({}))
 
     assert factory._optional_subsystem("kernel.nope", "Nope") is None
-    assert factory._optional_subsystem("kernel.tools", "MissingClass") is None
-    assert factory._optional_subsystem("kernel.tools", "ToolManager") is None
+    assert factory._optional_subsystem("kernel.agents.mustang.tools", "MissingClass") is None
+    assert factory._optional_subsystem("kernel.agents.mustang.tools", "ToolManager") is None
 
 
 def test_make_orchestrator_wires_deps_and_session_bound_closures(tmp_path: Path) -> None:

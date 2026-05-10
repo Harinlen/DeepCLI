@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from kernel.tool_authz.rule_store import RuleStore, _build_rules, _parse_section
-from kernel.tool_authz.types import RuleSource
-from kernel.tool_authz.config_section import PermissionsSection
+from kernel.agents.mustang.tool_authz.rule_store import RuleStore, _build_rules, _parse_section
+from kernel.agents.mustang.tool_authz.types import RuleSource
+from kernel.agents.mustang.tool_authz.config_section import PermissionsSection
 
 
 # ---------------------------------------------------------------------------

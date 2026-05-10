@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from kernel.agent_runtime import (
+from kernel.agents.mustang.runtime import (
     AgentResourceView,
     MinimalAgentRuntimeServer,
     request_runtime,
 )
-from kernel.agents import HubFrame, HubFrameType
+from kernel.agent_hub.contracts import HubFrame, HubFrameType
 
 pytestmark = pytest.mark.anyio
 

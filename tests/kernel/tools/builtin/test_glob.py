@@ -8,10 +8,10 @@ from typing import Any
 
 import pytest
 
-from kernel.tools.builtin.glob_tool import GlobTool
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
-from kernel.tools.types import LocationsDisplay, ToolCallResult, ToolInputError
+from kernel.agents.mustang.tools.builtin.glob_tool import GlobTool
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
+from kernel.agents.mustang.tools.types import LocationsDisplay, ToolCallResult, ToolInputError
 
 
 # ---------------------------------------------------------------------------

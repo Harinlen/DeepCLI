@@ -14,14 +14,14 @@ from pydantic import ValidationError
 from websockets.asyncio.server import Server, ServerConnection
 
 from kernel.agent_hub.hub import AgentHub
-from kernel.agents import (
+from kernel.agent_hub.contracts import (
     AgentRegistrationRequest,
     AgentRuntimeRecord,
     HubFrame,
     HubFrameType,
     RouterFrame,
 )
-from kernel.agent_runtime import request_runtime
+from kernel.agents.mustang.runtime import request_runtime
 
 
 class AgentHubWebSocketServer:
@@ -138,7 +138,7 @@ class AgentHubWebSocketServer:
         if expected_secret is None or expected_secret != request.registration_token.secret:
             raise PermissionError("invalid registration token")
 
-        from kernel.agents import AgentStatus
+        from kernel.agent_hub.contracts import AgentStatus
 
         self.hub.manager.upsert_runtime_record(
             AgentRuntimeRecord(

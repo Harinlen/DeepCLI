@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from kernel.orchestrator import OrchestratorDeps
-from kernel.orchestrator.prompt_builder import PromptBuilder
-from kernel.prompts.manager import PromptManager
+from kernel.agents.mustang.orchestrator import OrchestratorDeps
+from kernel.agents.mustang.orchestrator.prompt_builder import PromptBuilder
+from kernel.agents.mustang.prompts.manager import PromptManager
 
 from tests.kernel.orchestrator.conftest import FakeLLMProvider
 

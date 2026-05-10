@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from kernel.memory.types import (
+from kernel.agents.mustang.memory.types import (
     EVERGREEN_CATEGORIES,
     SOURCE_WEIGHTS,
     DispositionConfig,

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from kernel.protocol.acp.schemas.updates import (
+from kernel.core.protocol.acp.schemas.updates import (
     AgentMessageChunk,
     AgentThoughtChunk,
     ConfigOptionUpdate,
@@ -17,8 +17,8 @@ from kernel.protocol.acp.schemas.updates import (
     UsageUpdate,
     UserMessageChunk,
 )
-from kernel.session.client_stream.replay import SessionReplayMixin
-from kernel.session.events import (
+from kernel.agents.mustang.sessions.client_stream.replay import SessionReplayMixin
+from kernel.agents.mustang.sessions.events import (
     AgentMessageEvent,
     ConfigOptionChangedEvent,
     ConversationMessageEvent,
@@ -28,7 +28,7 @@ from kernel.session.events import (
     TurnCompletedEvent,
     UserMessageEvent,
 )
-from kernel.session.runtime.state import Session
+from kernel.agents.mustang.sessions.runtime.state import Session
 
 
 class _Store:

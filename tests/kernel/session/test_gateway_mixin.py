@@ -7,9 +7,9 @@ from typing import Any
 
 import pytest
 
-from kernel.protocol.interfaces.contracts.prompt_params import PromptParams
-from kernel.session.api.gateway import SessionGatewayMixin
-from kernel.session.runtime.state import Session
+from kernel.core.protocol.interfaces.contracts.prompt_params import PromptParams
+from kernel.agents.mustang.sessions.api.gateway import SessionGatewayMixin
+from kernel.agents.mustang.sessions.runtime.state import Session
 
 
 class _Gateway(SessionGatewayMixin):

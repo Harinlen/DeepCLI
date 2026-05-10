@@ -55,7 +55,7 @@ async def handle(ctx):
 
     # HookEvent is imported lazily so this file can be imported by the
     # kernel's loader without dragging our test modules.
-    from kernel.hooks.types import HookEvent
+    from kernel.agents.mustang.hooks.types import HookEvent
 
     if ctx.event is HookEvent.WORKTREE_CREATE:
         slug = ctx.worktree_slug or "unnamed"
@@ -76,15 +76,15 @@ async def run() -> int:
     import os
     import shutil
 
-    from kernel.config import ConfigManager
-    from kernel.flags import FlagManager
-    from kernel.hooks import HookManager
-    from kernel.module_table import KernelModuleTable
-    from kernel.prompts.manager import PromptManager
-    from kernel.tools.builtin.enter_worktree import EnterWorktreeTool
-    from kernel.tools.builtin.exit_worktree import ExitWorktreeTool
-    from kernel.tools.context import ToolContext
-    from kernel.tools.file_state import FileStateCache
+    from kernel.core.config import ConfigManager
+    from kernel.core.flags import FlagManager
+    from kernel.agents.mustang.hooks import HookManager
+    from kernel.agents.mustang.module_table import KernelModuleTable
+    from kernel.agents.mustang.prompts.manager import PromptManager
+    from kernel.agents.mustang.tools.builtin.enter_worktree import EnterWorktreeTool
+    from kernel.agents.mustang.tools.builtin.exit_worktree import ExitWorktreeTool
+    from kernel.agents.mustang.tools.context import ToolContext
+    from kernel.agents.mustang.tools.file_state import FileStateCache
     import logging
 
     logging.basicConfig(level=logging.WARNING)

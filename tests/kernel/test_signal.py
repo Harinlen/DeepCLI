@@ -1,4 +1,4 @@
-"""Tests for :mod:`kernel.signal`.
+"""Tests for :mod:`kernel.core.signal`.
 
 The Signal primitive is tiny, so the tests focus on the invariants
 that ConfigManager (and future subscribers) actually rely on:
@@ -11,7 +11,7 @@ that ConfigManager (and future subscribers) actually rely on:
 
 from __future__ import annotations
 
-from kernel.signal import Signal
+from kernel.core.signal import Signal
 
 
 async def test_emit_calls_slots_with_args() -> None:

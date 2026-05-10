@@ -8,21 +8,21 @@ from typing import Any
 
 import httpx
 
-import kernel.tools.web.fetch_backends as fetch_backends
-from kernel.tools.web.fetch_backends import (
+import kernel.agents.mustang.tools.web.fetch_backends as fetch_backends
+from kernel.agents.mustang.tools.web.fetch_backends import (
     _has_env,
     _looks_like_anti_bot,
     fetch_with_fallback,
     get_available_backends,
 )
-from kernel.tools.web.fetch_backends.base import FetchBackend, FetchResult
-from kernel.tools.web.fetch_backends.httpx_html import (
+from kernel.agents.mustang.tools.web.fetch_backends.base import FetchBackend, FetchResult
+from kernel.agents.mustang.tools.web.fetch_backends.httpx_html import (
     _HEADERS,
     HttpxFetchBackend,
     _send_with_redirect_check,
 )
-from kernel.tools.web.fetch_backends.playwright_be import PlaywrightFetchBackend
-from kernel.tools.web.fetch_backends.readability_be import ReadabilityFetchBackend
+from kernel.agents.mustang.tools.web.fetch_backends.playwright_be import PlaywrightFetchBackend
+from kernel.agents.mustang.tools.web.fetch_backends.readability_be import ReadabilityFetchBackend
 
 
 # ── Mock backend ──

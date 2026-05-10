@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.tools.builtin.bash import ALLOWLIST_SAFE_COMMANDS, BashTool
-from kernel.tools.types import ToolCallResult
+from kernel.agents.mustang.tools.builtin.bash import ALLOWLIST_SAFE_COMMANDS, BashTool
+from kernel.agents.mustang.tools.types import ToolCallResult
 
 
 @pytest.fixture

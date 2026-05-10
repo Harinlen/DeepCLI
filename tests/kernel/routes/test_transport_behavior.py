@@ -28,16 +28,16 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from kernel.connection_auth.context import AuthContext
-from kernel.connection_auth.connection_authenticator import AuthError
-from kernel.routes.flags import TransportFlags
-from kernel.routes.session import (
+from kernel.agents.access.security.context import AuthContext
+from kernel.agents.access.security.connection_authenticator import AuthError
+from kernel.agents.access.routes.flags import TransportFlags
+from kernel.agents.access.routes.session import (
     _MissingCredentials,
     _extract_credentials,
     _format_remote_addr,
     router,
 )
-from kernel.routes.stack import ProtocolError, ProtocolStack
+from kernel.agents.access.routes.stack import ProtocolError, ProtocolStack
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +203,7 @@ def _failing_stack() -> ProtocolStack:
 def test_decode_error_sends_error_frame_and_keeps_connection_alive() -> None:
     """A ProtocolError from decode must not close the connection."""
     client = TestClient(_app(_module_table()), raise_server_exceptions=False)
-    with patch("kernel.routes.session.create_stack", return_value=_failing_stack()):
+    with patch("kernel.agents.access.routes.session.create_stack", return_value=_failing_stack()):
         with client.websocket_connect("/session?token=valid") as ws:
             # Good frame → echoed normally
             ws.send_text("good")
@@ -244,7 +244,7 @@ def _tracking_stack(log: list) -> ProtocolStack:
 def test_on_disconnect_called_after_client_disconnect() -> None:
     log: list = []
     client = TestClient(_app(_module_table()), raise_server_exceptions=False)
-    with patch("kernel.routes.session.create_stack", return_value=_tracking_stack(log)):
+    with patch("kernel.agents.access.routes.session.create_stack", return_value=_tracking_stack(log)):
         with client.websocket_connect("/session?token=valid") as ws:
             ws.send_text("ping")
             ws.receive_text()
@@ -258,7 +258,7 @@ def test_on_disconnect_not_called_when_auth_fails() -> None:
     """on_disconnect must not fire if auth failed before stack was created."""
     log: list = []
     client = TestClient(_app(_module_table(auth_error=True)), raise_server_exceptions=False)
-    with patch("kernel.routes.session.create_stack", return_value=_tracking_stack(log)):
+    with patch("kernel.agents.access.routes.session.create_stack", return_value=_tracking_stack(log)):
         with pytest.raises(WebSocketDisconnect):
             with client.websocket_connect("/session?token=bad") as ws:
                 ws.receive_text()

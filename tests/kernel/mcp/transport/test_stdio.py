@@ -1,4 +1,4 @@
-"""Tests for kernel.mcp.transport.stdio — StdioTransport."""
+"""Tests for kernel.agents.mustang.mcp.transport.stdio — StdioTransport."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import sys
 
 import pytest
 
-from kernel.mcp.transport.stdio import StdioTransport, _expand_env
-from kernel.mcp.types import TransportClosed
+from kernel.agents.mustang.mcp.transport.stdio import StdioTransport, _expand_env
+from kernel.agents.mustang.mcp.types import TransportClosed
 
 
 class TestExpandEnv:

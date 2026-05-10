@@ -7,10 +7,10 @@ from typing import Any
 
 import pytest
 
-from kernel.orchestrator.types import ToolKind
-from kernel.tools.registry import ToolRegistry
-from kernel.tools.tool import Tool
-from kernel.tools.types import ToolCallProgress, ToolCallResult
+from kernel.agents.mustang.orchestrator.types import ToolKind
+from kernel.agents.mustang.tools.registry import ToolRegistry
+from kernel.agents.mustang.tools.tool import Tool
+from kernel.agents.mustang.tools.types import ToolCallProgress, ToolCallResult
 
 
 class _Fake(Tool[dict[str, Any], str]):

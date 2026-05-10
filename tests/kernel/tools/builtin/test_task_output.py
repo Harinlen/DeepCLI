@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from kernel.tasks.output import get_task_output_path
-from kernel.tasks.registry import TaskRegistry
-from kernel.tasks.types import ShellTaskState, TaskStatus
-from kernel.tools.builtin.task_output import TaskOutputTool
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
+from kernel.agents.mustang.tasks.output import get_task_output_path
+from kernel.agents.mustang.tasks.registry import TaskRegistry
+from kernel.agents.mustang.tasks.types import ShellTaskState, TaskStatus
+from kernel.agents.mustang.tools.builtin.task_output import TaskOutputTool
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
 
 
 def _ctx(tmp_path: Path) -> ToolContext:

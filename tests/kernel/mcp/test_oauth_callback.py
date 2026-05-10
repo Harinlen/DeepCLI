@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from kernel.mcp.oauth_callback import OAuthCallbackError, run_callback_server
+from kernel.agents.mustang.mcp.oauth_callback import OAuthCallbackError, run_callback_server
 
 
 @pytest.mark.anyio

@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.agent_runtime.__main__ import _dispatch_runtime_contract, _prompt_text, _write_json
-from kernel.agents import HubFrame, HubFrameType
+from kernel.agents.mustang.runtime.__main__ import _dispatch_runtime_contract, _prompt_text, _write_json
+from kernel.agent_hub.contracts import HubFrame, HubFrameType
 
 
 def test_kernel_main_version_prints_and_returns(
@@ -20,7 +20,7 @@ def test_kernel_main_version_prints_and_returns(
 
     kernel_main.main()
 
-    assert "mustang kernel" in capsys.readouterr().out
+    assert "deepcli kernel" in capsys.readouterr().out
 
 
 def test_kernel_main_runs_uvicorn_and_sets_dev(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -42,7 +42,7 @@ def test_kernel_main_runs_uvicorn_and_sets_dev(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_access_agent_main_sets_router_or_compat_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    from kernel.access_agent import __main__ as access_main
+    from kernel.agents.access import __main__ as access_main
     from kernel.uvicorn_runtime import uvicorn_loop
 
     run = MagicMock()

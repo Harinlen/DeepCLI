@@ -9,7 +9,7 @@ roundtrip、broadcast、replay、orchestrator event mapping、持久化写入等
 
 当前行为必须保持不变：
 
-- `from kernel.session import SessionManager` 继续可用。
+- `from kernel.agents.mustang.sessions import SessionManager` 继续可用。
 - `SessionManager` 继续实现 `SessionHandler` 的 7 个 ACP 方法。
 - 当前存储实现是 SQLite event table + sidecar spillover；本重构不把存储改回 JSONL。
 - 协议层仍然只通过 `SessionHandler` 调用 Session subsystem。
@@ -67,8 +67,8 @@ src/kernel/kernel/session/
     imports.py                 # private compatibility import surface for internal mixins
 ```
 
-Implementation note: the final layout deliberately keeps `kernel.session.events` and
-`kernel.session.store` as modules rather than converting them to packages. This preserves
+Implementation note: the final layout deliberately keeps `kernel.agents.mustang.sessions.events` and
+`kernel.agents.mustang.sessions.store` as modules rather than converting them to packages. This preserves
 the existing import paths with the least risk while still moving schema and spillover
 responsibilities out of the compatibility modules. Internal code is grouped by functional
 path: API entrypoints, lifecycle, turns, client streaming, orchestration, persistence,
@@ -226,21 +226,21 @@ Treat this as the main Phase 4.5 closure-seam inventory area for the batch.
 
 ### `event_schema.py` and `events.py`
 
-Split current `session/events.py` while keeping `kernel.session.events` import-compatible:
+Split current `session/events.py` while keeping `kernel.agents.mustang.sessions.events` import-compatible:
 
 - `event_schema.py`: event Pydantic models and `SessionEvent` union
 - `events.py`: compatibility exports plus `parse_event`, `serialize_event`
 
-Keep `from kernel.session.events import SessionCreatedEvent` working.
+Keep `from kernel.agents.mustang.sessions.events import SessionCreatedEvent` working.
 
 ### `store.py` and `store_spillover.py`
 
-Split current `session/store.py` while keeping `kernel.session.store` import-compatible:
+Split current `session/store.py` while keeping `kernel.agents.mustang.sessions.store` import-compatible:
 
 - `store.py`: public `SessionStore`, DB open/close, SQLite query methods
 - `store_spillover.py`: sidecar tool result read/write
 
-Keep `from kernel.session.store import SessionStore` working.
+Keep `from kernel.agents.mustang.sessions.store import SessionStore` working.
 
 ## Migration Order
 

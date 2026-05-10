@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kernel.llm.config import ModelRef
-from kernel.orchestrator.prompt_builder import PromptBuilder
+from kernel.agents.mustang.llm.config import ModelRef
+from kernel.agents.mustang.orchestrator.prompt_builder import PromptBuilder
 
 
 # ---------------------------------------------------------------------------

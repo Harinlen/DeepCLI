@@ -19,14 +19,14 @@ from datetime import datetime
 
 import pytest
 
-from kernel.prompts.manager import PromptManager
-from kernel.tools.builtin.cron_create import CronCreateTool
-from kernel.tools.builtin.enter_plan_mode import EnterPlanModeTool
-from kernel.tools.builtin.enter_worktree import EnterWorktreeTool
-from kernel.tools.builtin.exit_plan_mode import ExitPlanModeTool
-from kernel.tools.builtin.exit_worktree import ExitWorktreeTool
-from kernel.tools.builtin.todo_write import TodoWriteTool
-from kernel.tools.builtin.web_search import WebSearchTool
+from kernel.agents.mustang.prompts.manager import PromptManager
+from kernel.agents.mustang.tools.builtin.cron_create import CronCreateTool
+from kernel.agents.mustang.tools.builtin.enter_plan_mode import EnterPlanModeTool
+from kernel.agents.mustang.tools.builtin.enter_worktree import EnterWorktreeTool
+from kernel.agents.mustang.tools.builtin.exit_plan_mode import ExitPlanModeTool
+from kernel.agents.mustang.tools.builtin.exit_worktree import ExitWorktreeTool
+from kernel.agents.mustang.tools.builtin.todo_write import TodoWriteTool
+from kernel.agents.mustang.tools.builtin.web_search import WebSearchTool
 
 
 @pytest.fixture(scope="module")

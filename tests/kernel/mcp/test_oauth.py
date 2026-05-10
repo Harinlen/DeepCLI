@@ -8,7 +8,7 @@ import hashlib
 import pytest
 import httpx
 
-from kernel.mcp.oauth import (
+from kernel.agents.mustang.mcp.oauth import (
     OAuthDiscoveryError,
     OAuthMetadata,
     OAuthTokenError,

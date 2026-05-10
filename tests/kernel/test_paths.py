@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from kernel.paths import (
+from kernel.core.paths import (
     deepcli_home,
     user_config_dir,
     user_data_dir,

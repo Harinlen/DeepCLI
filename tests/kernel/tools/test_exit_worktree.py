@@ -9,9 +9,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from kernel.git.types import WorktreeSession
-from kernel.tools.builtin.exit_worktree import ExitWorktreeTool
-from kernel.tools.types import ToolCallResult, ToolInputError
+from kernel.agents.mustang.git.types import WorktreeSession
+from kernel.agents.mustang.tools.builtin.exit_worktree import ExitWorktreeTool
+from kernel.agents.mustang.tools.types import ToolCallResult, ToolInputError
 
 
 def _make_ws(
@@ -74,11 +74,11 @@ class TestExitWorktree:
         ctx = _make_ctx(ws=ws)
 
         with patch(
-            "kernel.tools.builtin.exit_worktree.count_changes",
+            "kernel.agents.mustang.tools.builtin.exit_worktree.count_changes",
             new_callable=AsyncMock,
             return_value=0,
         ), patch(
-            "kernel.tools.builtin.exit_worktree.remove_worktree",
+            "kernel.agents.mustang.tools.builtin.exit_worktree.remove_worktree",
             new_callable=AsyncMock,
         ) as mock_remove:
             tool = ExitWorktreeTool()
@@ -93,7 +93,7 @@ class TestExitWorktree:
         ctx = _make_ctx(ws=ws)
 
         with patch(
-            "kernel.tools.builtin.exit_worktree.count_changes",
+            "kernel.agents.mustang.tools.builtin.exit_worktree.count_changes",
             new_callable=AsyncMock,
             return_value=3,
         ):
@@ -107,7 +107,7 @@ class TestExitWorktree:
         ctx = _make_ctx(ws=ws)
 
         with patch(
-            "kernel.tools.builtin.exit_worktree.remove_worktree",
+            "kernel.agents.mustang.tools.builtin.exit_worktree.remove_worktree",
             new_callable=AsyncMock,
         ) as mock_remove:
             tool = ExitWorktreeTool()
@@ -144,8 +144,8 @@ class TestExitWorktree:
         results = await _collect(tool, {"action": "keep"}, ctx)
 
         modifier = results[0].context_modifier
-        from kernel.tools.context import ToolContext
-        from kernel.tools.file_state import FileStateCache
+        from kernel.agents.mustang.tools.context import ToolContext
+        from kernel.agents.mustang.tools.file_state import FileStateCache
 
         old_ctx = ToolContext(
             session_id="s1",

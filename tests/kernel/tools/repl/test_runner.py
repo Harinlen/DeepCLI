@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from kernel.tools.repl.linter import ReplLintError, lint_repl_code
-from kernel.tools.repl.runner import ReplRunner
-from kernel.tools.types import NestedToolResult
+from kernel.agents.mustang.tools.repl.linter import ReplLintError, lint_repl_code
+from kernel.agents.mustang.tools.repl.runner import ReplRunner
+from kernel.agents.mustang.tools.types import NestedToolResult
 
 
 def test_linter_rejects_import() -> None:

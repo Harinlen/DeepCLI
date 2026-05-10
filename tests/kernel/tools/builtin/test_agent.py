@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from kernel.orchestrator.events import SubAgentEnd, TextDelta
-from kernel.orchestrator.types import StopReason
-from kernel.tasks.registry import TaskRegistry
-from kernel.tasks.types import TaskStatus
-from kernel.tools.builtin.agent import AgentTool, _run_agent_background
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
-from kernel.tools.types import ToolCallProgress, ToolCallResult
+from kernel.agents.mustang.orchestrator.events import SubAgentEnd, TextDelta
+from kernel.agents.mustang.orchestrator.types import StopReason
+from kernel.agents.mustang.tasks.registry import TaskRegistry
+from kernel.agents.mustang.tasks.types import TaskStatus
+from kernel.agents.mustang.tools.builtin.agent import AgentTool, _run_agent_background
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
+from kernel.agents.mustang.tools.types import ToolCallProgress, ToolCallResult
 
 
 def _ctx(tmp_path: Path) -> ToolContext:
@@ -169,7 +169,7 @@ class TestRunAgentBackground:
     @pytest.mark.asyncio
     async def test_success(self) -> None:
         registry = TaskRegistry()
-        from kernel.tasks.types import AgentTaskState
+        from kernel.agents.mustang.tasks.types import AgentTaskState
 
         task = AgentTaskState(
             id="a_bg1", status=TaskStatus.running,
@@ -189,7 +189,7 @@ class TestRunAgentBackground:
     @pytest.mark.asyncio
     async def test_spawn_none(self) -> None:
         registry = TaskRegistry()
-        from kernel.tasks.types import AgentTaskState
+        from kernel.agents.mustang.tasks.types import AgentTaskState
 
         task = AgentTaskState(
             id="a_bg2", status=TaskStatus.running,
@@ -209,7 +209,7 @@ class TestRunAgentBackground:
     @pytest.mark.asyncio
     async def test_exception(self) -> None:
         registry = TaskRegistry()
-        from kernel.tasks.types import AgentTaskState
+        from kernel.agents.mustang.tasks.types import AgentTaskState
 
         task = AgentTaskState(
             id="a_bg3", status=TaskStatus.running,

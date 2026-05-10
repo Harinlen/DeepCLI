@@ -8,11 +8,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from kernel.mcp.types import ConnectedServer, McpResourceDef, McpResourceResult
-from kernel.tools.builtin.list_mcp_resources import ListMcpResourcesTool
-from kernel.tools.builtin.read_mcp_resource import ReadMcpResourceTool, _mime_to_ext
-from kernel.tools.context import ToolContext
-from kernel.tools.types import ToolInputError
+from kernel.agents.mustang.mcp.types import ConnectedServer, McpResourceDef, McpResourceResult
+from kernel.agents.mustang.tools.builtin.list_mcp_resources import ListMcpResourcesTool
+from kernel.agents.mustang.tools.builtin.read_mcp_resource import ReadMcpResourceTool, _mime_to_ext
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.types import ToolInputError
 
 
 def _ctx(mcp_manager: Any = None) -> ToolContext:

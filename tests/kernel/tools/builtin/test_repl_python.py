@@ -6,10 +6,10 @@ from typing import Any
 
 import pytest
 
-from kernel.tools.builtin.repl_python import ReplTool
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
-from kernel.tools.types import NestedToolResult, ToolCallResult
+from kernel.agents.mustang.tools.builtin.repl_python import ReplTool
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
+from kernel.agents.mustang.tools.types import NestedToolResult, ToolCallResult
 
 
 def _ctx(tmp_path: Path, run_nested_tool: Any) -> ToolContext:

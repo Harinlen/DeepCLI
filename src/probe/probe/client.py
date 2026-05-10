@@ -449,7 +449,11 @@ class ProbeClient:
         """List persisted sessions through ACP."""
         result: dict[str, Any] = await self._request(
             "session/list",
-            {"cursor": cursor, "cwd": cwd},
+            {
+                "cursor": cursor,
+                "cwd": cwd,
+                "meta": {"mustang.agent/includeEmpty": True},
+            },
         )
         return result
 

@@ -25,17 +25,17 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "kernel"))
 
 
 async def run() -> int:
-    from kernel.config import ConfigManager
-    from kernel.flags import FlagManager
-    from kernel.llm import LLMManager
-    from kernel.llm_provider import LLMProviderManager
-    from kernel.module_table import KernelModuleTable
-    from kernel.prompts.manager import PromptManager
-    from kernel.secrets import SecretManager
-    from kernel.session import _make_summarise_closure
-    from kernel.tools.builtin.web_fetch import WebFetchTool
-    from kernel.tools.context import ToolContext
-    from kernel.tools.file_state import FileStateCache
+    from kernel.core.config import ConfigManager
+    from kernel.core.flags import FlagManager
+    from kernel.agents.mustang.llm import LLMManager
+    from kernel.agents.mustang.llm_provider import LLMProviderManager
+    from kernel.agents.mustang.module_table import KernelModuleTable
+    from kernel.agents.mustang.prompts.manager import PromptManager
+    from kernel.core.secrets import SecretManager
+    from kernel.agents.mustang.sessions import _make_summarise_closure
+    from kernel.agents.mustang.tools.builtin.web_fetch import WebFetchTool
+    from kernel.agents.mustang.tools.context import ToolContext
+    from kernel.agents.mustang.tools.file_state import FileStateCache
     import logging
 
     logging.basicConfig(level=logging.WARNING)

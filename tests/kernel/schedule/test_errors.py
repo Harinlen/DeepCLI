@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from kernel.schedule.errors import (
+from kernel.agents.mustang.schedule.errors import (
     BACKOFF_SCHEDULE_S,
     backoff_delay,
     is_transient_delivery_error,

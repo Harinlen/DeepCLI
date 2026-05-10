@@ -4,7 +4,7 @@ import httpx
 import orjson
 import pytest
 
-from kernel.llm.types import (
+from kernel.agents.mustang.llm.types import (
     PromptSection,
     TextChunk,
     TextContent,
@@ -14,8 +14,8 @@ from kernel.llm.types import (
     UserMessage,
     StreamError,
 )
-from kernel.llm_provider.errors import PromptTooLongError, ProviderError
-from kernel.llm_provider.openai_compatible import OpenAICompatibleProvider
+from kernel.agents.mustang.llm_provider.errors import PromptTooLongError, ProviderError
+from kernel.agents.mustang.llm_provider.openai_compatible import OpenAICompatibleProvider
 
 
 def _sse(*payloads: dict[str, object] | str) -> bytes:

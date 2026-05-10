@@ -6,15 +6,15 @@ from datetime import datetime, timezone
 
 import pytest
 
-from kernel.connection_auth.context import AuthContext
-from kernel.protocol.acp.handshake import AcpHandshake
-from kernel.protocol.acp.schemas.initialize import (
+from kernel.agents.access.security.context import AuthContext
+from kernel.core.protocol.acp.handshake import AcpHandshake
+from kernel.core.protocol.acp.schemas.initialize import (
     AcpClientCapabilities,
     AcpImplementation,
     AuthenticateRequest,
     InitializeRequest,
 )
-from kernel.protocol.interfaces.contracts.connection_context import (
+from kernel.core.protocol.interfaces.contracts.connection_context import (
     ConnectionContext,
 )
 

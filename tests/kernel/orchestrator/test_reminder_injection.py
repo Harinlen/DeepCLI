@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from kernel.orchestrator.orchestrator import (
+from kernel.agents.mustang.orchestrator.orchestrator import (
     _drain_pending_reminders,
     _format_reminders,
     _to_text_content,
 )
-from kernel.orchestrator.types import OrchestratorDeps
+from kernel.agents.mustang.orchestrator.types import OrchestratorDeps
 
 
 def test_format_reminders_wraps_in_system_reminder_tags() -> None:
@@ -47,7 +47,7 @@ def test_drain_pending_reminders_swallows_exception() -> None:
 
 
 def test_to_text_content_prepends_reminders() -> None:
-    from kernel.llm.types import TextContent
+    from kernel.agents.mustang.llm.types import TextContent
 
     blocks = [TextContent(text="user question")]
     out = _to_text_content(blocks, reminders=["remember X"])
@@ -59,7 +59,7 @@ def test_to_text_content_prepends_reminders() -> None:
 
 
 def test_to_text_content_without_reminders_is_pass_through() -> None:
-    from kernel.llm.types import TextContent
+    from kernel.agents.mustang.llm.types import TextContent
 
     blocks = [TextContent(text="just a question")]
     out = _to_text_content(blocks)

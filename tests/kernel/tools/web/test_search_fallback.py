@@ -6,9 +6,9 @@ from typing import Any
 
 import httpx
 
-from kernel.tools.web.search_backends import _has_env, get_available_backends, search_with_fallback
-from kernel.tools.web.search_backends.base import SearchBackend, SearchResult
-from kernel.tools.web.search_backends.duckduckgo import (
+from kernel.agents.mustang.tools.web.search_backends import _has_env, get_available_backends, search_with_fallback
+from kernel.agents.mustang.tools.web.search_backends.base import SearchBackend, SearchResult
+from kernel.agents.mustang.tools.web.search_backends.duckduckgo import (
     DuckDuckGoSearchBackend,
     _parse_ddg_html,
     _resolve_ddg_url,

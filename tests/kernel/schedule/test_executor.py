@@ -4,8 +4,8 @@ import asyncio
 
 import pytest
 
-from kernel.schedule.executor import CronExecutor
-from kernel.schedule.types import CronTask, Schedule, ScheduleKind
+from kernel.agents.mustang.schedule.executor import CronExecutor
+from kernel.agents.mustang.schedule.types import CronTask, Schedule, ScheduleKind
 
 
 def _task(**kwargs) -> CronTask:
@@ -129,7 +129,7 @@ async def test_heartbeat_loop_calls_heartbeat_until_cancelled(monkeypatch: pytes
     async def fast_sleep(delay: float) -> None:
         return None
 
-    monkeypatch.setattr("kernel.schedule.executor.asyncio.sleep", fast_sleep)
+    monkeypatch.setattr("kernel.agents.mustang.schedule.executor.asyncio.sleep", fast_sleep)
 
     await CronExecutor(_SessionManager(), heartbeat_fn=heartbeat)._heartbeat_loop("task-1")
 

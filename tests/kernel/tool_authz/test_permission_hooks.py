@@ -9,19 +9,19 @@ from typing import Any
 
 import pytest
 
-from kernel.connection_auth import AuthContext
-from kernel.hooks import HookEvent, HookEventCtx
-from kernel.orchestrator.types import ToolKind
-from kernel.tool_authz.authorizer import ToolAuthorizer
-from kernel.tool_authz.rule_parser import parse_rule
-from kernel.tool_authz.types import (
+from kernel.agents.access.security import AuthContext
+from kernel.agents.mustang.hooks import HookEvent, HookEventCtx
+from kernel.agents.mustang.orchestrator.types import ToolKind
+from kernel.agents.mustang.tool_authz.authorizer import ToolAuthorizer
+from kernel.agents.mustang.tool_authz.rule_parser import parse_rule
+from kernel.agents.mustang.tool_authz.types import (
     AuthorizeContext,
     PermissionAsk,
     PermissionDeny,
     RuleSource,
 )
-from kernel.tools.tool import Tool
-from kernel.tools.types import (
+from kernel.agents.mustang.tools.tool import Tool
+from kernel.agents.mustang.tools.types import (
     PermissionSuggestion,
     ToolCallProgress,
     ToolCallResult,
@@ -62,7 +62,7 @@ class _RecordingHookManager:
                     await result
             except Exception as exc:
                 if type(exc).__name__ == "HookBlock":
-                    from kernel.hooks import EVENT_SPECS
+                    from kernel.agents.mustang.hooks import EVENT_SPECS
 
                     if EVENT_SPECS[ctx.event].can_block:
                         blocked = True
@@ -93,10 +93,10 @@ def _authorizer_with_hooks(hook_mgr: Any) -> ToolAuthorizer:
     """Build an authorizer whose module_table.get(HookManager) returns hook_mgr."""
     from unittest.mock import MagicMock
 
-    from kernel.tool_authz.bash_classifier import BashClassifier
-    from kernel.tool_authz.rule_engine import RuleEngine
-    from kernel.tool_authz.rule_store import RuleStore
-    from kernel.tool_authz.session_grant_cache import SessionGrantCache
+    from kernel.agents.mustang.tool_authz.bash_classifier import BashClassifier
+    from kernel.agents.mustang.tool_authz.rule_engine import RuleEngine
+    from kernel.agents.mustang.tool_authz.rule_store import RuleStore
+    from kernel.agents.mustang.tool_authz.session_grant_cache import SessionGrantCache
 
     authz = ToolAuthorizer.__new__(ToolAuthorizer)
     mt = MagicMock()

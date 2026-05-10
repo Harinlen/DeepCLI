@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from kernel.skills.bundled import (
+from kernel.agents.mustang.skills.bundled import (
     BundledSkillDef,
     clear_bundled_skills,
     extract_bundled_files,
     get_bundled_skills,
     register_bundled_skill,
 )
-from kernel.skills.types import SkillSource
+from kernel.agents.mustang.skills.types import SkillSource
 
 
 def setup_function() -> None:
@@ -62,7 +62,7 @@ def test_extract_bundled_files(
     # ``extract_bundled_files`` writes under ``_BUNDLED_SKILLS_ROOT``,
     # which defaults to ``~/.mustang/bundled-skills/``.  Redirect it
     # to ``tmp_path`` so the test never touches the developer's home.
-    from kernel.skills import bundled as bundled_mod
+    from kernel.agents.mustang.skills import bundled as bundled_mod
 
     monkeypatch.setattr(bundled_mod, "_BUNDLED_SKILLS_ROOT", tmp_path)
 

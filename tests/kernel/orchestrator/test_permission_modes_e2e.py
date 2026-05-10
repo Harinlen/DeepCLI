@@ -14,16 +14,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.llm.types import ToolUseContent
-from kernel.orchestrator.tool_executor import ToolExecutor
-from kernel.orchestrator.types import OrchestratorDeps, PermissionResponse, ToolKind
-from kernel.tool_authz.authorizer import ToolAuthorizer
-from kernel.tool_authz.rule_parser import parse_rule
-from kernel.tool_authz.types import (
+from kernel.agents.mustang.llm.types import ToolUseContent
+from kernel.agents.mustang.orchestrator.tool_executor import ToolExecutor
+from kernel.agents.mustang.orchestrator.types import OrchestratorDeps, PermissionResponse, ToolKind
+from kernel.agents.mustang.tool_authz.authorizer import ToolAuthorizer
+from kernel.agents.mustang.tool_authz.rule_parser import parse_rule
+from kernel.agents.mustang.tool_authz.types import (
     RuleSource,
 )
-from kernel.tools.tool import Tool
-from kernel.tools.types import (
+from kernel.agents.mustang.tools.tool import Tool
+from kernel.agents.mustang.tools.types import (
     PermissionSuggestion,
     ToolCallProgress,
     ToolCallResult,
@@ -54,8 +54,8 @@ class _EditTool(Tool[dict[str, Any], str]):
     async def call(
         self, input: dict[str, Any], ctx: Any
     ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
-        from kernel.protocol.interfaces.contracts.text_block import TextBlock
-        from kernel.tools.types import TextDisplay
+        from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
+        from kernel.agents.mustang.tools.types import TextDisplay
 
         yield ToolCallResult(
             data={"text": "edited"},
@@ -83,8 +83,8 @@ class _ExecTool(Tool[dict[str, Any], str]):
     async def call(
         self, input: dict[str, Any], ctx: Any
     ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
-        from kernel.protocol.interfaces.contracts.text_block import TextBlock
-        from kernel.tools.types import TextDisplay
+        from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
+        from kernel.agents.mustang.tools.types import TextDisplay
 
         yield ToolCallResult(
             data={"text": "executed"},
@@ -115,8 +115,8 @@ class _LowRiskTool(Tool[dict[str, Any], str]):
     async def call(
         self, input: dict[str, Any], ctx: Any
     ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
-        from kernel.protocol.interfaces.contracts.text_block import TextBlock
-        from kernel.tools.types import TextDisplay
+        from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
+        from kernel.agents.mustang.tools.types import TextDisplay
 
         yield ToolCallResult(
             data={"text": "done"},
@@ -147,8 +147,8 @@ class _HighRiskTool(Tool[dict[str, Any], str]):
     async def call(
         self, input: dict[str, Any], ctx: Any
     ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
-        from kernel.protocol.interfaces.contracts.text_block import TextBlock
-        from kernel.tools.types import TextDisplay
+        from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
+        from kernel.agents.mustang.tools.types import TextDisplay
 
         yield ToolCallResult(
             data={"text": "ran"},
@@ -164,10 +164,10 @@ class _HighRiskTool(Tool[dict[str, Any], str]):
 
 def _real_authorizer() -> ToolAuthorizer:
     """Build a real ToolAuthorizer (bypassing Subsystem.load)."""
-    from kernel.tool_authz.bash_classifier import BashClassifier
-    from kernel.tool_authz.rule_engine import RuleEngine
-    from kernel.tool_authz.rule_store import RuleStore
-    from kernel.tool_authz.session_grant_cache import SessionGrantCache
+    from kernel.agents.mustang.tool_authz.bash_classifier import BashClassifier
+    from kernel.agents.mustang.tool_authz.rule_engine import RuleEngine
+    from kernel.agents.mustang.tool_authz.rule_store import RuleStore
+    from kernel.agents.mustang.tool_authz.session_grant_cache import SessionGrantCache
 
     class _FakeModuleTable:
         config = None
@@ -325,9 +325,9 @@ async def test_auto_mode_asks_for_high_risk_tool() -> None:
 @pytest.mark.anyio
 async def test_mode_switching_lifecycle() -> None:
     """Verify mode transitions: default → accept_edits → plan → default."""
-    from kernel.llm.config import ModelRef
-    from kernel.orchestrator import OrchestratorConfig, OrchestratorDeps
-    from kernel.orchestrator.orchestrator import StandardOrchestrator
+    from kernel.agents.mustang.llm.config import ModelRef
+    from kernel.agents.mustang.orchestrator import OrchestratorConfig, OrchestratorDeps
+    from kernel.agents.mustang.orchestrator.orchestrator import StandardOrchestrator
 
     deps = OrchestratorDeps(provider=MagicMock())
     orc = StandardOrchestrator(

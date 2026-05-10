@@ -7,18 +7,18 @@ from pathlib import Path
 
 import pytest
 
-from kernel.config import ConfigManager
-from kernel.flags import FlagManager
-from kernel.hooks import (
+from kernel.core.config import ConfigManager
+from kernel.core.flags import FlagManager
+from kernel.agents.mustang.hooks import (
     AmbientContext,
     HookBlock,
     HookEvent,
     HookEventCtx,
     HookManager,
 )
-from kernel.hooks.registry import HookRegistry
-from kernel.hooks.types import EVENT_SPECS
-from kernel.module_table import KernelModuleTable
+from kernel.agents.mustang.hooks.registry import HookRegistry
+from kernel.agents.mustang.hooks.types import EVENT_SPECS
+from kernel.agents.mustang.module_table import KernelModuleTable
 
 
 @pytest.fixture

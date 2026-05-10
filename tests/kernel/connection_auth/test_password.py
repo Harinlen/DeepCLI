@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from kernel.connection_auth._fs import atomic_write_0600
-from kernel.connection_auth.password import (
+from kernel.agents.access.security._fs import atomic_write_0600
+from kernel.agents.access.security.password import (
     _deserialize,
     _serialize,
     delete_hash,

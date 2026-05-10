@@ -6,14 +6,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from kernel.mcp.config import HTTPServerConfig, SSEServerConfig, StdioServerConfig, WebSocketServerConfig
-from kernel.mcp.health import _sweep, health_loop
-from kernel.mcp.transport import create_transport
-from kernel.mcp.transport.http import HTTPTransport
-from kernel.mcp.transport.sse import SSETransport
-from kernel.mcp.transport.stdio import StdioTransport
-from kernel.mcp.transport.ws import WebSocketTransport
-from kernel.mcp.types import ConnectedServer, FailedServer, TransportClosed
+from kernel.agents.mustang.mcp.config import HTTPServerConfig, SSEServerConfig, StdioServerConfig, WebSocketServerConfig
+from kernel.agents.mustang.mcp.health import _sweep, health_loop
+from kernel.agents.mustang.mcp.transport import create_transport
+from kernel.agents.mustang.mcp.transport.http import HTTPTransport
+from kernel.agents.mustang.mcp.transport.sse import SSETransport
+from kernel.agents.mustang.mcp.transport.stdio import StdioTransport
+from kernel.agents.mustang.mcp.transport.ws import WebSocketTransport
+from kernel.agents.mustang.mcp.types import ConnectedServer, FailedServer, TransportClosed
 
 
 class _Signal:
@@ -72,7 +72,7 @@ async def test_health_loop_emits_when_sweep_changes_and_exits_on_cancel(
         if sleeps > 1:
             raise asyncio.CancelledError
 
-    monkeypatch.setattr("kernel.mcp.health.asyncio.sleep", fast_sleep)
+    monkeypatch.setattr("kernel.agents.mustang.mcp.health.asyncio.sleep", fast_sleep)
 
     await health_loop(manager, interval=0)
 

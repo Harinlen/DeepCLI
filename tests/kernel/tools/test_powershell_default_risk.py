@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.tools.builtin.powershell import ALLOWLIST_SAFE_CMDLETS, PowerShellTool
+from kernel.agents.mustang.tools.builtin.powershell import ALLOWLIST_SAFE_CMDLETS, PowerShellTool
 
 
 @pytest.fixture

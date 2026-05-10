@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from kernel.schedule.store import CronStore
-from kernel.schedule.types import (
+from kernel.agents.mustang.schedule.store import CronStore
+from kernel.agents.mustang.schedule.types import (
     CronExecution,
     CronTask,
     CronTaskStatus,
@@ -196,7 +196,7 @@ class TestRoundTrip:
 
     @pytest.mark.asyncio
     async def test_full_field_roundtrip(self, store: CronStore) -> None:
-        from kernel.schedule.types import FailureAlertConfig
+        from kernel.agents.mustang.schedule.types import FailureAlertConfig
 
         task = CronTask(
             id="rt001",

@@ -6,19 +6,19 @@ from typing import Any
 import httpx
 import pytest
 
-from kernel.tools.web.fetch_backends.exa import ExaFetchBackend
-from kernel.tools.web.fetch_backends.firecrawl import FirecrawlFetchBackend
-from kernel.tools.web.fetch_backends.parallel import ParallelFetchBackend
-from kernel.tools.web.fetch_backends.tavily import TavilyFetchBackend
-from kernel.tools.web.search_backends.brave import BraveSearchBackend
-from kernel.tools.web.search_backends.exa import ExaSearchBackend
-from kernel.tools.web.search_backends.firecrawl import FirecrawlSearchBackend
-from kernel.tools.web.search_backends.google import GoogleSearchBackend
-from kernel.tools.web.search_backends.kimi import KimiSearchBackend
-from kernel.tools.web.search_backends.parallel import ParallelSearchBackend
-from kernel.tools.web.search_backends.perplexity import PerplexitySearchBackend
-from kernel.tools.web.search_backends.tavily import TavilySearchBackend
-from kernel.tools.web.search_backends.xai import XaiSearchBackend
+from kernel.agents.mustang.tools.web.fetch_backends.exa import ExaFetchBackend
+from kernel.agents.mustang.tools.web.fetch_backends.firecrawl import FirecrawlFetchBackend
+from kernel.agents.mustang.tools.web.fetch_backends.parallel import ParallelFetchBackend
+from kernel.agents.mustang.tools.web.fetch_backends.tavily import TavilyFetchBackend
+from kernel.agents.mustang.tools.web.search_backends.brave import BraveSearchBackend
+from kernel.agents.mustang.tools.web.search_backends.exa import ExaSearchBackend
+from kernel.agents.mustang.tools.web.search_backends.firecrawl import FirecrawlSearchBackend
+from kernel.agents.mustang.tools.web.search_backends.google import GoogleSearchBackend
+from kernel.agents.mustang.tools.web.search_backends.kimi import KimiSearchBackend
+from kernel.agents.mustang.tools.web.search_backends.parallel import ParallelSearchBackend
+from kernel.agents.mustang.tools.web.search_backends.perplexity import PerplexitySearchBackend
+from kernel.agents.mustang.tools.web.search_backends.tavily import TavilySearchBackend
+from kernel.agents.mustang.tools.web.search_backends.xai import XaiSearchBackend
 
 
 class _FakeAsyncClient:

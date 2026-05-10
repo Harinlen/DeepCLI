@@ -8,10 +8,10 @@ from typing import Any
 
 import pytest
 
-from kernel.tools.builtin.file_edit import FileEditTool
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
-from kernel.tools.types import DiffDisplay, ToolCallResult, ToolInputError
+from kernel.agents.mustang.tools.builtin.file_edit import FileEditTool
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
+from kernel.agents.mustang.tools.types import DiffDisplay, ToolCallResult, ToolInputError
 
 
 # ---------------------------------------------------------------------------

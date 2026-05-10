@@ -7,8 +7,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-from kernel.skills.eligibility import is_eligible, is_visible
-from kernel.skills.types import (
+from kernel.agents.mustang.skills.eligibility import is_eligible, is_visible
+from kernel.agents.mustang.skills.types import (
     LoadedSkill,
     SkillFallbackFor,
     SkillManifest,

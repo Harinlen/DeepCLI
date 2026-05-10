@@ -11,20 +11,20 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.llm.types import ToolUseContent
-from kernel.orchestrator.events import ToolCallResult as ToolCallResultEvent
-from kernel.orchestrator.events import ToolCallStart
-from kernel.orchestrator.tool_executor import ToolExecutor, partition_tool_calls
-from kernel.orchestrator.types import OrchestratorDeps, ToolKind
-from kernel.tool_authz.types import (
+from kernel.agents.mustang.llm.types import ToolUseContent
+from kernel.agents.mustang.orchestrator.events import ToolCallResult as ToolCallResultEvent
+from kernel.agents.mustang.orchestrator.events import ToolCallStart
+from kernel.agents.mustang.orchestrator.tool_executor import ToolExecutor, partition_tool_calls
+from kernel.agents.mustang.orchestrator.types import OrchestratorDeps, ToolKind
+from kernel.agents.mustang.tool_authz.types import (
     AuthorizeContext,
     PermissionAllow,
     PermissionAsk,
     PermissionSuggestionBtn,
     ReasonDefaultRisk,
 )
-from kernel.tools.tool import Tool
-from kernel.tools.types import (
+from kernel.agents.mustang.tools.tool import Tool
+from kernel.agents.mustang.tools.types import (
     PermissionSuggestion,
     ToolCallProgress,
     ToolCallResult,
@@ -55,8 +55,8 @@ class _SafeTool(Tool[dict[str, Any], str]):
     async def call(
         self, input: dict[str, Any], ctx: Any
     ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
-        from kernel.protocol.interfaces.contracts.text_block import TextBlock
-        from kernel.tools.types import TextDisplay
+        from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
+        from kernel.agents.mustang.tools.types import TextDisplay
 
         delay = input.get("delay", 0)
         if delay:
@@ -89,8 +89,8 @@ class _UnsafeTool(Tool[dict[str, Any], str]):
     async def call(
         self, input: dict[str, Any], ctx: Any
     ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
-        from kernel.protocol.interfaces.contracts.text_block import TextBlock
-        from kernel.tools.types import TextDisplay
+        from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
+        from kernel.agents.mustang.tools.types import TextDisplay
 
         delay = input.get("delay", 0)
         if delay:
@@ -120,8 +120,8 @@ class _ContextProbeTool(Tool[dict[str, Any], str]):
     async def call(
         self, input: dict[str, Any], ctx: Any
     ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
-        from kernel.protocol.interfaces.contracts.text_block import TextBlock
-        from kernel.tools.types import TextDisplay
+        from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
+        from kernel.agents.mustang.tools.types import TextDisplay
 
         self.call_module_table = ctx.module_table
         yield ToolCallResult(
@@ -371,7 +371,7 @@ async def test_per_tool_event_ordering() -> None:
 @pytest.mark.anyio
 async def test_permission_serialization() -> None:
     """When concurrent safe tools both need ask, on_permission is never called concurrently."""
-    from kernel.orchestrator.types import PermissionResponse
+    from kernel.agents.mustang.orchestrator.types import PermissionResponse
 
     safe = _SafeTool()
     executor = ToolExecutor(
@@ -411,7 +411,7 @@ async def test_permission_serialization() -> None:
 @pytest.mark.anyio
 async def test_permission_request_carries_authorizer_suggestions() -> None:
     """ToolExecutor forwards dynamic PermissionAsk suggestions to Session."""
-    from kernel.orchestrator.types import PermissionResponse
+    from kernel.agents.mustang.orchestrator.types import PermissionResponse
 
     class _DestructiveAskAuthorizer(_AskAuthorizer):
         async def authorize(

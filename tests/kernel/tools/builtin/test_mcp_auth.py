@@ -7,11 +7,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.mcp.oauth import OAuthDiscoveryError, OAuthMetadata, OAuthRegistrationError
-from kernel.mcp.types import ConnectedServer, NeedsAuthServer
-from kernel.secrets.types import OAuthToken
-from kernel.tools.builtin.mcp_auth import McpAuthTool
-from kernel.tools.context import ToolContext
+from kernel.agents.mustang.mcp.oauth import OAuthDiscoveryError, OAuthMetadata, OAuthRegistrationError
+from kernel.agents.mustang.mcp.types import ConnectedServer, NeedsAuthServer
+from kernel.core.secrets.types import OAuthToken
+from kernel.agents.mustang.tools.builtin.mcp_auth import McpAuthTool
+from kernel.agents.mustang.tools.context import ToolContext
 
 
 class _CallbackHandle:
@@ -73,7 +73,7 @@ async def test_mcp_auth_tool_reports_discovery_failure(monkeypatch: pytest.Monke
         assert server_url == "https://mcp.example"
         raise OAuthDiscoveryError("metadata unavailable")
 
-    monkeypatch.setattr("kernel.mcp.oauth.discover_oauth_metadata", _discover)
+    monkeypatch.setattr("kernel.agents.mustang.mcp.oauth.discover_oauth_metadata", _discover)
 
     [result] = await _collect(tool)
 
@@ -97,8 +97,8 @@ async def test_mcp_auth_tool_reports_callback_server_failure(
     async def _callback(_: str) -> _CallbackHandle:
         raise OSError("port busy")
 
-    monkeypatch.setattr("kernel.mcp.oauth.discover_oauth_metadata", _discover)
-    monkeypatch.setattr("kernel.mcp.oauth_callback.run_callback_server", _callback)
+    monkeypatch.setattr("kernel.agents.mustang.mcp.oauth.discover_oauth_metadata", _discover)
+    monkeypatch.setattr("kernel.agents.mustang.mcp.oauth_callback.run_callback_server", _callback)
 
     [result] = await _collect(tool)
 
@@ -129,9 +129,9 @@ async def test_mcp_auth_tool_closes_callback_on_registration_failure(
     async def _register(_: OAuthMetadata, __: str) -> tuple[str, str | None]:
         raise OAuthRegistrationError("registration disabled")
 
-    monkeypatch.setattr("kernel.mcp.oauth.discover_oauth_metadata", _discover)
-    monkeypatch.setattr("kernel.mcp.oauth_callback.run_callback_server", _callback)
-    monkeypatch.setattr("kernel.mcp.oauth.register_client", _register)
+    monkeypatch.setattr("kernel.agents.mustang.mcp.oauth.discover_oauth_metadata", _discover)
+    monkeypatch.setattr("kernel.agents.mustang.mcp.oauth_callback.run_callback_server", _callback)
+    monkeypatch.setattr("kernel.agents.mustang.mcp.oauth.register_client", _register)
 
     [result] = await _collect(tool)
 
@@ -166,10 +166,10 @@ async def test_mcp_auth_tool_returns_url_with_cached_client_and_starts_backgroun
         coro.close()
         return MagicMock()
 
-    monkeypatch.setattr("kernel.mcp.oauth.discover_oauth_metadata", _discover)
-    monkeypatch.setattr("kernel.mcp.oauth_callback.run_callback_server", _callback)
-    monkeypatch.setattr("kernel.mcp.oauth.generate_pkce", lambda: ("verifier", "challenge"))
-    monkeypatch.setattr("kernel.tools.builtin.mcp_auth.asyncio.create_task", _create_task)
+    monkeypatch.setattr("kernel.agents.mustang.mcp.oauth.discover_oauth_metadata", _discover)
+    monkeypatch.setattr("kernel.agents.mustang.mcp.oauth_callback.run_callback_server", _callback)
+    monkeypatch.setattr("kernel.agents.mustang.mcp.oauth.generate_pkce", lambda: ("verifier", "challenge"))
+    monkeypatch.setattr("kernel.agents.mustang.tools.builtin.mcp_auth.asyncio.create_task", _create_task)
 
     [result] = await _collect(tool)
 

@@ -4,7 +4,7 @@ These tests verify the contract the lifespan is supposed to deliver:
 
 - the two bootstrap services (``FlagManager``, ``ConfigManager``)
   come up before any regular subsystem and land on the shared
-  :class:`~kernel.module_table.KernelModuleTable`
+  :class:`~kernel.agents.mustang.module_table.KernelModuleTable`
 - regular subsystems are started through ``Subsystem.load`` in
   declared order, register themselves on the module table, and
   stop in reverse order at shutdown
@@ -27,10 +27,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from kernel import app as app_module
-from kernel.flags import FlagManager
-from kernel.module_table import KernelModuleTable
-from kernel.subsystem import Subsystem
+from kernel.agents.access import app as app_module
+from kernel.core.flags import FlagManager
+from kernel.agents.mustang.module_table import KernelModuleTable
+from kernel.core.lifecycle import Subsystem
 
 
 class _Recorder:
@@ -59,7 +59,7 @@ def tmp_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(app_module, "FlagManager", lambda: FlagManager(path=flags_path))
 
     # SecretManager — redirect db to tmp_path.
-    from kernel.secrets import SecretManager
+    from kernel.core.secrets import SecretManager
 
     monkeypatch.setattr(
         app_module, "SecretManager",
@@ -104,7 +104,7 @@ _SUBSYSTEM_ATTRS: dict[str, str] = {
 
 @pytest.fixture
 def fake_subsystems(monkeypatch: pytest.MonkeyPatch) -> _Recorder:
-    """Replace every regular subsystem in ``kernel.app`` with a recorder stub.
+    """Replace every regular subsystem in ``kernel.agents.access.app`` with a recorder stub.
 
     Bootstrap services (``FlagManager`` / ``ConfigManager``) are
     deliberately **not** replaced here — they have richer APIs than

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from kernel.llm.types import (
+from kernel.agents.mustang.llm.types import (
     AssistantMessage,
     TextContent,
     ThinkingContent,
@@ -11,7 +11,7 @@ from kernel.llm.types import (
     ToolUseContent,
     UserMessage,
 )
-from kernel.orchestrator.history import ConversationHistory
+from kernel.agents.mustang.orchestrator.history import ConversationHistory
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +74,7 @@ def test_append_assistant_with_tool_calls() -> None:
 
 
 def test_append_assistant_assembles_thinking_content() -> None:
-    from kernel.llm.types import ThoughtChunk
+    from kernel.agents.mustang.llm.types import ThoughtChunk
 
     h = ConversationHistory()
     thoughts = [
@@ -95,7 +95,7 @@ def test_append_assistant_assembles_thinking_content() -> None:
 
 def test_append_assistant_thinking_comes_before_text() -> None:
     """Anthropic API requires thinking before text in the content list."""
-    from kernel.llm.types import ThoughtChunk
+    from kernel.agents.mustang.llm.types import ThoughtChunk
 
     h = ConversationHistory()
     thoughts = [ThoughtChunk(content="thought", signature="sig")]

@@ -11,22 +11,22 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.llm import LLMManager
-from kernel.llm.config import (
+from kernel.agents.mustang.llm import LLMManager
+from kernel.agents.mustang.llm.config import (
     CurrentUsedConfig,
     LLMConfig,
     ModelRef,
     ModelSpec,
     ProviderConfig,
 )
-from kernel.llm.errors import ModelNotFoundError
-from kernel.llm.types import (
+from kernel.agents.mustang.llm.errors import ModelNotFoundError
+from kernel.agents.mustang.llm.types import (
     LLMChunk,
     ModelInfo,
     TextChunk,
     UsageChunk,
 )
-from kernel.llm_provider.base import Provider
+from kernel.agents.mustang.llm_provider.base import Provider
 
 
 # ---------------------------------------------------------------------------

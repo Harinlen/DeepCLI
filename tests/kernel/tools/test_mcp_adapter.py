@@ -1,4 +1,4 @@
-"""Tests for kernel.tools.mcp_adapter — MCPAdapter + naming utils."""
+"""Tests for kernel.agents.mustang.tools.mcp_adapter — MCPAdapter + naming utils."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from kernel.mcp.types import McpToolDef, McpToolResult
-from kernel.tools.mcp_adapter import (
+from kernel.agents.mustang.mcp.types import McpToolDef, McpToolResult
+from kernel.agents.mustang.tools.mcp_adapter import (
     MCPAdapter,
     build_mcp_tool_name,
     extract_text_content,

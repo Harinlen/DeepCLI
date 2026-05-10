@@ -1,4 +1,4 @@
-"""Tests for kernel.git.context — build_git_context()."""
+"""Tests for kernel.agents.mustang.git.context — build_git_context()."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from kernel.git.context import MAX_STATUS_CHARS, build_git_context
-from kernel.git.types import GitContext
+from kernel.agents.mustang.git.context import MAX_STATUS_CHARS, build_git_context
+from kernel.agents.mustang.git.types import GitContext
 
 
 def _make_git_mgr(

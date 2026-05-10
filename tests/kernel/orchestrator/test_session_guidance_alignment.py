@@ -18,10 +18,10 @@ from typing import Any
 
 import pytest
 
-from kernel.llm.config import ModelRef
-from kernel.orchestrator import OrchestratorConfig, OrchestratorDeps
-from kernel.orchestrator.orchestrator import StandardOrchestrator
-from kernel.prompts.manager import PromptManager
+from kernel.agents.mustang.llm.config import ModelRef
+from kernel.agents.mustang.orchestrator import OrchestratorConfig, OrchestratorDeps
+from kernel.agents.mustang.orchestrator.orchestrator import StandardOrchestrator
+from kernel.agents.mustang.prompts.manager import PromptManager
 
 # Re-use the FakeLLMProvider fixture from conftest.
 from tests.kernel.orchestrator.conftest import FakeLLMProvider  # noqa: F401
@@ -239,7 +239,7 @@ class TestConditionalAssembly:
     ) -> None:
         """``_inject_session_guidance`` appends to the system prompt list."""
         orch = make_orch(skills=_StubSkills())
-        from kernel.llm.types import PromptSection
+        from kernel.agents.mustang.llm.types import PromptSection
 
         sections: list[PromptSection] = []
         orch._inject_session_guidance(sections, {"AskUserQuestion", "Agent", "Skill"})
@@ -254,7 +254,7 @@ class TestConditionalAssembly:
     ) -> None:
         """If deps.prompts is None, _build_ returns None and _inject_
         does not append anything."""
-        from kernel.llm.types import PromptSection
+        from kernel.agents.mustang.llm.types import PromptSection
         from tests.kernel.orchestrator.conftest import FakeLLMProvider
 
         deps = OrchestratorDeps(provider=FakeLLMProvider(), prompts=None)

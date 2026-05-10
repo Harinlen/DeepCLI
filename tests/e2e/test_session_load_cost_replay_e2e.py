@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from kernel.session.events import (
+from kernel.agents.mustang.sessions.events import (
     AgentMessageEvent,
     ConversationMessageEvent,
     TurnCompletedEvent,

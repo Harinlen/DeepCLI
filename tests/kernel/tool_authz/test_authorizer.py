@@ -12,20 +12,20 @@ from typing import Any
 
 import pytest
 
-from kernel.connection_auth import AuthContext
-from kernel.orchestrator.types import ToolKind
-from kernel.tool_authz.authorizer import ToolAuthorizer
-from kernel.tool_authz.rule_parser import parse_rule
-from kernel.tool_authz.types import (
+from kernel.agents.access.security import AuthContext
+from kernel.agents.mustang.orchestrator.types import ToolKind
+from kernel.agents.mustang.tool_authz.authorizer import ToolAuthorizer
+from kernel.agents.mustang.tool_authz.rule_parser import parse_rule
+from kernel.agents.mustang.tool_authz.types import (
     AuthorizeContext,
     PermissionAllow,
     PermissionAsk,
     PermissionDeny,
     RuleSource,
 )
-from kernel.tools.tool import Tool
-from kernel.tools.builtin.bash import BashTool
-from kernel.tools.types import (
+from kernel.agents.mustang.tools.tool import Tool
+from kernel.agents.mustang.tools.builtin.bash import BashTool
+from kernel.agents.mustang.tools.types import (
     PermissionSuggestion,
     ToolCallProgress,
     ToolCallResult,
@@ -94,10 +94,10 @@ def authorizer() -> ToolAuthorizer:
     authz = ToolAuthorizer.__new__(ToolAuthorizer)
     authz._module_table = _FakeModuleTable()  # type: ignore[attr-defined]
 
-    from kernel.tool_authz.bash_classifier import BashClassifier
-    from kernel.tool_authz.rule_engine import RuleEngine
-    from kernel.tool_authz.rule_store import RuleStore
-    from kernel.tool_authz.session_grant_cache import SessionGrantCache
+    from kernel.agents.mustang.tool_authz.bash_classifier import BashClassifier
+    from kernel.agents.mustang.tool_authz.rule_engine import RuleEngine
+    from kernel.agents.mustang.tool_authz.rule_store import RuleStore
+    from kernel.agents.mustang.tool_authz.session_grant_cache import SessionGrantCache
 
     authz._rule_store = RuleStore()
     authz._rule_engine = RuleEngine()

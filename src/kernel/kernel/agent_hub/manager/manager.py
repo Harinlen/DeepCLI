@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from kernel.agents import (
+from kernel.agent_hub.contracts import (
     AgentDefinition,
     AgentRuntimeRecord,
     AgentStatus,

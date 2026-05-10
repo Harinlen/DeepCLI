@@ -9,8 +9,8 @@ import os
 
 import pytest
 
-from kernel.tools.web.search_backends import search_with_fallback
-from kernel.tools.web.search_backends.duckduckgo import DuckDuckGoSearchBackend
+from kernel.agents.mustang.tools.web.search_backends import search_with_fallback
+from kernel.agents.mustang.tools.web.search_backends.duckduckgo import DuckDuckGoSearchBackend
 
 pytestmark = pytest.mark.e2e
 
@@ -46,7 +46,7 @@ class TestDuckDuckGoSearchBackend:
 )
 class TestBraveSearchBackend:
     async def test_search(self):
-        from kernel.tools.web.search_backends.brave import BraveSearchBackend
+        from kernel.agents.mustang.tools.web.search_backends.brave import BraveSearchBackend
 
         be = BraveSearchBackend()
         results = await be.search("python programming", limit=5)
@@ -63,7 +63,7 @@ class TestBraveSearchBackend:
 )
 class TestGoogleSearchBackend:
     async def test_search(self):
-        from kernel.tools.web.search_backends.google import GoogleSearchBackend
+        from kernel.agents.mustang.tools.web.search_backends.google import GoogleSearchBackend
 
         be = GoogleSearchBackend()
         results = await be.search("python programming", limit=5)
@@ -79,7 +79,7 @@ class TestGoogleSearchBackend:
 )
 class TestExaSearchBackend:
     async def test_search(self):
-        from kernel.tools.web.search_backends.exa import ExaSearchBackend
+        from kernel.agents.mustang.tools.web.search_backends.exa import ExaSearchBackend
 
         be = ExaSearchBackend()
         results = await be.search("python programming", limit=3)
@@ -95,7 +95,7 @@ class TestExaSearchBackend:
 )
 class TestTavilySearchBackend:
     async def test_search(self):
-        from kernel.tools.web.search_backends.tavily import TavilySearchBackend
+        from kernel.agents.mustang.tools.web.search_backends.tavily import TavilySearchBackend
 
         be = TavilySearchBackend()
         results = await be.search("python programming", limit=5)
@@ -111,7 +111,7 @@ class TestTavilySearchBackend:
 )
 class TestFirecrawlSearchBackend:
     async def test_search(self):
-        from kernel.tools.web.search_backends.firecrawl import FirecrawlSearchBackend
+        from kernel.agents.mustang.tools.web.search_backends.firecrawl import FirecrawlSearchBackend
 
         be = FirecrawlSearchBackend()
         results = await be.search("python programming", limit=5)
@@ -127,7 +127,7 @@ class TestFirecrawlSearchBackend:
 )
 class TestParallelSearchBackend:
     async def test_search(self):
-        from kernel.tools.web.search_backends.parallel import ParallelSearchBackend
+        from kernel.agents.mustang.tools.web.search_backends.parallel import ParallelSearchBackend
 
         be = ParallelSearchBackend()
         results = await be.search("python programming", limit=5)
@@ -143,7 +143,7 @@ class TestParallelSearchBackend:
 )
 class TestPerplexitySearchBackend:
     async def test_search(self):
-        from kernel.tools.web.search_backends.perplexity import PerplexitySearchBackend
+        from kernel.agents.mustang.tools.web.search_backends.perplexity import PerplexitySearchBackend
 
         be = PerplexitySearchBackend()
         results = await be.search("python programming", limit=5)
@@ -159,7 +159,7 @@ class TestPerplexitySearchBackend:
 )
 class TestKimiSearchBackend:
     async def test_search(self):
-        from kernel.tools.web.search_backends.kimi import KimiSearchBackend
+        from kernel.agents.mustang.tools.web.search_backends.kimi import KimiSearchBackend
 
         be = KimiSearchBackend()
         results = await be.search("python programming", limit=5)
@@ -175,7 +175,7 @@ class TestKimiSearchBackend:
 )
 class TestXaiSearchBackend:
     async def test_search(self):
-        from kernel.tools.web.search_backends.xai import XaiSearchBackend
+        from kernel.agents.mustang.tools.web.search_backends.xai import XaiSearchBackend
 
         be = XaiSearchBackend()
         results = await be.search("python programming", limit=5)

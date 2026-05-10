@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from kernel.tools.builtin.restart_self import RestartSelfTool
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
+from kernel.agents.mustang.tools.builtin.restart_self import RestartSelfTool
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
 
 
 def _ctx(tmp_path: Path) -> ToolContext:

@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from kernel.protocol.interfaces.batcher import Batcher
+from kernel.core.protocol.interfaces.batcher import Batcher
 
 
 # ---------------------------------------------------------------------------
@@ -84,12 +84,12 @@ class TestBatcherMerge:
 class TestAcpBatcher:
     @pytest.mark.anyio
     async def test_agent_message_chunks_merged(self) -> None:
-        from kernel.protocol.acp.batching import make_acp_batcher
-        from kernel.protocol.acp.schemas.updates import (
+        from kernel.core.protocol.acp.batching import make_acp_batcher
+        from kernel.core.protocol.acp.schemas.updates import (
             AgentMessageChunk,
             SessionUpdateNotification,
         )
-        from kernel.protocol.acp.schemas.content import AcpTextBlock
+        from kernel.core.protocol.acp.schemas.content import AcpTextBlock
 
         collected: list = []
 
@@ -110,13 +110,13 @@ class TestAcpBatcher:
 
     @pytest.mark.anyio
     async def test_tool_call_not_merged(self) -> None:
-        from kernel.protocol.acp.batching import make_acp_batcher
-        from kernel.protocol.acp.schemas.updates import (
+        from kernel.core.protocol.acp.batching import make_acp_batcher
+        from kernel.core.protocol.acp.schemas.updates import (
             AgentMessageChunk,
             SessionUpdateNotification,
             ToolCallStart,
         )
-        from kernel.protocol.acp.schemas.content import AcpTextBlock
+        from kernel.core.protocol.acp.schemas.content import AcpTextBlock
 
         collected: list = []
 

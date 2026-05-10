@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 
 
-from kernel.schedule.types import (
+from kernel.agents.mustang.schedule.types import (
     CronTask,
     CronTaskStatus,
     RepeatConfig,

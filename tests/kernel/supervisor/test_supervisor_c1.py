@@ -40,8 +40,8 @@ def test_supervisor_builds_ordered_child_specs(tmp_path: Path) -> None:
 
     assert list(specs) == ["hub", "access", "primary"]
     assert specs["hub"].command[2] == "kernel.agent_hub"
-    assert specs["access"].command[2] == "kernel.access_agent"
-    assert specs["primary"].command[2] == "kernel.agent_runtime"
+    assert specs["access"].command[2] == "kernel.agents.access"
+    assert specs["primary"].command[2] == "kernel.agents.mustang.runtime"
     assert "--prompt-backend" in specs["access"].command
     assert "router" in specs["access"].command
     assert f"--primary-token={runtime.primary_token}" in specs["hub"].command

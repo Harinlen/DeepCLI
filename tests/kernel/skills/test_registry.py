@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kernel.skills.registry import SkillRegistry
-from kernel.skills.types import LoadedSkill, SkillManifest, SkillSource
+from kernel.agents.mustang.skills.registry import SkillRegistry
+from kernel.agents.mustang.skills.types import LoadedSkill, SkillManifest, SkillSource
 
 
 def _skill(

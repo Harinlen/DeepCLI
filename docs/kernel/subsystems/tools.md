@@ -70,8 +70,8 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import Any, Literal, TypeVar, Generic
 
-from kernel.orchestrator.types import ToolKind
-from kernel.llm.types import ToolSchema
+from kernel.agents.mustang.orchestrator.types import ToolKind
+from kernel.agents.mustang.llm.types import ToolSchema
 
 InputT = TypeVar("InputT", bound=dict[str, Any])
 OutputT = TypeVar("OutputT")
@@ -2561,12 +2561,12 @@ def skip_without_key(env_var: str):
 # tests/kernel/tools/web/e2e/test_fetch_e2e.py
 
 import pytest
-from kernel.tools.web.fetch_backends import fetch_with_fallback
-from kernel.tools.web.fetch_backends.httpx_html import HttpxFetchBackend
-from kernel.tools.web.fetch_backends.firecrawl import FirecrawlFetchBackend
-from kernel.tools.web.fetch_backends.exa import ExaFetchBackend
-from kernel.tools.web.fetch_backends.tavily import TavilyFetchBackend
-from kernel.tools.web.fetch_backends.parallel import ParallelFetchBackend
+from kernel.agents.mustang.tools.web.fetch_backends import fetch_with_fallback
+from kernel.agents.mustang.tools.web.fetch_backends.httpx_html import HttpxFetchBackend
+from kernel.agents.mustang.tools.web.fetch_backends.firecrawl import FirecrawlFetchBackend
+from kernel.agents.mustang.tools.web.fetch_backends.exa import ExaFetchBackend
+from kernel.agents.mustang.tools.web.fetch_backends.tavily import TavilyFetchBackend
+from kernel.agents.mustang.tools.web.fetch_backends.parallel import ParallelFetchBackend
 
 pytestmark = pytest.mark.e2e
 
@@ -2677,17 +2677,17 @@ class TestFetchFallbackE2E:
 # tests/kernel/tools/web/e2e/test_search_e2e.py
 
 import pytest
-from kernel.tools.web.search_backends import search_with_fallback
-from kernel.tools.web.search_backends.duckduckgo import DuckDuckGoSearchBackend
-from kernel.tools.web.search_backends.brave import BraveSearchBackend
-from kernel.tools.web.search_backends.google import GoogleSearchBackend
-from kernel.tools.web.search_backends.exa import ExaSearchBackend
-from kernel.tools.web.search_backends.tavily import TavilySearchBackend
-from kernel.tools.web.search_backends.firecrawl import FirecrawlSearchBackend
-from kernel.tools.web.search_backends.parallel import ParallelSearchBackend
-from kernel.tools.web.search_backends.perplexity import PerplexitySearchBackend
-from kernel.tools.web.search_backends.kimi import KimiSearchBackend
-from kernel.tools.web.search_backends.xai import XaiSearchBackend
+from kernel.agents.mustang.tools.web.search_backends import search_with_fallback
+from kernel.agents.mustang.tools.web.search_backends.duckduckgo import DuckDuckGoSearchBackend
+from kernel.agents.mustang.tools.web.search_backends.brave import BraveSearchBackend
+from kernel.agents.mustang.tools.web.search_backends.google import GoogleSearchBackend
+from kernel.agents.mustang.tools.web.search_backends.exa import ExaSearchBackend
+from kernel.agents.mustang.tools.web.search_backends.tavily import TavilySearchBackend
+from kernel.agents.mustang.tools.web.search_backends.firecrawl import FirecrawlSearchBackend
+from kernel.agents.mustang.tools.web.search_backends.parallel import ParallelSearchBackend
+from kernel.agents.mustang.tools.web.search_backends.perplexity import PerplexitySearchBackend
+from kernel.agents.mustang.tools.web.search_backends.kimi import KimiSearchBackend
+from kernel.agents.mustang.tools.web.search_backends.xai import XaiSearchBackend
 
 pytestmark = pytest.mark.e2e
 

@@ -1,11 +1,11 @@
-"""Allow running kernel as ``python -m kernel``."""
+"""Allow running the Access Agent as ``python -m kernel``."""
 
 import argparse
 
 
 def main() -> None:
     """Entry point for ``python -m kernel``."""
-    parser = argparse.ArgumentParser(description="Mustang Kernel")
+    parser = argparse.ArgumentParser(description="DeepCLI Kernel")
     parser.add_argument("--version", action="store_true", help="Show version and exit")
     parser.add_argument("--port", type=int, required=True, help="Port to listen on")
     parser.add_argument("--dev", action="store_true", help="Enable INFO-level logging")
@@ -14,7 +14,7 @@ def main() -> None:
     if args.version:
         from kernel import __version__
 
-        print(f"mustang kernel {__version__}")
+        print(f"deepcli kernel {__version__}")
         return
 
     import os
@@ -26,7 +26,7 @@ def main() -> None:
         os.environ["_MUSTANG_DEV"] = "1"
 
     uvicorn.run(
-        "kernel.app:create_app",
+        "kernel.agents.access.app:create_app",
         factory=True,
         host="127.0.0.1",
         port=args.port,

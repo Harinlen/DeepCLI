@@ -1,10 +1,10 @@
-"""Tests for kernel.tasks.output."""
+"""Tests for kernel.agents.mustang.tasks.output."""
 
 import os
 
 import pytest
 
-from kernel.tasks.output import TaskOutput
+from kernel.agents.mustang.tasks.output import TaskOutput
 
 
 @pytest.fixture

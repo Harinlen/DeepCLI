@@ -322,7 +322,7 @@ CLI：
 
 ### Phase 5 — Runtime process guard
 
-- 增加 `kernel.tool_authz.runtime_guard`。
+- 增加 `kernel.agents.mustang.tool_authz.runtime_guard`。
 - 在 `ToolAuthorizer._authorize_impl` 最前面调用。
 - 覆盖 Bash / Cmd / PowerShell / ShellExec / Monitor。
 - 单元测试 `bypass` 下仍 deny runtime kill，包括 deny 当前 Agent Runtime 的

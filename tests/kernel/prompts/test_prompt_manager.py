@@ -1,4 +1,4 @@
-"""Tests for kernel.prompts.PromptManager."""
+"""Tests for kernel.agents.mustang.prompts.PromptManager."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from kernel.prompts import PromptKeyError, PromptLoadError, PromptManager
+from kernel.agents.mustang.prompts import PromptKeyError, PromptLoadError, PromptManager
 
 
 # ---------------------------------------------------------------------------

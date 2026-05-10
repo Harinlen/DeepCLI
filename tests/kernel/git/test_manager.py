@@ -1,4 +1,4 @@
-"""Tests for kernel.git.GitManager — lifecycle, config signal, tool sync."""
+"""Tests for kernel.agents.mustang.git.GitManager — lifecycle, config signal, tool sync."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from kernel.git import GitManager
-from kernel.git.types import GitConfig, GitContext, WorktreeSession
+from kernel.agents.mustang.git import GitManager
+from kernel.agents.mustang.git.types import GitConfig, GitContext, WorktreeSession
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +225,7 @@ class TestContextCache:
 
         ctx = GitContext("main", "main", "X", "", "")
         with patch(
-            "kernel.git.build_git_context", new_callable=AsyncMock
+            "kernel.agents.mustang.git.build_git_context", new_callable=AsyncMock
         ) as mock_build:
             mock_build.return_value = ctx
             r1 = await mgr.get_context(Path("/repo"), "s1")
@@ -243,7 +243,7 @@ class TestContextCache:
 
         ctx = GitContext("main", "main", "X", "", "")
         with patch(
-            "kernel.git.build_git_context", new_callable=AsyncMock
+            "kernel.agents.mustang.git.build_git_context", new_callable=AsyncMock
         ) as mock_build:
             mock_build.return_value = ctx
             await mgr.get_context(Path("/repo"), "s1")
@@ -321,10 +321,10 @@ class TestShutdown:
 
         with (
             patch(
-                "kernel.git.count_changes", new_callable=AsyncMock
+                "kernel.agents.mustang.git.count_changes", new_callable=AsyncMock
             ) as mock_count,
             patch(
-                "kernel.git.remove_worktree", new_callable=AsyncMock
+                "kernel.agents.mustang.git.remove_worktree", new_callable=AsyncMock
             ) as mock_remove,
         ):
             mock_count.return_value = 0
@@ -347,10 +347,10 @@ class TestShutdown:
 
         with (
             patch(
-                "kernel.git.count_changes", new_callable=AsyncMock
+                "kernel.agents.mustang.git.count_changes", new_callable=AsyncMock
             ) as mock_count,
             patch(
-                "kernel.git.remove_worktree", new_callable=AsyncMock
+                "kernel.agents.mustang.git.remove_worktree", new_callable=AsyncMock
             ) as mock_remove,
         ):
             mock_count.return_value = 3

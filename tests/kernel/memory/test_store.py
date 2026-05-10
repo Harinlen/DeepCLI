@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from kernel.memory.store import (
+from kernel.agents.mustang.memory.store import (
     append_memory,
     build_index_text,
     delete_memory,
@@ -23,7 +23,7 @@ from kernel.memory.store import (
     write_log,
     write_memory,
 )
-from kernel.memory.types import MemoryHeader
+from kernel.agents.mustang.memory.types import MemoryHeader
 
 
 @pytest.fixture()
@@ -137,10 +137,10 @@ class TestWriteAndRead:
         assert "atomic-test" in text
 
     def test_store_imports_when_fcntl_is_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        store_module = importlib.import_module("kernel.memory.store")
+        store_module = importlib.import_module("kernel.agents.mustang.memory.store")
         store_path = Path(store_module.__file__ or "")
         spec = importlib.util.spec_from_file_location(
-            "kernel.memory._store_no_fcntl_test",
+            "kernel.agents.mustang.memory._store_no_fcntl_test",
             store_path,
         )
         assert spec is not None

@@ -6,9 +6,9 @@ import pytest
 import yaml
 from pydantic import BaseModel, Field, ValidationError
 
-from kernel.flags import KernelFlags
-from kernel.flags import manager as flags_manager
-from kernel.flags.manager import FlagManager
+from kernel.core.flags import KernelFlags
+from kernel.core.flags import manager as flags_manager
+from kernel.core.flags.manager import FlagManager
 
 
 class ToolsFlags(BaseModel):

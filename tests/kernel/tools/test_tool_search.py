@@ -8,12 +8,12 @@ from typing import Any
 
 import pytest
 
-from kernel.orchestrator.types import ToolKind
-from kernel.tools.builtin.tool_search import ToolSearchTool
-from kernel.tools.context import ToolContext
-from kernel.tools.registry import ToolRegistry
-from kernel.tools.tool import Tool
-from kernel.tools.types import ToolCallProgress, ToolCallResult
+from kernel.agents.mustang.orchestrator.types import ToolKind
+from kernel.agents.mustang.tools.builtin.tool_search import ToolSearchTool
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.registry import ToolRegistry
+from kernel.agents.mustang.tools.tool import Tool
+from kernel.agents.mustang.tools.types import ToolCallProgress, ToolCallResult
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ async def _run_search(
         agent_id=None,
         cwd=__import__("pathlib").Path.cwd(),
         cancel_event=__import__("asyncio").Event(),
-        file_state=__import__("kernel.tools.file_state", fromlist=["FileStateCache"]).FileStateCache(),
+        file_state=__import__("kernel.agents.mustang.tools.file_state", fromlist=["FileStateCache"]).FileStateCache(),
     )
     result = None
     async for event in tool.call({"query": query, "max_results": max_results}, ctx):
@@ -293,7 +293,7 @@ async def test_output_format_is_functions_block() -> None:
 async def test_validate_empty_query_raises() -> None:
     reg = _make_registry()
     tool = _make_tool(reg)
-    from kernel.tools.types import ToolInputError
+    from kernel.agents.mustang.tools.types import ToolInputError
 
     with pytest.raises(ToolInputError):
         await tool.validate_input({"query": ""}, None)  # type: ignore[arg-type]

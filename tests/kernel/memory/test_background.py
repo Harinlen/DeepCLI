@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from kernel.memory.background import BackgroundMemoryAgent
-from kernel.memory.index import MemoryIndex
-from kernel.memory.store import ensure_directory_tree, write_memory
-from kernel.memory.types import MemoryHeader
+from kernel.agents.mustang.memory.background import BackgroundMemoryAgent
+from kernel.agents.mustang.memory.index import MemoryIndex
+from kernel.agents.mustang.memory.store import ensure_directory_tree, write_memory
+from kernel.agents.mustang.memory.types import MemoryHeader
 
 
 @pytest.fixture()
@@ -60,7 +60,7 @@ class TestMutualExclusion:
         await agent.on_pre_compact(messages)
 
         # No new files should be created (skipped due to mutual exclusion)
-        from kernel.memory.store import scan_headers
+        from kernel.agents.mustang.memory.store import scan_headers
 
         headers = scan_headers(mem_root)
         assert len(headers) == 0

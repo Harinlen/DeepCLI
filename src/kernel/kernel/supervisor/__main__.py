@@ -10,7 +10,7 @@ from kernel.supervisor.runtime import (
     SupervisorRuntime,
     install_signal_handlers,
 )
-from kernel.paths import user_state_dir
+from kernel.core.paths import user_state_dir
 
 
 def main() -> None:

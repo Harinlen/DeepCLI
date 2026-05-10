@@ -7,8 +7,8 @@ import pytest
 import websockets
 
 from kernel.agent_hub import AgentHub, AgentHubManager, AgentHubWebSocketServer, request_hub
-from kernel.agent_runtime import MinimalAgentRuntimeServer, RuntimeClientPeer
-from kernel.agents import (
+from kernel.agents.mustang.runtime import MinimalAgentRuntimeServer, RuntimeClientPeer
+from kernel.agent_hub.contracts import (
     AgentRegistrationRequest,
     AgentRuntimeKind,
     HubFrame,

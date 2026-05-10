@@ -1,10 +1,10 @@
-"""Tests for kernel.session.message_serde — Message round-trip serialization."""
+"""Tests for kernel.agents.mustang.sessions.message_serde — Message round-trip serialization."""
 
 from __future__ import annotations
 
 import pytest
 
-from kernel.llm.types import (
+from kernel.agents.mustang.llm.types import (
     AssistantMessage,
     ImageContent,
     TextContent,
@@ -13,7 +13,7 @@ from kernel.llm.types import (
     ToolUseContent,
     UserMessage,
 )
-from kernel.session.message_serde import deserialize_message, serialize_message
+from kernel.agents.mustang.sessions.message_serde import deserialize_message, serialize_message
 
 
 # ---------------------------------------------------------------------------

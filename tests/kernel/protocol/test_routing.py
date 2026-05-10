@@ -12,14 +12,14 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 
-from kernel.protocol.acp.namespaces import (
+from kernel.core.protocol.acp.namespaces import (
     MUSTANG_EXTENSION_PREFIX,
     AcpMethod,
     MethodKind,
     MustangMethod,
     classify_method,
 )
-from kernel.protocol.acp.routing import (
+from kernel.core.protocol.acp.routing import (
     REQUEST_DISPATCH,
     NOTIFICATION_DISPATCH,
     _handle_archive_session,
@@ -47,7 +47,7 @@ from kernel.protocol.acp.routing import (
     _handle_model_add,
     _handle_model_update,
 )
-from kernel.protocol.acp.schemas.model import (
+from kernel.core.protocol.acp.schemas.model import (
     AddModelRequest,
     AddProviderRequest,
     ListProfilesRequest,
@@ -57,7 +57,7 @@ from kernel.protocol.acp.schemas.model import (
     SetCurrentModelRequest,
     UpdateModelRequest,
 )
-from kernel.protocol.acp.schemas.session import (
+from kernel.core.protocol.acp.schemas.session import (
     ArchiveSessionRequest,
     CancelExecutionRequest,
     CancelNotification,
@@ -75,10 +75,10 @@ from kernel.protocol.acp.schemas.session import (
     SetSessionConfigOptionRequest,
     SetSessionModeRequest,
 )
-from kernel.protocol.interfaces.contracts.archive_session_result import ArchiveSessionResult
-from kernel.protocol.interfaces.contracts.close_session_result import CloseSessionResult
-from kernel.protocol.interfaces.contracts.delete_session_result import DeleteSessionResult
-from kernel.protocol.interfaces.contracts.get_usage_result import (
+from kernel.core.protocol.interfaces.contracts.archive_session_result import ArchiveSessionResult
+from kernel.core.protocol.interfaces.contracts.close_session_result import CloseSessionResult
+from kernel.core.protocol.interfaces.contracts.delete_session_result import DeleteSessionResult
+from kernel.core.protocol.interfaces.contracts.get_usage_result import (
     ContextUsageSummary,
     EnvironmentUsageSummary,
     GetUsageResult,
@@ -86,33 +86,33 @@ from kernel.protocol.interfaces.contracts.get_usage_result import (
     MemoryUsageSummary,
     TokenUsageSummary,
 )
-from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
-from kernel.protocol.interfaces.contracts.execution_result import ExecutionResult
-from kernel.protocol.interfaces.contracts.list_providers_result import (
+from kernel.core.protocol.interfaces.contracts.handler_context import HandlerContext
+from kernel.core.protocol.interfaces.contracts.execution_result import ExecutionResult
+from kernel.core.protocol.interfaces.contracts.list_providers_result import (
     ListProvidersResult,
     ProviderInfo,
     ProviderTypeInfo,
 )
-from kernel.protocol.interfaces.contracts.list_profiles_result import (
+from kernel.core.protocol.interfaces.contracts.list_profiles_result import (
     ListProfilesResult,
     ProfileInfo,
 )
-from kernel.protocol.interfaces.contracts.new_session_result import NewSessionResult
-from kernel.protocol.interfaces.contracts.load_session_result import LoadSessionResult
-from kernel.protocol.interfaces.contracts.list_sessions_result import ListSessionsResult
-from kernel.protocol.interfaces.contracts.rename_session_result import RenameSessionResult
-from kernel.protocol.interfaces.contracts.resume_session_result import ResumeSessionResult
-from kernel.protocol.interfaces.contracts.set_mode_result import SetModeResult
-from kernel.protocol.interfaces.contracts.set_config_option_result import (
+from kernel.core.protocol.interfaces.contracts.new_session_result import NewSessionResult
+from kernel.core.protocol.interfaces.contracts.load_session_result import LoadSessionResult
+from kernel.core.protocol.interfaces.contracts.list_sessions_result import ListSessionsResult
+from kernel.core.protocol.interfaces.contracts.rename_session_result import RenameSessionResult
+from kernel.core.protocol.interfaces.contracts.resume_session_result import ResumeSessionResult
+from kernel.core.protocol.interfaces.contracts.set_mode_result import SetModeResult
+from kernel.core.protocol.interfaces.contracts.set_config_option_result import (
     SetConfigOptionResult,
 )
-from kernel.protocol.interfaces.contracts.add_provider_result import AddProviderResult
-from kernel.protocol.interfaces.contracts.remove_provider_result import RemoveProviderResult
-from kernel.protocol.interfaces.contracts.refresh_models_result import RefreshModelsResult
-from kernel.protocol.interfaces.contracts.set_current_model_result import (
+from kernel.core.protocol.interfaces.contracts.add_provider_result import AddProviderResult
+from kernel.core.protocol.interfaces.contracts.remove_provider_result import RemoveProviderResult
+from kernel.core.protocol.interfaces.contracts.refresh_models_result import RefreshModelsResult
+from kernel.core.protocol.interfaces.contracts.set_current_model_result import (
     SetCurrentModelResult,
 )
-from kernel.protocol.interfaces.contracts.update_model_result import UpdateModelResult
+from kernel.core.protocol.interfaces.contracts.update_model_result import UpdateModelResult
 
 
 # ---------------------------------------------------------------------------
@@ -281,7 +281,7 @@ class TestHandleResumeAndClose:
 
 class TestHandleList:
     async def test_converts_sessions(self) -> None:
-        from kernel.protocol.interfaces.contracts.list_sessions_result import SessionSummary
+        from kernel.core.protocol.interfaces.contracts.list_sessions_result import SessionSummary
 
         sh = MagicMock()
         sh.list = AsyncMock(
@@ -319,7 +319,7 @@ class TestHandleList:
         assert forwarded.archived_only is True
 
     async def test_moves_session_custom_fields_to_meta(self) -> None:
-        from kernel.protocol.interfaces.contracts.list_sessions_result import SessionSummary
+        from kernel.core.protocol.interfaces.contracts.list_sessions_result import SessionSummary
 
         sh = MagicMock()
         sh.list = AsyncMock(
@@ -358,7 +358,7 @@ class TestHandlePrompt:
         assert forwarded.max_turns == 3
 
     async def test_forwards_client_turn_id_meta(self) -> None:
-        from kernel.protocol.interfaces.contracts.prompt_result import PromptResult
+        from kernel.core.protocol.interfaces.contracts.prompt_result import PromptResult
 
         sh = MagicMock()
         sh.prompt = AsyncMock(
@@ -393,7 +393,7 @@ class TestHandleSetMode:
 
 class TestHandleSetConfigOption:
     async def test_delegates(self) -> None:
-        from kernel.protocol.interfaces.contracts.session_config import ConfigOptionDescriptor
+        from kernel.core.protocol.interfaces.contracts.session_config import ConfigOptionDescriptor
 
         sh = MagicMock()
         sh.set_config_option = AsyncMock(

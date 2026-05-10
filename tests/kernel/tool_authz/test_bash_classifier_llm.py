@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from kernel.llm.types import StreamError, TextChunk
-from kernel.tool_authz.bash_classifier import (
+from kernel.agents.mustang.llm.types import StreamError, TextChunk
+from kernel.agents.mustang.tool_authz.bash_classifier import (
     MAX_CONSECUTIVE,
     BashClassifier,
 )

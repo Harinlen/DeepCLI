@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kernel.skills.arguments import substitute_arguments, substitute_config
+from kernel.agents.mustang.skills.arguments import substitute_arguments, substitute_config
 
 
 def test_arguments_positional() -> None:

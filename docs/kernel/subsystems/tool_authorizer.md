@@ -691,7 +691,7 @@ sub-agent 的 `AuthorizeContext.should_avoid_prompts` 由 Session 层计算,
 
 ```python
 # kernel/tool_authz/constants.py
-BASH_TOOL_NAME: Final = "Bash"   # 与 kernel.tools.builtin.bash.BashTool.name 必须相等
+BASH_TOOL_NAME: Final = "Bash"   # 与 kernel.agents.mustang.tools.builtin.bash.BashTool.name 必须相等
 ```
 
 Authorizer 用 `tool.name == BASH_TOOL_NAME` 判断是否跑 LLMJudge —— **不用

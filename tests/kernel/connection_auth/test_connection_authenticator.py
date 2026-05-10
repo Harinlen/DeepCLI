@@ -1,6 +1,6 @@
-"""End-to-end tests for :class:`kernel.connection_auth.ConnectionAuthenticator`.
+"""End-to-end tests for :class:`kernel.agents.access.security.ConnectionAuthenticator`.
 
-Wired up against a real :class:`kernel.module_table.KernelModuleTable`
+Wired up against a real :class:`kernel.agents.mustang.module_table.KernelModuleTable`
 so the same integration surface subsystems use at runtime is
 exercised here — mocking the module table would hide binding errors
 between ConnectionAuthenticator, ConfigManager, and the state
@@ -28,11 +28,11 @@ from typing import Literal
 
 import pytest
 
-from kernel.connection_auth import AuthContext, AuthError, ConnectionAuthenticator
-from kernel.connection_auth.password import hash_password
-from kernel.config import ConfigManager
-from kernel.flags import FlagManager
-from kernel.module_table import KernelModuleTable
+from kernel.agents.access.security import AuthContext, AuthError, ConnectionAuthenticator
+from kernel.agents.access.security.password import hash_password
+from kernel.core.config import ConfigManager
+from kernel.core.flags import FlagManager
+from kernel.agents.mustang.module_table import KernelModuleTable
 
 
 # --------------------------------------------------------------------

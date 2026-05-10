@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kernel.tools.web.domain_filter import (
+from kernel.agents.mustang.tools.web.domain_filter import (
     add_blocked_domain,
     check_domain,
     remove_blocked_domain,

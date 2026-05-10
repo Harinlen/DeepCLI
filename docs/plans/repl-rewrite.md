@@ -6,7 +6,7 @@ PowerShell + Cmd probe。
 ## 当前实现
 
 - 模型可见工具：[`ReplTool`](../../src/kernel/kernel/tools/builtin/repl_python.py)
-- worker / IPC / linter：[`kernel.tools.repl`](../../src/kernel/kernel/tools/repl/)
+- worker / IPC / linter：[`kernel.agents.mustang.tools.repl`](../../src/kernel/kernel/tools/repl/)
 - primitive tool allowlist：
   [`REPL_PRIMITIVE_TOOLS`](../../src/kernel/kernel/tools/repl/primitives.py)
 - prompt：[`tools/repl.txt`](../../src/kernel/kernel/prompts/default/tools/repl.txt)

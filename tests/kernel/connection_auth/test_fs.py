@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from kernel.connection_auth import _fs as fs_module
-from kernel.connection_auth._fs import atomic_write_0600
+from kernel.agents.access.security import _fs as fs_module
+from kernel.agents.access.security._fs import atomic_write_0600
 
 
 def _mode(path: Path) -> int:

@@ -19,11 +19,11 @@ from typing import Any
 
 import pytest
 
-from kernel.tools.builtin.ask_user_question import AskUserQuestionTool
-from kernel.tools.context import ToolContext
-from kernel.tools.file_state import FileStateCache
-from kernel.tools.registry import ToolRegistry
-from kernel.tools.types import ToolCallResult
+from kernel.agents.mustang.tools.builtin.ask_user_question import AskUserQuestionTool
+from kernel.agents.mustang.tools.context import ToolContext
+from kernel.agents.mustang.tools.file_state import FileStateCache
+from kernel.agents.mustang.tools.registry import ToolRegistry
+from kernel.agents.mustang.tools.types import ToolCallResult
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +116,7 @@ class TestMetadata:
         assert t.is_destructive({}) is False
 
     def test_kind_is_other(self) -> None:
-        from kernel.orchestrator.types import ToolKind
+        from kernel.agents.mustang.orchestrator.types import ToolKind
 
         assert AskUserQuestionTool.kind == ToolKind.other
 
@@ -180,7 +180,7 @@ class TestValidateInput:
 
     @pytest.mark.asyncio
     async def test_missing_questions(self) -> None:
-        from kernel.tools.types import ToolInputError
+        from kernel.agents.mustang.tools.types import ToolInputError
 
         t = AskUserQuestionTool()
         with pytest.raises(ToolInputError, match="questions"):
@@ -188,7 +188,7 @@ class TestValidateInput:
 
     @pytest.mark.asyncio
     async def test_empty_questions(self) -> None:
-        from kernel.tools.types import ToolInputError
+        from kernel.agents.mustang.tools.types import ToolInputError
 
         t = AskUserQuestionTool()
         with pytest.raises(ToolInputError, match="questions"):
@@ -196,7 +196,7 @@ class TestValidateInput:
 
     @pytest.mark.asyncio
     async def test_too_many_questions(self) -> None:
-        from kernel.tools.types import ToolInputError
+        from kernel.agents.mustang.tools.types import ToolInputError
 
         t = AskUserQuestionTool()
         with pytest.raises(ToolInputError, match="at most 4"):
@@ -204,7 +204,7 @@ class TestValidateInput:
 
     @pytest.mark.asyncio
     async def test_duplicate_question_text(self) -> None:
-        from kernel.tools.types import ToolInputError
+        from kernel.agents.mustang.tools.types import ToolInputError
 
         t = AskUserQuestionTool()
         qs = _make_questions(2)
@@ -214,7 +214,7 @@ class TestValidateInput:
 
     @pytest.mark.asyncio
     async def test_too_few_options(self) -> None:
-        from kernel.tools.types import ToolInputError
+        from kernel.agents.mustang.tools.types import ToolInputError
 
         t = AskUserQuestionTool()
         qs = _make_questions(1)
@@ -224,7 +224,7 @@ class TestValidateInput:
 
     @pytest.mark.asyncio
     async def test_choice_question_missing_options_still_fails(self) -> None:
-        from kernel.tools.types import ToolInputError
+        from kernel.agents.mustang.tools.types import ToolInputError
 
         t = AskUserQuestionTool()
         qs = [{"type": "choice", "question": "Pick one?", "header": "Pick"}]
@@ -233,7 +233,7 @@ class TestValidateInput:
 
     @pytest.mark.asyncio
     async def test_too_many_options(self) -> None:
-        from kernel.tools.types import ToolInputError
+        from kernel.agents.mustang.tools.types import ToolInputError
 
         t = AskUserQuestionTool()
         qs = _make_questions(1)
@@ -243,7 +243,7 @@ class TestValidateInput:
 
     @pytest.mark.asyncio
     async def test_duplicate_option_label(self) -> None:
-        from kernel.tools.types import ToolInputError
+        from kernel.agents.mustang.tools.types import ToolInputError
 
         t = AskUserQuestionTool()
         qs = _make_questions(1)
@@ -253,7 +253,7 @@ class TestValidateInput:
 
     @pytest.mark.asyncio
     async def test_missing_question_text(self) -> None:
-        from kernel.tools.types import ToolInputError
+        from kernel.agents.mustang.tools.types import ToolInputError
 
         t = AskUserQuestionTool()
         qs = [
@@ -270,7 +270,7 @@ class TestValidateInput:
 
     @pytest.mark.asyncio
     async def test_invalid_question_type(self) -> None:
-        from kernel.tools.types import ToolInputError
+        from kernel.agents.mustang.tools.types import ToolInputError
 
         t = AskUserQuestionTool()
         qs = [_make_text_question()]
@@ -280,7 +280,7 @@ class TestValidateInput:
 
     @pytest.mark.asyncio
     async def test_invalid_text_question_placeholder(self) -> None:
-        from kernel.tools.types import ToolInputError
+        from kernel.agents.mustang.tools.types import ToolInputError
 
         t = AskUserQuestionTool()
         qs = [_make_text_question()]
@@ -290,7 +290,7 @@ class TestValidateInput:
 
     @pytest.mark.asyncio
     async def test_invalid_text_question_multiline(self) -> None:
-        from kernel.tools.types import ToolInputError
+        from kernel.agents.mustang.tools.types import ToolInputError
 
         t = AskUserQuestionTool()
         qs = [_make_text_question()]
@@ -300,7 +300,7 @@ class TestValidateInput:
 
     @pytest.mark.asyncio
     async def test_invalid_text_question_max_length(self) -> None:
-        from kernel.tools.types import ToolInputError
+        from kernel.agents.mustang.tools.types import ToolInputError
 
         t = AskUserQuestionTool()
         qs = [_make_text_question()]
@@ -310,7 +310,7 @@ class TestValidateInput:
 
     @pytest.mark.asyncio
     async def test_missing_option_label(self) -> None:
-        from kernel.tools.types import ToolInputError
+        from kernel.agents.mustang.tools.types import ToolInputError
 
         t = AskUserQuestionTool()
         qs = _make_questions(1)
@@ -400,7 +400,7 @@ class TestCall:
 
     @pytest.mark.asyncio
     async def test_display_is_text(self) -> None:
-        from kernel.tools.types import TextDisplay
+        from kernel.agents.mustang.tools.types import TextDisplay
 
         t = AskUserQuestionTool()
         input_ = _make_input(answers={"Question 0?": "Option A0"})
@@ -453,11 +453,11 @@ class TestPermissionRoundTrip:
     async def test_updated_input_forwarded(self) -> None:
         from unittest.mock import MagicMock
 
-        from kernel.llm.types import ToolUseContent
-        from kernel.orchestrator.events import ToolCallResult as ToolCallResultEvent
-        from kernel.orchestrator.tool_executor import ToolExecutor
-        from kernel.orchestrator.types import OrchestratorDeps, PermissionResponse
-        from kernel.tool_authz.types import PermissionAsk, ReasonDefaultRisk
+        from kernel.agents.mustang.llm.types import ToolUseContent
+        from kernel.agents.mustang.orchestrator.events import ToolCallResult as ToolCallResultEvent
+        from kernel.agents.mustang.orchestrator.tool_executor import ToolExecutor
+        from kernel.agents.mustang.orchestrator.types import OrchestratorDeps, PermissionResponse
+        from kernel.agents.mustang.tool_authz.types import PermissionAsk, ReasonDefaultRisk
 
         tool = AskUserQuestionTool()
 
@@ -529,11 +529,11 @@ class TestPermissionRoundTrip:
     async def test_text_question_updated_input_forwarded(self) -> None:
         from unittest.mock import MagicMock
 
-        from kernel.llm.types import ToolUseContent
-        from kernel.orchestrator.events import ToolCallResult as ToolCallResultEvent
-        from kernel.orchestrator.tool_executor import ToolExecutor
-        from kernel.orchestrator.types import OrchestratorDeps, PermissionResponse
-        from kernel.tool_authz.types import PermissionAsk, ReasonDefaultRisk
+        from kernel.agents.mustang.llm.types import ToolUseContent
+        from kernel.agents.mustang.orchestrator.events import ToolCallResult as ToolCallResultEvent
+        from kernel.agents.mustang.orchestrator.tool_executor import ToolExecutor
+        from kernel.agents.mustang.orchestrator.types import OrchestratorDeps, PermissionResponse
+        from kernel.agents.mustang.tool_authz.types import PermissionAsk, ReasonDefaultRisk
 
         tool = AskUserQuestionTool()
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from kernel.hooks.manifest import (
+from kernel.agents.mustang.hooks.manifest import (
     HookRequires,
     ManifestError,
     parse_manifest,

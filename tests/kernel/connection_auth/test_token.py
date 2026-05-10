@@ -3,7 +3,7 @@
 Covers the "what a token file looks like" concerns —
 :func:`generate_token` and the load-or-create semantics.  The
 underlying atomic-write discipline lives in ``_fs.py`` and is
-tested by :mod:`tests.kernel.connection_auth.test_fs`.
+tested by :mod:`tests.kernel.agents.access.security.test_fs`.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from __future__ import annotations
 import stat
 from pathlib import Path
 
-from kernel.connection_auth.token import generate_token, load_or_create_token
+from kernel.agents.access.security.token import generate_token, load_or_create_token
 
 
 def _mode(path: Path) -> int:

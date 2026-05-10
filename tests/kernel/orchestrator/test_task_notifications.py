@@ -1,8 +1,8 @@
 """Tests for task notification drain + orphan drain + GC in orchestrator."""
 
-from kernel.orchestrator.orchestrator import _format_task_notification
-from kernel.tasks.registry import TaskRegistry
-from kernel.tasks.types import AgentTaskState, ShellTaskState, TaskStatus
+from kernel.agents.mustang.orchestrator.orchestrator import _format_task_notification
+from kernel.agents.mustang.tasks.registry import TaskRegistry
+from kernel.agents.mustang.tasks.types import AgentTaskState, ShellTaskState, TaskStatus
 
 
 def _shell(task_id: str = "b00000001", **kw: object) -> ShellTaskState:

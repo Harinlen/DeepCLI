@@ -1,12 +1,12 @@
-"""Agent Hub skeleton composed from Manager, Router, and GlobalResourceMonitor."""
+"""Agent Hub skeleton composed from Manager, Router, and ResourceRevisionTracker."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from kernel.agent_hub.global_resources import GlobalResourceMonitor
 from kernel.agent_hub.manager import AgentHubManager
+from kernel.agent_hub.resource_revisions import ResourceRevisionTracker
 from kernel.agent_hub.router import AgentHubRouter
 
 
@@ -16,7 +16,9 @@ class AgentHub:
 
     router: AgentHubRouter = field(default_factory=AgentHubRouter)
     manager: AgentHubManager = field(default_factory=AgentHubManager)
-    global_resources: GlobalResourceMonitor = field(default_factory=GlobalResourceMonitor)
+    resource_revisions: ResourceRevisionTracker = field(
+        default_factory=ResourceRevisionTracker
+    )
     started_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )

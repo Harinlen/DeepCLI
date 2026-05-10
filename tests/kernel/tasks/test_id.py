@@ -1,7 +1,7 @@
-"""Tests for kernel.tasks.id."""
+"""Tests for kernel.agents.mustang.tasks.id."""
 
-from kernel.tasks.id import generate_task_id
-from kernel.tasks.types import TaskType
+from kernel.agents.mustang.tasks.id import generate_task_id
+from kernel.agents.mustang.tasks.types import TaskType
 
 
 class TestGenerateTaskId:

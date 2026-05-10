@@ -5,7 +5,7 @@ from typing import Any, cast
 import httpx
 import orjson
 
-from kernel.llm.types import (
+from kernel.agents.mustang.llm.types import (
     AssistantMessage,
     PromptSection,
     TextChunk,
@@ -15,7 +15,7 @@ from kernel.llm.types import (
     UsageChunk,
     UserMessage,
 )
-from kernel.llm_provider.deepseek import DeepSeekProvider
+from kernel.agents.mustang.llm_provider.deepseek import DeepSeekProvider
 
 
 def _sse(*payloads: dict[str, object] | str) -> bytes:

@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from kernel.memory.index import MemoryIndex
-from kernel.memory.store import ensure_directory_tree, write_memory
-from kernel.memory.types import MemoryHeader
+from kernel.agents.mustang.memory.index import MemoryIndex
+from kernel.agents.mustang.memory.store import ensure_directory_tree, write_memory
+from kernel.agents.mustang.memory.types import MemoryHeader
 
 
 def _make_header(

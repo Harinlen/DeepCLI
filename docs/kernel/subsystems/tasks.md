@@ -184,7 +184,7 @@ import asyncio
 import time
 from typing import Callable
 
-from kernel.tasks.types import TaskState, TaskStatus
+from kernel.agents.mustang.tasks.types import TaskState, TaskStatus
 
 
 class TaskRegistry:
@@ -552,7 +552,7 @@ def _format_task_notification(task: TaskState) -> str:
 ```python
 # kernel/tools/context.py — 修改
 
-from kernel.tasks.registry import TaskRegistry
+from kernel.agents.mustang.tasks.registry import TaskRegistry
 
 @dataclass
 class ToolContext:
@@ -674,8 +674,8 @@ async def _spawn_background(
     ctx: ToolContext,
 ) -> ToolCallResult:
     """Spawn 后台 shell task，立即返回 task_id。"""
-    from kernel.tasks.types import ShellTaskState, TaskStatus, generate_task_id, TaskType
-    from kernel.tasks.output import TaskOutput
+    from kernel.agents.mustang.tasks.types import ShellTaskState, TaskStatus, generate_task_id, TaskType
+    from kernel.agents.mustang.tasks.output import TaskOutput
 
     task_id = generate_task_id(TaskType.local_bash)
     output = TaskOutput(ctx.session_id, task_id)
@@ -976,8 +976,8 @@ async def _spawn_background(
     ctx: ToolContext,
 ) -> ToolCallResult:
     """Spawn 后台 agent task，立即返回 task_id。"""
-    from kernel.tasks.types import AgentTaskState, TaskStatus, generate_task_id, TaskType
-    from kernel.tasks.output import TaskOutput
+    from kernel.agents.mustang.tasks.types import AgentTaskState, TaskStatus, generate_task_id, TaskType
+    from kernel.agents.mustang.tasks.output import TaskOutput
 
     description = input["description"]
     prompt = input["prompt"]

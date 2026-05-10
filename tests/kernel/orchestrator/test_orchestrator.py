@@ -20,13 +20,13 @@ import asyncio
 from typing import Any
 
 
-from kernel.llm.config import ModelRef
-from kernel.llm.types import (
+from kernel.agents.mustang.llm.config import ModelRef
+from kernel.agents.mustang.llm.types import (
     TextContent,
     ThinkingContent,
 )
-from kernel.llm_provider.errors import PromptTooLongError, ProviderError
-from kernel.orchestrator import (
+from kernel.agents.mustang.llm_provider.errors import PromptTooLongError, ProviderError
+from kernel.agents.mustang.orchestrator import (
     CancelledEvent,
     CompactionEvent,
     OrchestratorConfig,
@@ -37,7 +37,7 @@ from kernel.orchestrator import (
     ToolCallError,
     ToolCallStart,
 )
-from kernel.orchestrator.events import OrchestratorEvent
+from kernel.agents.mustang.orchestrator.events import OrchestratorEvent
 
 from .conftest import FakeLLMProvider, no_permission
 
@@ -76,7 +76,7 @@ async def test_multi_chunk_text_assembled_in_history(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
     """Multiple TextChunks should be joined in the history assistant message."""
-    from kernel.llm.types import TextChunk, UsageChunk
+    from kernel.agents.mustang.llm.types import TextChunk, UsageChunk
 
     fake_provider.responses.append(
         [
@@ -91,7 +91,7 @@ async def test_multi_chunk_text_assembled_in_history(
 
     # History should have: user message + assistant message
     assert len(orc._history.messages) == 2
-    from kernel.llm.types import AssistantMessage
+    from kernel.agents.mustang.llm.types import AssistantMessage
 
     asst = orc._history.messages[1]
     assert isinstance(asst, AssistantMessage)
@@ -192,7 +192,7 @@ async def test_thinking_content_stored_in_history(
     orc = make_orchestrator()
     await collect(orc.query([TextContent(text="q")], on_permission=no_permission))
 
-    from kernel.llm.types import AssistantMessage
+    from kernel.agents.mustang.llm.types import AssistantMessage
 
     asst = orc._history.messages[-1]
     assert isinstance(asst, AssistantMessage)
@@ -262,7 +262,7 @@ async def test_cancellation_yields_cancelled_event(
         yield TextContent  # never reached — just so the generator exists
         await asyncio.sleep(10)  # blocks until cancelled
 
-    from kernel.llm.types import TextChunk
+    from kernel.agents.mustang.llm.types import TextChunk
 
     async def slow_gen(**kwargs):
         yield TextChunk(content="part")
@@ -312,7 +312,7 @@ async def test_cancellation_yields_cancelled_event(
 async def test_stream_error_yields_query_error(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
-    from kernel.llm.types import StreamError as SE
+    from kernel.agents.mustang.llm.types import StreamError as SE
 
     fake_provider.responses.append([SE(message="rate limit hit", code="rate_limit_error")])
 
@@ -330,7 +330,7 @@ async def test_transient_stream_error_retries_before_output(
     fake_provider: FakeLLMProvider,
     monkeypatch,
 ) -> None:
-    from kernel.llm.types import StreamError as SE
+    from kernel.agents.mustang.llm.types import StreamError as SE
 
     async def no_sleep(_delay: float) -> None:
         return None
@@ -355,7 +355,7 @@ async def test_transient_stream_error_after_output_does_not_retry(
     fake_provider: FakeLLMProvider,
     monkeypatch,
 ) -> None:
-    from kernel.llm.types import StreamError as SE, TextChunk
+    from kernel.agents.mustang.llm.types import StreamError as SE, TextChunk
 
     async def no_sleep(_delay: float) -> None:
         return None
@@ -400,7 +400,7 @@ async def test_provider_error_yields_query_error(
 async def test_new_query_seals_orphan_tool_use_before_provider_call(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
-    from kernel.llm.types import AssistantMessage, ToolResultContent, ToolUseContent, UserMessage
+    from kernel.agents.mustang.llm.types import AssistantMessage, ToolResultContent, ToolUseContent, UserMessage
 
     fake_provider.add_text_response("ok")
     orc = make_orchestrator()
@@ -438,7 +438,7 @@ async def test_new_query_seals_orphan_tool_use_before_provider_call(
 async def test_provider_missing_tool_result_error_repairs_history_and_retries(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
-    from kernel.llm.types import AssistantMessage, ToolResultContent, ToolUseContent, UserMessage
+    from kernel.agents.mustang.llm.types import AssistantMessage, ToolResultContent, ToolUseContent, UserMessage
 
     call_count = 0
     orc = make_orchestrator()
@@ -465,7 +465,7 @@ async def test_provider_missing_tool_result_error_repairs_history_and_retries(
                 "'tool_call_id'. (insufficient tool messages following tool_calls message)"
             )
 
-        from kernel.llm.types import TextChunk, UsageChunk
+        from kernel.agents.mustang.llm.types import TextChunk, UsageChunk
 
         async def gen():
             yield TextChunk(content="recovered")
@@ -495,7 +495,7 @@ async def test_provider_missing_tool_result_error_repairs_history_and_retries(
 async def test_provider_orphan_tool_message_error_repairs_history_and_retries(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
-    from kernel.llm.types import AssistantMessage, ToolResultContent, ToolUseContent, UserMessage
+    from kernel.agents.mustang.llm.types import AssistantMessage, ToolResultContent, ToolUseContent, UserMessage
 
     call_count = 0
     orc = make_orchestrator()
@@ -530,7 +530,7 @@ async def test_provider_orphan_tool_message_error_repairs_history_and_retries(
                 "'tool' must be a response to a preceding message with 'tool_calls'."
             )
 
-        from kernel.llm.types import TextChunk, UsageChunk
+        from kernel.agents.mustang.llm.types import TextChunk, UsageChunk
 
         async def gen():
             yield TextChunk(content="recovered")
@@ -575,7 +575,7 @@ async def test_reactive_compaction_on_prompt_too_long(
         if call_count == 1:
             raise PromptTooLongError("too long")
         # Second call succeeds — but we need a real stream here
-        from kernel.llm.types import TextChunk, UsageChunk
+        from kernel.agents.mustang.llm.types import TextChunk, UsageChunk
 
         async def gen():
             yield TextChunk(content="ok after compact")
@@ -686,9 +686,9 @@ async def test_plan_mode_property_compat(make_orchestrator, fake_provider: FakeL
 
 
 async def test_set_config_updates_model(make_orchestrator, fake_provider: FakeLLMProvider) -> None:
-    from kernel.orchestrator import OrchestratorConfigPatch
+    from kernel.agents.mustang.orchestrator import OrchestratorConfigPatch
 
-    from kernel.llm.config import ModelRef
+    from kernel.agents.mustang.llm.config import ModelRef
 
     orc = make_orchestrator()
     new_ref = ModelRef(provider="fake", model="new-model")
@@ -701,8 +701,8 @@ async def test_set_config_updates_model(make_orchestrator, fake_provider: FakeLL
 
 
 async def test_set_config_partial_update_preserves_other_fields(make_orchestrator) -> None:
-    from kernel.orchestrator import OrchestratorConfigPatch
-    from kernel.llm.config import ModelRef
+    from kernel.agents.mustang.orchestrator import OrchestratorConfigPatch
+    from kernel.agents.mustang.llm.config import ModelRef
 
     orc = make_orchestrator(
         config=OrchestratorConfig(model=ModelRef(provider="test", model="m1"), temperature=0.5)
@@ -769,7 +769,7 @@ class FakeHookManager:
         self.fired: list[str] = []
 
     async def fire(self, ctx):
-        from kernel.hooks.types import EVENT_SPECS, HookBlock
+        from kernel.agents.mustang.hooks.types import EVENT_SPECS, HookBlock
 
         self.fired.append(ctx.event.value)
         if self._handler is None:
@@ -791,8 +791,8 @@ async def test_user_prompt_submit_hook_blocks(
 ) -> None:
     """When user_prompt_submit hook blocks, query yields UserPromptBlocked
     and the LLM is never called."""
-    from kernel.hooks.types import HookBlock
-    from kernel.orchestrator.events import UserPromptBlocked
+    from kernel.agents.mustang.hooks.types import HookBlock
+    from kernel.agents.mustang.orchestrator.events import UserPromptBlocked
 
     def blocker(ctx):
         raise HookBlock("not allowed")
@@ -843,7 +843,7 @@ async def test_user_prompt_submit_hook_drains_reminders(
 
     queued: list[list[str]] = []
 
-    from kernel.hooks.types import HookEvent
+    from kernel.agents.mustang.hooks.types import HookEvent
 
     def reminder_handler(ctx):
         if ctx.event == HookEvent.USER_PROMPT_SUBMIT:
@@ -914,7 +914,7 @@ async def test_post_sampling_hook_not_fired_on_empty_stream(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
     """POST_SAMPLING should not fire when the LLM returns empty output."""
-    from kernel.llm.types import UsageChunk
+    from kernel.agents.mustang.llm.types import UsageChunk
 
     hooks = FakeHookManager()
     # Empty stream — only usage chunk, no text or tools.
@@ -962,7 +962,7 @@ async def test_cancel_with_pending_tool_use_synthesises_results(
 ) -> None:
     """Cancellation after tool_use blocks are in history should synthesise
     error tool_results to keep history well-formed."""
-    from kernel.llm.types import ToolUseChunk, UsageChunk, ToolResultContent
+    from kernel.agents.mustang.llm.types import ToolUseChunk, UsageChunk, ToolResultContent
 
     hooks = FakeHookManager()
     orc = make_orchestrator(hooks=hooks)
@@ -1002,7 +1002,7 @@ async def test_cancel_with_pending_tool_use_synthesises_results(
     assert orphans == [], f"Expected no orphans but found: {orphans}"
 
     # Verify the synthetic tool_result is an error.
-    from kernel.llm.types import UserMessage
+    from kernel.agents.mustang.llm.types import UserMessage
 
     last_user = [m for m in orc._history.messages if isinstance(m, UserMessage)]
     if last_user:
@@ -1017,7 +1017,7 @@ async def test_cancel_without_tool_use_no_synthetic_results(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
     """Cancellation during a text-only stream should not add synthetic results."""
-    from kernel.llm.types import TextChunk
+    from kernel.agents.mustang.llm.types import TextChunk
 
     async def blocking_stream(**kwargs):
         fake_provider.calls.append(kwargs)
@@ -1059,7 +1059,7 @@ async def test_stop_reason_captured_from_usage_chunk(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
     """UsageChunk.stop_reason is surfaced through the orchestrator."""
-    from kernel.llm.types import TextChunk, UsageChunk
+    from kernel.agents.mustang.llm.types import TextChunk, UsageChunk
 
     fake_provider.responses.append(
         [
@@ -1082,8 +1082,8 @@ async def test_media_size_error_strips_images_and_retries(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
     """MediaSizeError triggers strip_media + compact + retry."""
-    from kernel.llm.types import ImageContent, TextChunk, UsageChunk
-    from kernel.llm_provider.errors import MediaSizeError
+    from kernel.agents.mustang.llm.types import ImageContent, TextChunk, UsageChunk
+    from kernel.agents.mustang.llm_provider.errors import MediaSizeError
 
     call_count = 0
 
@@ -1105,7 +1105,7 @@ async def test_media_size_error_strips_images_and_retries(
     # Pre-populate history with an image in a user message.
     orc._history.append_user([TextContent(text="look at this")])
     orc._history._messages[0] = __import__(
-        "kernel.llm.types", fromlist=["UserMessage"]
+        "kernel.agents.mustang.llm.types", fromlist=["UserMessage"]
     ).UserMessage(
         content=[
             TextContent(text="look at this"),
@@ -1127,7 +1127,7 @@ async def test_media_size_error_strips_images_and_retries(
     assert orc.stop_reason == StopReason.end_turn
 
     # Verify images were stripped from history.
-    from kernel.llm.types import UserMessage
+    from kernel.agents.mustang.llm.types import UserMessage
 
     for msg in orc._history.messages:
         if isinstance(msg, UserMessage):
@@ -1139,7 +1139,7 @@ async def test_media_size_error_gives_up_after_max_retries(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
     """MediaSizeError gives up after _MAX_REACTIVE_RETRIES."""
-    from kernel.llm_provider.errors import MediaSizeError
+    from kernel.agents.mustang.llm_provider.errors import MediaSizeError
 
     async def always_media_error(**kwargs):
         raise MediaSizeError("image too large forever")
@@ -1166,8 +1166,8 @@ async def test_max_output_tokens_escalation_retries(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
     """When stop_reason='max_tokens', orchestrator escalates max_tokens and retries."""
-    from kernel.llm.types import TextChunk, UsageChunk
-    from kernel.orchestrator.orchestrator import _MAX_TOKENS_ESCALATED
+    from kernel.agents.mustang.llm.types import TextChunk, UsageChunk
+    from kernel.agents.mustang.orchestrator.orchestrator import _MAX_TOKENS_ESCALATED
 
     call_count = 0
 
@@ -1207,8 +1207,8 @@ async def test_max_output_tokens_gives_up_after_max_retries(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
     """After _MAX_OUTPUT_TOKEN_RETRIES, the orchestrator stops retrying."""
-    from kernel.llm.types import TextChunk, UsageChunk
-    from kernel.orchestrator.orchestrator import _MAX_OUTPUT_TOKEN_RETRIES
+    from kernel.agents.mustang.llm.types import TextChunk, UsageChunk
+    from kernel.agents.mustang.orchestrator.orchestrator import _MAX_OUTPUT_TOKEN_RETRIES
 
     async def always_truncated(**kwargs):
         fake_provider.calls.append(kwargs)
@@ -1234,7 +1234,7 @@ async def test_pop_last_assistant_removes_partial_turn(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
     """pop_last_assistant removes the truncated response before retry."""
-    from kernel.llm.types import AssistantMessage, TextChunk, UsageChunk
+    from kernel.agents.mustang.llm.types import AssistantMessage, TextChunk, UsageChunk
 
     call_count = 0
 
@@ -1274,7 +1274,7 @@ async def test_stop_hook_fires_on_end_turn(
     make_orchestrator, fake_provider: FakeLLMProvider
 ) -> None:
     """HookEvent.STOP fires with stop_reason when LLM finishes normally."""
-    from kernel.hooks.types import HookEvent
+    from kernel.agents.mustang.hooks.types import HookEvent
 
     captured_ctx = {}
 

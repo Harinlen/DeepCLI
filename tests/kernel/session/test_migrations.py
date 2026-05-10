@@ -18,8 +18,8 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
-from kernel.session import migrations as mig
-from kernel.session.migrations import SCHEMA_VERSION, _get_version, _set_version
+from kernel.agents.mustang.sessions import migrations as mig
+from kernel.agents.mustang.sessions.migrations import SCHEMA_VERSION, _get_version, _set_version
 
 # Mark every async test in this module to run under anyio (asyncio backend).
 pytestmark = pytest.mark.anyio
@@ -56,7 +56,7 @@ async def test_fresh_db_gets_schema_version(tmp_path: Path) -> None:
 
 async def test_fresh_db_creates_tables(tmp_path: Path) -> None:
     """Tables must exist after apply() on a fresh DB."""
-    from kernel.session.models import ConversationRecord
+    from kernel.agents.mustang.sessions.models import ConversationRecord
 
     db = tmp_path / "s.db"
     engine = create_async_engine(f"sqlite+aiosqlite:///{db}", echo=False)
@@ -239,7 +239,7 @@ async def test_failed_migration_does_not_advance_version(tmp_path: Path) -> None
 
 async def test_store_open_applies_migrations(tmp_path: Path) -> None:
     """SessionStore.open() must stamp the version on a fresh DB."""
-    from kernel.session.store import SessionStore
+    from kernel.agents.mustang.sessions.store import SessionStore
 
     store = SessionStore(tmp_path / "sessions")
     await store.open()

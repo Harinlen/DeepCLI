@@ -12,25 +12,25 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from kernel.llm import LLMManager
-from kernel.llm.config import (
+from kernel.agents.mustang.llm import LLMManager
+from kernel.agents.mustang.llm.config import (
     CurrentUsedConfig,
     LLMConfig,
     ModelRef,
     ModelSpec,
     ProviderConfig,
 )
-from kernel.llm.errors import ModelNotFoundError
-from kernel.llm.types import LLMChunk, ModelInfo
-from kernel.llm_provider.base import Provider
-from kernel.protocol.interfaces.contracts.add_model_params import AddModelParams
-from kernel.protocol.interfaces.contracts.add_provider_params import AddProviderParams
-from kernel.protocol.interfaces.contracts.handler_context import HandlerContext
-from kernel.protocol.interfaces.contracts.list_providers_params import ListProvidersParams
-from kernel.protocol.interfaces.contracts.refresh_models_params import RefreshModelsParams
-from kernel.protocol.interfaces.contracts.remove_provider_params import RemoveProviderParams
-from kernel.protocol.interfaces.contracts.set_current_model_params import SetCurrentModelParams
-from kernel.protocol.interfaces.contracts.update_model_params import UpdateModelParams
+from kernel.agents.mustang.llm.errors import ModelNotFoundError
+from kernel.agents.mustang.llm.types import LLMChunk, ModelInfo
+from kernel.agents.mustang.llm_provider.base import Provider
+from kernel.core.protocol.interfaces.contracts.add_model_params import AddModelParams
+from kernel.core.protocol.interfaces.contracts.add_provider_params import AddProviderParams
+from kernel.core.protocol.interfaces.contracts.handler_context import HandlerContext
+from kernel.core.protocol.interfaces.contracts.list_providers_params import ListProvidersParams
+from kernel.core.protocol.interfaces.contracts.refresh_models_params import RefreshModelsParams
+from kernel.core.protocol.interfaces.contracts.remove_provider_params import RemoveProviderParams
+from kernel.core.protocol.interfaces.contracts.set_current_model_params import SetCurrentModelParams
+from kernel.core.protocol.interfaces.contracts.update_model_params import UpdateModelParams
 
 
 # ---------------------------------------------------------------------------

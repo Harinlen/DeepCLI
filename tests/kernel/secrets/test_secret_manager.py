@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from kernel.secrets import SecretManager
-from kernel.secrets.types import OAuthToken, SecretNotFoundError
+from kernel.core.secrets import SecretManager
+from kernel.core.secrets.types import OAuthToken, SecretNotFoundError
 
 
 # ---------------------------------------------------------------------------

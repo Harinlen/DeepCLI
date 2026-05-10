@@ -1,12 +1,12 @@
-"""Tests for kernel.tasks.registry."""
+"""Tests for kernel.agents.mustang.tasks.registry."""
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from kernel.tasks.registry import TaskRegistry
-from kernel.tasks.types import (
+from kernel.agents.mustang.tasks.registry import TaskRegistry
+from kernel.agents.mustang.tasks.types import (
     AgentTaskState,
     ShellTaskState,
     TaskStatus,

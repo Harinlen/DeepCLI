@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from kernel.tools.builtin import shell_exec
+from kernel.agents.mustang.tools.builtin import shell_exec
 
 
 def test_bash_shell_spec_prefers_bash_then_sh(monkeypatch: pytest.MonkeyPatch) -> None:

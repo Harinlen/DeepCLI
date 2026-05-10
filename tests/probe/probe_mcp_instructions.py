@@ -59,7 +59,7 @@ class _CapturingProvider:
 
     async def stream(self, **kwargs: Any) -> AsyncGenerator[Any, None]:
         self.calls.append(kwargs)
-        from kernel.llm.types import TextChunk, UsageChunk
+        from kernel.agents.mustang.llm.types import TextChunk, UsageChunk
 
         async def _emit() -> AsyncGenerator[Any, None]:
             yield TextChunk(content="ok")
@@ -73,11 +73,11 @@ async def no_permission(_req: Any) -> Any:  # pragma: no cover
 
 
 async def run() -> int:  # noqa: C901
-    from kernel.llm.config import ModelRef
-    from kernel.llm.types import PromptSection, TextContent
-    from kernel.orchestrator import OrchestratorConfig, OrchestratorDeps
-    from kernel.orchestrator.orchestrator import StandardOrchestrator
-    from kernel.prompts.manager import PromptManager
+    from kernel.agents.mustang.llm.config import ModelRef
+    from kernel.agents.mustang.llm.types import PromptSection, TextContent
+    from kernel.agents.mustang.orchestrator import OrchestratorConfig, OrchestratorDeps
+    from kernel.agents.mustang.orchestrator.orchestrator import StandardOrchestrator
+    from kernel.agents.mustang.prompts.manager import PromptManager
 
     scratch = Path(tempfile.mkdtemp(prefix="probe-mcp-"))
     try:
@@ -217,8 +217,8 @@ async def run() -> int:  # noqa: C901
         # ── Seam 3: SessionManager closure → MCPManager.get_connected() ─
         print("\nSeam 3 — SessionManager._mcp_instructions closure → MCPManager.get_connected():")
 
-        from kernel.mcp import MCPManager
-        from kernel.mcp.types import ConnectedServer
+        from kernel.agents.mustang.mcp import MCPManager
+        from kernel.agents.mustang.mcp.types import ConnectedServer
 
         # Instantiate MCPManager without calling startup() — we inject
         # ConnectedServer directly to avoid needing real stdio/SSE transports.
@@ -258,7 +258,7 @@ async def run() -> int:  # noqa: C901
 
         # Also verify module_table.get(MCPManager) lookup — the actual path
         # SessionManager uses to retrieve the manager before building the closure.
-        from kernel.module_table import KernelModuleTable
+        from kernel.agents.mustang.module_table import KernelModuleTable
 
         mt = KernelModuleTable(
             flags=None,   # type: ignore[arg-type]

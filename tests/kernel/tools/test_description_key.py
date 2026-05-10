@@ -7,10 +7,10 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
-from kernel.orchestrator.types import ToolKind
-from kernel.prompts.manager import PromptManager
-from kernel.tools.tool import Tool
-from kernel.tools.types import ToolCallProgress, ToolCallResult
+from kernel.agents.mustang.orchestrator.types import ToolKind
+from kernel.agents.mustang.prompts.manager import PromptManager
+from kernel.agents.mustang.tools.tool import Tool
+from kernel.agents.mustang.tools.types import ToolCallProgress, ToolCallResult
 
 
 class _FakeTool(Tool[dict[str, Any], str]):

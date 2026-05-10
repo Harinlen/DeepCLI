@@ -11,15 +11,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from kernel.session.events import (
+from kernel.agents.mustang.sessions.events import (
     SessionCreatedEvent,
     TurnCompletedEvent,
     TurnStartedEvent,
     UserMessageEvent,
 )
-from kernel.session.events import KERNEL_VERSION
-from kernel.session.models import ConversationRecord, TokenUsageUpdate
-from kernel.session.store import SessionStore
+from kernel.agents.mustang.sessions.events import KERNEL_VERSION
+from kernel.agents.mustang.sessions.models import ConversationRecord, TokenUsageUpdate
+from kernel.agents.mustang.sessions.store import SessionStore
 
 # Mark every async test in this module to run under anyio (asyncio backend).
 pytestmark = pytest.mark.anyio

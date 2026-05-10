@@ -6,12 +6,12 @@ import time
 
 import pytest
 
-from kernel.schedule.schedule_parser import (
+from kernel.agents.mustang.schedule.schedule_parser import (
     compute_next_fire,
     human_schedule,
     parse_schedule,
 )
-from kernel.schedule.types import Schedule, ScheduleKind
+from kernel.agents.mustang.schedule.types import Schedule, ScheduleKind
 
 
 class TestParseSchedule:

@@ -1,4 +1,4 @@
-"""Tests for kernel.mcp.client — McpClient protocol + reconnection."""
+"""Tests for kernel.agents.mustang.mcp.client — McpClient protocol + reconnection."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from kernel.mcp.client import McpClient
-from kernel.mcp.types import McpError, McpToolCallError, TransportClosed
+from kernel.agents.mustang.mcp.client import McpClient
+from kernel.agents.mustang.mcp.types import McpError, McpToolCallError, TransportClosed
 
 
 # ── Fake transport ──────────────────────────────────────────────────

@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from kernel.llm.types import PromptSection, TextChunk, UserMessage
-from kernel.memory.llm_text import collect_llm_text
+from kernel.agents.mustang.llm.types import PromptSection, TextChunk, UserMessage
+from kernel.agents.mustang.memory.llm_text import collect_llm_text
 
 
 class StrictLLM:

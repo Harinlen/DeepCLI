@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 
 from kernel.agent_hub import AgentHub, AgentHubManager, AgentHubWebSocketServer
-from kernel.agents import default_primary_agent_definition
+from kernel.agent_hub.contracts import default_primary_agent_definition
 
 
 async def _amain() -> None:

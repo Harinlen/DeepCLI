@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from kernel.agents import (
+from kernel.agent_hub.contracts import (
     AgentRegistrationRequest,
     AgentRuntimeKind,
     CallerIdentity,

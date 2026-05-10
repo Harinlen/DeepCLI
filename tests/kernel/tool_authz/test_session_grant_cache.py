@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from kernel.tool_authz.session_grant_cache import (
+from kernel.agents.mustang.tool_authz.session_grant_cache import (
     SessionGrantCache,
     compute_signature,
 )

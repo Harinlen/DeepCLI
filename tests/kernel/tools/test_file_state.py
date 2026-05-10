@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kernel.tools.file_state import FileStateCache, hash_text
+from kernel.agents.mustang.tools.file_state import FileStateCache, hash_text
 
 
 def test_record_then_verify(tmp_path: Path) -> None:

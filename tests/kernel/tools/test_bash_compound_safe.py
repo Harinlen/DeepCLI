@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.tools.builtin.bash import (
+from kernel.agents.mustang.tools.builtin.bash import (
     BashTool,
     _base_command,
     _extract_commands,

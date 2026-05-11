@@ -227,8 +227,9 @@ export class MustangAgentSessionAdapter {
 	}
 
 	async fetchCostReport(): Promise<CostUsageReport> {
-		const session = this.#requireSession("Run a chat prompt or /session new before using /cost.");
-		const report = await session.getUsage();
+		const report = this.options.session
+			? await this.options.session.getUsage()
+			: await MustangSession.getUsage(this.options.client);
 		const contextWindow = this.model.contextWindow;
 		if ((!report.context.contextWindow || report.context.contextWindow <= 0) && contextWindow && contextWindow > 0) {
 			report.context.contextWindow = contextWindow;

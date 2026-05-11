@@ -271,7 +271,7 @@ class DeleteSessionResponse(AcpModel):
 
 
 class GetUsageRequest(AcpModel):
-    session_id: str
+    session_id: str | None = None
     meta: dict[str, Any] | None = None
 
 

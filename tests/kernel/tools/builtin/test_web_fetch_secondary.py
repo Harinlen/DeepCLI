@@ -105,27 +105,38 @@ class TestWebFetchSecondaryModel:
         summarise_mock.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_backend_input_overrides_runtime_config(self, tmp_path: Path) -> None:
+    async def test_backend_input_is_ignored_in_favor_of_runtime_config(
+        self, tmp_path: Path
+    ) -> None:
         ctx = _ctx(tmp_path, summarise=None)
         tool = WebFetchTool()
-        fetch_mock = AsyncMock(return_value=(_FakeResult("https://x", "body"), "httpx"))
+        fetch_mock = AsyncMock(return_value=(_FakeResult("https://x", "body"), "crawl4ai"))
 
-        with patch(
-            "kernel.agents.mustang.tools.web.fetch_backends.fetch_with_fallback",
-            new=fetch_mock,
+        with (
+            patch(
+                "kernel.agents.mustang.tools.web.fetch_backends.fetch_with_fallback",
+                new=fetch_mock,
+            ),
+            patch(
+                "kernel.agents.mustang.tools.builtin.web_fetch._configured_backend",
+                return_value="crawl4ai",
+            ),
         ):
             results = []
             async for ev in tool.call({"url": "https://x", "backend": "httpx"}, ctx):
                 results.append(ev)
 
-        assert results[0].data["backend"] == "httpx"
+        assert results[0].data["backend"] == "crawl4ai"
         assert results[0].meta == {
             "mustang.agent/toolBackend": {
-                "backend": "httpx",
+                "backend": "crawl4ai",
                 "kind": "web_fetch",
             }
         }
-        assert fetch_mock.await_args.kwargs["preferred"] == "httpx"
+        assert fetch_mock.await_args.kwargs["preferred"] == "crawl4ai"
+
+    def test_backend_is_not_exposed_to_llm_schema(self) -> None:
+        assert "backend" not in WebFetchTool.input_schema["properties"]
 
     @pytest.mark.asyncio
     async def test_summarise_exception_falls_back_gracefully(

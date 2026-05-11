@@ -173,6 +173,30 @@ assert(recentAfterCreate[0]?.id === "new-session", "welcome recents should inclu
 assert(recentAfterCreate[0]?.title === "Untitled session", "welcome recents should label empty active sessions");
 assert(recentAfterCreate.some(session => session.id === "old-session"), "welcome recents should still include kernel-listed sessions");
 
+const emptyUsageCalls: unknown[] = [];
+const emptyUsageAdapter = new MustangAgentSessionAdapter({
+	client: {
+		request: async (_method: string, params: unknown) => {
+			emptyUsageCalls.push(params);
+			return {
+				sessionId: "",
+				cwd: "/tmp",
+				kernelVersion: "1.0.0",
+				tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				context: { totalTokens: 0, contextWindow: null, percent: 0, sections: [] },
+				history: { messages: 0, turns: 0, toolCalls: 0, compactions: 0, queuedTurns: 0, inFlight: false },
+				memory: { loaded: 0, writableScopes: 0 },
+				environment: { lspServers: [], mcpServers: [] },
+			};
+		},
+	} as never,
+	sessionService: fakeSessionService as never,
+	modelProfiles: [{ name: "deepseek/deepseek-chat", providerName: "deepseek", providerType: "deepseek", modelId: "deepseek-chat", isDefault: true, contextWindow: 64_000 }],
+});
+const emptyCostReport = await emptyUsageAdapter.fetchCostReport();
+assert(emptyCostReport.tokens.total === 0, "adapter should fetch empty /cost usage before a session exists");
+assert(JSON.stringify(emptyUsageCalls[0]) === "{}", "empty /cost should call the kernel without creating or requiring a session");
+
 const subagentUpdates = [
 	{ sessionUpdate: "tool_call", toolCallId: "agent-1", title: "Agent", rawInput: "{\"description\":\"Check weather\",\"prompt\":\"Look up weather\"}" },
 	{ sessionUpdate: "tool_call_update", toolCallId: "agent-1", status: "in_progress", meta: { "mustang.agent/agentStart": { agent_id: "a1" } } },

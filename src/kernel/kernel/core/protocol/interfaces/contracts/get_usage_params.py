@@ -8,4 +8,4 @@ from pydantic import BaseModel
 class GetUsageParams(BaseModel):
     """Input to ``_mustang.agent/session/get_usage``."""
 
-    session_id: str
+    session_id: str | None = None

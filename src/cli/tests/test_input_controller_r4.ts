@@ -532,7 +532,10 @@ await executeBuiltinSlashCommand("/webfetch backend tavily", {
 	},
 });
 assert(webfetchCalls.includes("error:Tavily API key validation failed."), "/webfetch backend should explain a configured key validation failure");
-assert(webfetchCalls.includes("input:Enter replacement Tavily API key:TAVILY_API_KEY"), "/webfetch backend should then ask for a replacement key");
+assert(
+	webfetchCalls.includes("input:Request for New Tavily API key\n\nTavily API key validation failed.:TAVILY_API_KEY"),
+	"/webfetch backend should then ask for a replacement key with the validation error in the prompt",
+);
 assert(webfetchCalls.includes("set:tavily:false:tvly-replacement"), "/webfetch backend should retry with replacement API key");
 webfetchCalls.length = 0;
 await executeBuiltinSlashCommand("/webfetch backend crawl4ai", {

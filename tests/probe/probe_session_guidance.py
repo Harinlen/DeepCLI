@@ -392,7 +392,7 @@ async def run() -> int:  # noqa: C901 — long, but flat
             ln for ln in pm_guidance[0].text.splitlines() if ln.startswith(" - ")
         ]
         print(f"  ✓ guidance section reached LLM in plan mode: {len(pm_bullets)} bullets")
-        print(f"  ✓ agent/search/explore bullets present")
+        print("  ✓ agent/search/explore bullets present")
 
         # ── 5. Shutdown so state_dir resources close cleanly. ───────
         await tool_mgr.shutdown()

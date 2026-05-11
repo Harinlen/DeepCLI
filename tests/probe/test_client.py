@@ -310,6 +310,10 @@ def test_session_lifecycle_helpers_send_expected_requests() -> None:
         ]
         assert sent[0]["params"] == {"sessionId": "sess-1", "cwd": "/tmp"}
         assert sent[1]["params"] == {"sessionId": "sess-1"}
-        assert sent[2]["params"] == {"cursor": None, "cwd": "/tmp"}
+        assert sent[2]["params"] == {
+            "cursor": None,
+            "cwd": "/tmp",
+            "meta": {"mustang.agent/includeEmpty": True},
+        }
 
     asyncio.run(_run())

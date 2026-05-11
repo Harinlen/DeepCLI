@@ -366,7 +366,11 @@ class AgentSessionRuntimeService:
 
     async def get_usage(self, params: GetUsageRequest) -> dict[str, Any]:
         manager = self._manager()
-        conn, sender = self._connection_for(params.session_id)
+        if params.session_id:
+            conn, sender = self._connection_for(params.session_id)
+        else:
+            sender = CollectingRuntimeSender()
+            conn = _handler_context(sender).conn
         result = await manager.get_usage(
             HandlerContext(conn=conn, sender=sender, request_id=None),
             _to_contract_get_usage(params),

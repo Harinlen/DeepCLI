@@ -1036,6 +1036,23 @@ async def test_get_usage_returns_cost_panel_data(manager: SessionManager, tmp_pa
     ]
 
 
+async def test_get_usage_without_session_returns_empty_cost_panel(manager: SessionManager) -> None:
+    """The /cost command can render before the first real chat session exists."""
+    usage = await manager.get_usage(_make_ctx(), GetUsageParams())
+
+    assert usage.session_id == ""
+    assert usage.tokens.total == 0
+    assert usage.context.total_tokens == 0
+    assert usage.history.turns == 0
+    assert usage.history.in_flight is False
+    assert [section.id for section in usage.context.sections] == [
+        "system_prompt",
+        "memory",
+        "conversation",
+        "tools",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Orchestrator last_turn_usage
 # ---------------------------------------------------------------------------

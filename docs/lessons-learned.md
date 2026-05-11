@@ -372,6 +372,13 @@ wall twice.
   After mutating existing transcript components for a global visibility
   toggle, call `requestRender(true)` and cover it with a real PTY probe.
 
+- **WebFetch backend selection is user-owned state, not model input.**
+  The LLM-visible `WebFetch` schema must not expose a `backend` field.
+  Runtime execution should ignore stale or injected `backend` arguments
+  and use only the user-selected WebFetch config.  Otherwise API-key
+  validation/debugging is impossible because the model can silently switch
+  away from the backend the user is testing.
+
 ---
 
 ## Kernel Design-debt Backlog

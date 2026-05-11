@@ -66,6 +66,23 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _format_tavily_usage_error(response: httpx.Response) -> str:
+    detail = ""
+    try:
+        payload = response.json()
+        if isinstance(payload, dict):
+            detail = str(
+                payload.get("error")
+                or payload.get("message")
+                or payload.get("detail")
+                or payload
+            )
+    except Exception:
+        detail = response.text.strip()
+    suffix = f": {detail}" if detail else ""
+    return f"Tavily Usage API returned HTTP {response.status_code}{suffix}"
+
+
 class ToolManager(Subsystem):
     """Tools subsystem — registry + shared state provider.
 
@@ -578,6 +595,8 @@ class ToolManager(Subsystem):
         old_value = os.environ.get(env_key)
         os.environ[env_key] = api_key
         try:
+            if definition.id == "tavily":
+                return await self._validate_tavily_api_key(api_key)
             from kernel.agents.mustang.tools.web.fetch_backends import get_backend_by_name
 
             backend = get_backend_by_name(definition.id)
@@ -608,6 +627,25 @@ class ToolManager(Subsystem):
                 os.environ.pop(env_key, None)
             else:
                 os.environ[env_key] = old_value
+
+    async def _validate_tavily_api_key(self, api_key: str) -> dict[str, Any]:
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.get(
+                    "https://api.tavily.com/usage",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+        except Exception as exc:
+            return {
+                "ok": False,
+                "message": f"Tavily API key validation failed: {self._format_web_fetch_validation_exception(exc)}",
+            }
+        if response.status_code >= 400:
+            return {
+                "ok": False,
+                "message": f"Tavily API key validation failed: {_format_tavily_usage_error(response)}",
+            }
+        return {"ok": True, "message": ""}
 
     def _format_web_fetch_validation_exception(self, exc: Exception) -> str:
         if isinstance(exc, httpx.HTTPStatusError):

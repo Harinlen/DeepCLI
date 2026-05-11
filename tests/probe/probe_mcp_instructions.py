@@ -104,7 +104,7 @@ async def run() -> int:  # noqa: C901
                 f"  want: {expected!r}\n"
                 f"  got : {rendered!r}"
             )
-        print(f"  ✓ render output byte-equal to expected CC format")
+        print("  ✓ render output byte-equal to expected CC format")
 
         if "{blocks}" in rendered:
             return _fail("placeholder {blocks} was not substituted")

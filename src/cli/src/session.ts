@@ -107,6 +107,16 @@ export class MustangSession {
     return new MustangSession(client, id);
   }
 
+  static async getUsage(client: AcpClient, sessionId?: string): Promise<CostUsageReport> {
+    const params = sessionId
+      ? {
+          sessionId,
+          session_id: sessionId,
+        }
+      : {};
+    return await client.request<CostUsageReport>(MustangMethod.sessionGetUsage, params);
+  }
+
   async prompt(
     text: string,
     onUpdate: (update: SessionUpdateParams) => void,
@@ -206,10 +216,7 @@ export class MustangSession {
   async getUsage(): Promise<CostUsageReport> {
     // Send both spellings for compatibility with already-running dev kernels
     // that may have loaded the new method before the ACP camelCase base model.
-    return await this.client.request<CostUsageReport>(MustangMethod.sessionGetUsage, {
-      sessionId: this.sessionId,
-      session_id: this.sessionId,
-    });
+    return await MustangSession.getUsage(this.client as AcpClient, this.sessionId);
   }
 
   async runtimeStatus(): Promise<RuntimeStatusReport> {

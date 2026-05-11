@@ -109,7 +109,10 @@ mounted.handleInput("\n");
 await Bun.sleep(0);
 
 assert(calls.includes("error:Tavily API key validation failed."), "invalid configured key should show validation error");
-assert(calls.includes("input:Enter replacement Tavily API key:TAVILY_API_KEY"), "invalid configured key should ask for a replacement key after showing the error");
+assert(
+	calls.includes("input:Request for New Tavily API key\n\nTavily API key validation failed.:TAVILY_API_KEY"),
+	"invalid configured key should ask for a replacement key with the validation error in the prompt",
+);
 
 mounted = undefined;
 calls.length = 0;

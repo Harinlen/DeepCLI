@@ -42,3 +42,20 @@ def test_session_get_usage_live_kernel(kernel: tuple[int, str]) -> None:
         "tools",
     ]
     assert result["history"]["turns"] == 0
+
+
+def test_session_get_usage_without_session_live_kernel(kernel: tuple[int, str]) -> None:
+    """Drive `/cost` before any session exists; it should return zero usage."""
+    port, token = kernel
+
+    async def _run_test() -> dict[str, Any]:
+        async with ProbeClient(port=port, token=token, request_timeout=_TEST_TIMEOUT) as client:
+            await client.initialize()
+            return await client._request("_mustang.agent/session/get_usage", {})
+
+    result = _run(_run_test())
+
+    assert result["sessionId"] == ""
+    assert result["tokens"]["total"] == 0
+    assert result["context"]["totalTokens"] == 0
+    assert result["history"]["turns"] == 0

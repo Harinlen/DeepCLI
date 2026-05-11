@@ -51,11 +51,6 @@ class WebFetchTool(Tool[dict[str, Any], dict[str, Any]]):
                 "default": 50_000,
                 "description": "Maximum characters of content to return.",
             },
-            "backend": {
-                "type": "string",
-                "enum": ["auto", "httpx", "crawl4ai", "firecrawl", "parallel", "exa", "tavily"],
-                "description": "Optional WebFetch backend override for this call.",
-            },
         },
         "required": ["url"],
     }
@@ -102,7 +97,7 @@ class WebFetchTool(Tool[dict[str, Any], dict[str, Any]]):
         return f"Fetching {host}"
 
     def execution_metadata(self, input: dict[str, Any], ctx: Any) -> dict[str, Any] | None:
-        preferred = input.get("backend") or _configured_backend(ctx)
+        preferred = _configured_backend(ctx)
         return {
             "mustang.agent/toolBackend": {
                 "backend": preferred or "auto",
@@ -126,7 +121,7 @@ class WebFetchTool(Tool[dict[str, Any], dict[str, Any]]):
         url = input["url"]
         user_prompt = input.get("prompt")
         max_chars = input.get("max_chars", 50_000)
-        preferred = input.get("backend") or _configured_backend(ctx)
+        preferred = _configured_backend(ctx)
 
         result, backend_name = await fetch_with_fallback(
             url,

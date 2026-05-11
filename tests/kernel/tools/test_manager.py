@@ -91,6 +91,20 @@ async def test_snapshot_for_session_emits_schemas(
 
 
 @pytest.mark.anyio
+async def test_web_fetch_schema_does_not_expose_backend_selector(
+    module_table: KernelModuleTable,
+) -> None:
+    """ToolManager must not surface WebFetch backend switching to the LLM."""
+    mgr = ToolManager(module_table)
+    await mgr.startup()
+
+    tool = mgr.lookup("WebFetch")
+    assert tool is not None
+    schema = tool.to_schema().input_schema
+    assert "backend" not in schema["properties"]
+
+
+@pytest.mark.anyio
 async def test_snapshot_keeps_mutating_tools_visible_in_plan_mode(
     module_table: KernelModuleTable,
 ) -> None:
@@ -170,23 +184,20 @@ async def test_web_fetch_external_backend_prompts_then_stores_valid_api_key(
             async def __aexit__(self, *_: object) -> None:
                 return None
 
-            async def post(self, url: str, **kwargs: Any) -> httpx.Response:
-                assert url == "https://api.tavily.com/extract"
+            async def get(self, url: str, **kwargs: Any) -> httpx.Response:
+                assert url == "https://api.tavily.com/usage"
                 assert kwargs["headers"]["Authorization"] == "Bearer tvly-valid"
-                assert "api_key" not in kwargs["json"]
                 return httpx.Response(
                     200,
                     json={
-                        "results": [
-                            {
-                                "url": "https://example.com",
-                                "content": "Example Domain",
-                                "title": "Example Domain",
-                            }
-                        ]
+                        "key": {"usage": 1, "limit": 1000, "extract_usage": 0},
+                        "account": {"current_plan": "Researcher", "plan_usage": 1, "plan_limit": 1000},
                     },
                     request=httpx.Request("POST", url),
                 )
+
+            async def post(self, *_: Any, **__: Any) -> httpx.Response:
+                raise AssertionError("Tavily API key validation must not call billable extract")
 
         monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client(**kwargs))
 
@@ -212,7 +223,7 @@ async def test_web_fetch_external_backend_prompts_then_stores_valid_api_key(
             async def __aexit__(self, *_: object) -> None:
                 return None
 
-            async def post(self, *_: Any, **__: Any) -> httpx.Response:
+            async def get(self, *_: Any, **__: Any) -> httpx.Response:
                 raise AssertionError("current backend selection must not revalidate credentials")
 
         monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _UnexpectedClient(**kwargs))
@@ -265,29 +276,28 @@ async def test_web_fetch_external_backend_validates_existing_api_key_before_swit
             async def __aexit__(self, *_: object) -> None:
                 return None
 
-            async def post(self, url: str, **kwargs: Any) -> httpx.Response:
+            async def get(self, url: str, **kwargs: Any) -> httpx.Response:
+                assert url == "https://api.tavily.com/usage"
                 status = 200 if kwargs["headers"]["Authorization"] == "Bearer tvly-valid" else 401
                 body = (
                     {
-                        "results": [
-                            {
-                                "url": "https://example.com",
-                                "content": "Example Domain",
-                                "title": "Example Domain",
-                            }
-                        ]
+                        "key": {"usage": 1, "limit": 1000, "extract_usage": 0},
+                        "account": {"current_plan": "Researcher", "plan_usage": 1, "plan_limit": 1000},
                     }
                     if status == 200
                     else {"error": "unauthorized"}
                 )
                 return httpx.Response(status, json=body, request=httpx.Request("POST", url))
 
+            async def post(self, *_: Any, **__: Any) -> httpx.Response:
+                raise AssertionError("Tavily API key validation must not call billable extract")
+
         monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client(**kwargs))
 
         invalid = await mgr.set_web_fetch_backend("tavily")
         assert invalid["changed"] is False
         assert invalid["credentialRequired"] is True
-        assert "Tavily Extract API returned HTTP 401" in invalid["message"]
+        assert "Tavily Usage API returned HTTP 401" in invalid["message"]
         assert "developer.mozilla.org" not in invalid["message"]
         assert mgr.web_fetch_config_model().backend == "auto"
 
@@ -381,22 +391,20 @@ async def test_web_fetch_config_api_key_validates_and_hides_secret_ref(
             async def __aexit__(self, *_: object) -> None:
                 return None
 
-            async def post(self, url: str, **kwargs: Any) -> httpx.Response:
+            async def get(self, url: str, **kwargs: Any) -> httpx.Response:
+                assert url == "https://api.tavily.com/usage"
                 assert kwargs["headers"]["Authorization"] == "Bearer tvly-config"
-                assert "api_key" not in kwargs["json"]
                 return httpx.Response(
                     200,
                     json={
-                        "results": [
-                            {
-                                "url": "https://example.com",
-                                "content": "Example Domain",
-                                "title": "Example Domain",
-                            }
-                        ]
+                        "key": {"usage": 1, "limit": 1000, "extract_usage": 0},
+                        "account": {"current_plan": "Researcher", "plan_usage": 1, "plan_limit": 1000},
                     },
-                    request=httpx.Request("POST", url),
+                    request=httpx.Request("GET", url),
                 )
+
+            async def post(self, *_: Any, **__: Any) -> httpx.Response:
+                raise AssertionError("Tavily API key validation must not call billable extract")
 
         monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client(**kwargs))
 

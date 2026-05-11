@@ -471,6 +471,9 @@ class SessionHandlerMixin(_SessionMixinBase):
 
     async def get_usage(self, ctx: HandlerContext, params: GetUsageParams) -> GetUsageResult:
         """Return the `/cost` usage dashboard payload for one session."""
+        if not params.session_id:
+            return self._empty_usage()
+
         record = await self._store.get_session(params.session_id)
         if record is None:
             raise ResourceNotFoundError(f"Session not found: {params.session_id!r}")
@@ -512,6 +515,34 @@ class SessionHandlerMixin(_SessionMixinBase):
             environment=_environment_summary(session),
             cost_usd=None,
             cost_note="Pricing is not estimated until provider/model pricing tables are trusted.",
+        )
+
+    def _empty_usage(self) -> GetUsageResult:
+        return GetUsageResult(
+            session_id="",
+            title=None,
+            cwd=str(Path.cwd()),
+            created_at=None,
+            updated_at=None,
+            model=None,
+            kernel_version="",
+            tokens=TokenUsageSummary(),
+            context=ContextUsageSummary(
+                total_tokens=0,
+                context_window=None,
+                percent=0.0,
+                sections=[
+                    ContextUsageSection(id="system_prompt", label="System Prompts", tokens=0, percent=0.0),
+                    ContextUsageSection(id="memory", label="Memory", tokens=0, percent=0.0),
+                    ContextUsageSection(id="conversation", label="Conversation", tokens=0, percent=0.0),
+                    ContextUsageSection(id="tools", label="Tool Call", tokens=0, percent=0.0),
+                ],
+            ),
+            history=HistoryUsageSummary(),
+            memory=_memory_summary(self._module_table),
+            environment=EnvironmentUsageSummary(),
+            cost_usd=None,
+            cost_note="No session has been created yet.",
         )
 
     async def tool_snapshot(self, ctx: HandlerContext, session_id: str) -> dict[str, Any]:

@@ -308,9 +308,10 @@ async function executeWebFetchCommand(ctx: any, argsText: string): Promise<boole
 		const result = await ctx.session?.setWebFetchBackend?.(backend, false);
 		if (result?.credentialRequired && result.credentialRequest) {
 			if (result.message) ctx.showError?.(result.message);
+			const replacementTitle = `Request for New ${result.credentialRequest.label ?? backend + " API Key"}`;
 			const key = await ctx.showHookInput?.(
 				result.message
-					? `Enter replacement ${result.credentialRequest.label ?? backend + " API key"}`
+					? `${replacementTitle}\n\n${result.message}`
 					: (result.credentialRequest.prompt ?? `Enter ${backend} API key`),
 				result.credentialRequest.envKey ?? "API key",
 			);

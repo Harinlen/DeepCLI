@@ -577,9 +577,10 @@ export class SelectorController {
 								if (selected.hasCredentials) {
 									this.ctx.showError(result.message ?? `WebFetch backend ${selected.id} is not available.`);
 								}
+								const replacementTitle = `Request for New ${result.credentialRequest.label ?? selected.id + " API Key"}`;
 								const key = await this.ctx.showHookInput(
 									selected.hasCredentials
-										? `Enter replacement ${result.credentialRequest.label ?? selected.id + " API key"}`
+										? `${replacementTitle}\n\n${result.message ?? "The configured API key could not be validated."}`
 										: (result.credentialRequest.prompt ?? `Enter ${selected.id} API key`),
 									result.credentialRequest.envKey ?? "API key",
 								);

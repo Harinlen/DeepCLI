@@ -28,6 +28,7 @@ class ToolCallStart:
     title: str
     kind: ToolKind
     raw_input: str | None = None
+    meta: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

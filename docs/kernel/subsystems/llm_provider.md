@@ -1,5 +1,11 @@
 # LLMProviderManager
 
+> **Quick header**
+> - **Role**: provider instance lifecycle and vendor adapter registry.
+> - **Current code**: `kernel.agents.mustang.llm_provider.*`.
+> - **Runtime owner**: Mustang runtime core subsystem before `LLMManager`.
+> - **Boundary**: provider clients and stream adapters only; model alias/config routing lives in `LLMManager`.
+
 ## Purpose
 
 LLMProviderManager 管理 LLM Provider 实例的生命周期。
@@ -72,10 +78,10 @@ class LLMProviderManager(Subsystem):
 
 ## `Provider` ABC（内部抽象）
 
-每个 Provider 实现继承此 ABC。不对外暴露，只在 `kernel/llm_provider/` 内部使用。
+每个 Provider 实现继承此 ABC。不对外暴露，只在 `kernel/agents/mustang/llm_provider/` 内部使用。
 
 ```python
-# kernel/llm_provider/base.py
+# kernel/agents/mustang/llm_provider/base.py
 
 class Provider(ABC):
     """
@@ -151,7 +157,7 @@ class LLMProviderManager(Subsystem):
 ## 文件布局
 
 ```
-kernel/llm_provider/
+kernel/agents/mustang/llm_provider/
   __init__.py             # LLMProviderManager (Subsystem)
   base.py                 # Provider ABC
   errors.py               # ProviderError, PromptTooLongError
@@ -167,7 +173,7 @@ kernel/llm_provider/
 ```
 
 Universal 类型（`LLMChunk`、`PromptSection`、`Message`、`ToolSchema`）
-定义在 `kernel/llm/types.py`，Provider 实现从那里 import。
+定义在 `kernel/agents/mustang/llm/types.py`，Provider 实现从那里 import。
 
 ---
 
@@ -185,7 +191,7 @@ Universal 类型（`LLMChunk`、`PromptSection`、`Message`、`ToolSchema`）
 - **Provider 是无状态的通信层**：每次 `stream()` 调用完全无状态，Provider
   不持有对话历史，不做路由，只管"怎么调这个 API"。
 
-- **格式转换在 Provider 实现里**：`kernel/llm/types.py` 的 universal 类型
+- **格式转换在 Provider 实现里**：`kernel/agents/mustang/llm/types.py` 的 universal 类型
   → SDK native format 的转换完全封装在各 Provider 实现内的 `format/` helpers 里。
 
 - **`ToolUseChunk` 是完整的**：Provider 实现在 `content_block_stop` 时

@@ -55,6 +55,8 @@ case "$OS_NAME" in
     ;;
 esac
 INSTALL_DIR="${DEEPCLI_INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
+UV_VERSION="${DEEPCLI_UV_VERSION:-0.9.28}"
+PRIVATE_UV_BIN="$INSTALL_DIR/tools/uv/$UV_VERSION/uv"
 
 usage() {
   cat <<'EOF'
@@ -126,6 +128,9 @@ resolve_layout() {
     CLI_CMD=("$RELEASE_DIR/cli/deepcli-cli")
     CLI_CWD="$PWD"
     PORT_PYTHON="$RELEASE_DIR/kernel/.venv/bin/python"
+    if [[ -z "${DEEPCLI_UV_BIN:-}" && -x "$PRIVATE_UV_BIN" ]]; then
+      export DEEPCLI_UV_BIN="$PRIVATE_UV_BIN"
+    fi
   fi
 }
 

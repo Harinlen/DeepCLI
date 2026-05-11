@@ -4,7 +4,7 @@
 创建: 2026-04-29
 相关:
 
-- [`acp-acpx-schema-alignment-plan.md`](acp-acpx-schema-alignment-plan.md)
+- [`acp-acpx-schema-alignment-plan.md`](../../interfaces/protocol/history/acp-acpx-schema-alignment-plan.md)
 - [`agent-control-plane-notes.md`](agent-control-plane-notes.md) — 详细讨论记录、参考实现发现和取舍理由。
 - [`full-system-test-plan.md`](../../../plans/full-system-test-plan.md) — Agent Control Plane、Runtime、Permission、CLI/Probe 的全系统测试矩阵。
 

@@ -1,10 +1,18 @@
 # SecretManager — Design
 
+> **Quick header**
+> - **Role**: local secret storage and `${secret:name}` config expansion support.
+> - **Current code**: `kernel.core.secrets.*`.
+> - **Lifecycle**: bootstrap service before ConfigManager, not a regular `Subsystem`.
+> - **Boundary**: credential storage only; connection AuthN and tool AuthZ are separate.
+> - **Current surface**: no `/auth` slash command and no active `secrets/auth`
+>   ACP route; older `/auth` design notes below are historical only.
+
 Status: **landed** — 全部实装（bootstrap 服务，Phase 16）。
 
 > 前置阅读：
 > - 架构子系统表：[kernel/architecture.md](../../kernel/architecture.md)
-> - ConfigManager 实现：`kernel/config/manager.py`
+> - ConfigManager 实现：`kernel/core/config/manager.py`
 > - MCP 连接状态机：[mcp.md](mcp.md)
 > - Roadmap credential store 条目：[plans/roadmap.md](../../plans/roadmap.md) §Standing gaps
 > - Hermes credential store：`hermes-agent/hermes_cli/auth.py`
@@ -457,7 +465,12 @@ LLM，MCP transport 拿到 header token 去建连）。这些值
 
 ---
 
-## 7. CLI 命令（/auth）
+## 7. Retired CLI Command Design (`/auth`)
+
+> Current status: `/auth` was removed from the CommandManager catalog and
+> gateway handling.  The design below is retained as historical context for a
+> possible future local credential-management surface, but it is not part of
+> the active protocol.
 
 SecretManager 不做 CLI 交互。
 
@@ -750,35 +763,35 @@ async def test_full_boot_with_secrets(tmp_path):
 
 | 操作 | 文件 | 说明 |
 |------|------|------|
-| 新建 | `kernel/secrets/__init__.py` | SecretManager 类 |
-| 新建 | `kernel/secrets/types.py` | SecretError, SecretNotFoundError, SecretDatabaseError, OAuthToken |
+| 新建 | `kernel/core/secrets/__init__.py` | SecretManager 类 |
+| 新建 | `kernel/core/secrets/types.py` | SecretError, SecretNotFoundError, SecretDatabaseError, OAuthToken |
 | 新建 | `tests/kernel/test_secret_manager.py` | 单元测试 |
 
 ### Phase 2: ConfigManager 集成 + LLM 隔离
 
 | 操作 | 文件 | 说明 |
 |------|------|------|
-| 修改 | `kernel/app.py` | lifespan 加 SecretManager 启动（FlagManager 之后，ConfigManager 之前） |
+| 修改 | `kernel/agents/access/app.py` | lifespan 加 SecretManager 启动（FlagManager 之后，ConfigManager 之前） |
 | 修改 | `kernel/module_table.py` | 新增 `secrets: SecretManager` 字段 |
-| 修改 | `kernel/config/manager.py` | 新增 `secret_resolver` 构造参数 + `_expand_secrets_in_dict` |
-| 修改 | `kernel/tools/builtin/bash.py` | `prepare_permission_matcher()` 加 wildcard（`fnmatch`）支持 |
+| 修改 | `kernel/core/config/manager.py` | 新增 `secret_resolver` 构造参数 + `_expand_secrets_in_dict` |
+| 修改 | `kernel/agents/mustang/tools/builtin/bash.py` | `prepare_permission_matcher()` 加 wildcard（`fnmatch`）支持 |
 | 新建 | `tests/kernel/test_secret_config_integration.py` | 集成测试 |
 
 ### Phase 3: CLI 命令
 
 | 操作 | 文件 | 说明 |
 |------|------|------|
-| 修改 | `kernel/commands/__init__.py` | `_BUILTIN_COMMANDS` 加 `/auth` CommandDef |
-| 修改 | `kernel/protocol/acp/routing.py` | `HandlerTarget` 加 `"secrets"` + `REQUEST_DISPATCH` 加 `secrets/auth` |
-| 新建 | `kernel/protocol/acp/schemas/auth.py` | `AuthRequest` + `AuthResult` ACP schema |
-| 修改 | `kernel/protocol/acp/session_handler.py` | `_get_handler_for` 加 `"secrets"` 分支 |
-| 修改 | `kernel/gateways/base.py` | `/auth` gateway 拒绝 |
+| 历史/未激活 | `kernel/agents/mustang/commands/__init__.py` | `/auth` CommandDef 已移除 |
+| 历史/未激活 | `kernel/core/protocol/acp/routing.py` | `secrets/auth` route 不属于当前 active surface |
+| 历史/未激活 | `kernel/core/protocol/acp/schemas/auth.py` | `AuthRequest` + `AuthResult` schema 不属于当前 active surface |
+| 历史/未激活 | `kernel/core/protocol/acp/session_handler.py` | `"secrets"` handler target 不属于当前 active surface |
+| 历史/未激活 | `kernel/agents/mustang/gateways/base.py` | `/auth` gateway special-case 已移除 |
 
 ### Phase 4: OAuth 存储层
 
 | 操作 | 文件 | 说明 |
 |------|------|------|
-| 修改 | `kernel/secrets/__init__.py` | migration v2 + `get_oauth_token` / `set_oauth_token` / `delete_oauth_token` |
+| 修改 | `kernel/core/secrets/__init__.py` | migration v2 + `get_oauth_token` / `set_oauth_token` / `delete_oauth_token` |
 | 新建 | `tests/kernel/test_secret_oauth.py` | OAuth token 单元测试 |
 
 ---
@@ -789,7 +802,7 @@ async def test_full_boot_with_secrets(tmp_path):
 |-------|------|------|
 | **Phase 1: 核心存储** | SecretManager 类 + sqlite3 标准库 + CRUD API + `resolve()` + 0600 权限 + 单元测试 | 无 |
 | **Phase 2: ConfigManager 集成 + LLM 隔离** | `${secret:name}` late resolve 接入 `_get_or_create_section()` + KernelModuleTable 新增 `secrets` 字段 + lifespan 启动顺序调整 + BashTool wildcard matcher 扩展 + 默认 deny `Bash(*secrets.db*)` 规则 + 集成测试 | Phase 1 |
-| **Phase 3: CLI 命令** | `/auth` CommandDef + ACP `secrets/auth` RequestSpec + `HandlerTarget` 扩展 + Gateway 拒绝 | Phase 2 |
+| **Phase 3: CLI 命令** | 历史设计，当前未激活；`/auth` 与 `secrets/auth` 已从 active surface 移除 | Phase 2 |
 | **Phase 4: OAuth 存储层** | `oauth_tokens` 表 migration v2 + `get_oauth_token` / `set_oauth_token` / `delete_oauth_token` | Phase 2 |
 
 ---

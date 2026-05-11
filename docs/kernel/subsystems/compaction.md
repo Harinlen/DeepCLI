@@ -1,5 +1,11 @@
 # Context Compression Layers (1a–1d) — Design
 
+> **Quick header**
+> - **Role**: context compaction design for the Mustang orchestrator.
+> - **Current code**: `kernel.agents.mustang.orchestrator.compact.*`, `history/*`, `tool_executor.py`.
+> - **Owns**: snip, microcompact, LLM summary/autocompact, and deferred context-collapse shape.
+> - **Boundary**: prompt assembly and memory retrieval stay in their owning docs.
+
 Status: **landed** — 1a (tool-result budget), 1b (snip), 1c (microcompact)
 已实装并集成到 STEP 1 调用链。1d (context collapse) 仍为 deferred。
 
@@ -55,7 +61,7 @@ Orchestrator STEP 1 (PREPARE) 设计了 5 层 context 压缩，按成本从低�
 **新增 Tool 类属性**：
 
 ```python
-# kernel/tools/tool.py
+# kernel/agents/mustang/tools/tool.py
 class Tool(ABC):
     max_result_size_chars: ClassVar[int] = 50_000
 ```
@@ -109,7 +115,7 @@ if isinstance(result_text, str) and len(result_text) > budget:
 `ToolExecutor` 执行工具时写入映射，`Compactor.snip()` 读取映射。
 
 ```python
-# kernel/orchestrator/history.py
+# kernel/agents/mustang/orchestrator/history.py
 class ConversationHistory:
     def __init__(self, ...):
         ...
@@ -125,7 +131,7 @@ class ConversationHistory:
 **Snip 算法**：
 
 ```python
-# kernel/orchestrator/compactor.py
+# kernel/agents/mustang/orchestrator/compactor.py
 def snip(self, history: ConversationHistory) -> int:
     """Replace read-only tool results in non-tail messages with placeholders.
     Returns chars freed."""
@@ -297,13 +303,13 @@ if self._history.token_count > threshold:
 
 | 文件 | 改动 |
 |------|------|
-| `kernel/tools/tool.py` | 新增 `max_result_size_chars: ClassVar[int]` |
-| `kernel/tools/builtin/bash.py` | Override `max_result_size_chars` |
-| `kernel/tools/builtin/file_read.py` | Override `max_result_size_chars` |
-| `kernel/orchestrator/tool_executor.py` | 结果截断（1a）+ `history.record_tool_kind()` 调用 |
-| `kernel/orchestrator/compactor.py` | 新增 `snip()` + `microcompact()` |
-| `kernel/orchestrator/history.py` | 新增 `_tool_kinds` 映射 + 辅助方法 |
-| `kernel/orchestrator/orchestrator.py` | STEP 1 调用 snip → microcompact → compact |
+| `kernel/agents/mustang/tools/tool.py` | 新增 `max_result_size_chars: ClassVar[int]` |
+| `kernel/agents/mustang/tools/builtin/bash.py` | Override `max_result_size_chars` |
+| `kernel/agents/mustang/tools/builtin/file_read.py` | Override `max_result_size_chars` |
+| `kernel/agents/mustang/orchestrator/tool_executor.py` | 结果截断（1a）+ `history.record_tool_kind()` 调用 |
+| `kernel/agents/mustang/orchestrator/compactor.py` | 新增 `snip()` + `microcompact()` |
+| `kernel/agents/mustang/orchestrator/history.py` | 新增 `_tool_kinds` 映射 + 辅助方法 |
+| `kernel/agents/mustang/orchestrator/orchestrator.py` | STEP 1 调用 snip → microcompact → compact |
 | `tests/kernel/orchestrator/test_compactor.py` | snip / microcompact 单元测试 |
 | `tests/kernel/orchestrator/test_tool_executor.py` | 截断测试 |
 

@@ -72,6 +72,8 @@ from kernel.core.protocol.acp.schemas.session import (
     DeleteSessionResponse,
     GetUsageRequest,
     GetUsageResponse,
+    ToolSnapshotRequest,
+    ToolSnapshotResponse,
     ExecutePythonRequest,
     ExecutePythonResponse,
     ExecuteShellRequest,
@@ -92,6 +94,16 @@ from kernel.core.protocol.acp.schemas.session import (
     SetSessionConfigOptionResponse,
     SetSessionModeRequest,
     SetSessionModeResponse,
+)
+from kernel.core.protocol.acp.schemas.web_fetch import (
+    SetWebFetchBackendRequest,
+    SetWebFetchBackendResponse,
+    SetWebFetchConfigRequest,
+    SetWebFetchConfigResponse,
+    WebFetchBackendOptionsRequest,
+    WebFetchBackendOptionsResponse,
+    WebFetchConfigRequest,
+    WebFetchConfigResponse,
 )
 from kernel.core.protocol.interfaces.contracts.archive_session_params import ArchiveSessionParams
 from kernel.core.protocol.interfaces.contracts.activate_skill_params import ActivateSkillParams
@@ -114,6 +126,7 @@ from kernel.core.protocol.interfaces.contracts.execute_python_params import (
 from kernel.core.protocol.interfaces.contracts.execute_shell_params import ExecuteShellParams
 from kernel.core.protocol.interfaces.contracts.get_usage_params import GetUsageParams
 from kernel.core.protocol.interfaces.contracts.handler_context import HandlerContext
+from kernel.core.protocol.interfaces.errors import InvalidParams
 from kernel.core.protocol.interfaces.contracts.list_profiles_params import (
     ListProfilesParams,
 )
@@ -168,7 +181,7 @@ from kernel.core.protocol.interfaces.model_handler import ModelHandler
 from kernel.core.protocol.interfaces.session_handler import SessionHandler
 
 # Discriminator for which kernel subsystem handles a request.
-HandlerTarget = Literal["session", "model", "secrets", "commands"]
+HandlerTarget = Literal["session", "model", "secrets", "commands", "tools"]
 
 
 @dataclass(frozen=True)
@@ -474,6 +487,13 @@ async def _handle_get_usage(
     return GetUsageResponse.model_validate(_dump_contract(result))
 
 
+async def _handle_tool_snapshot(
+    sh: SessionHandler, ctx: HandlerContext, p: ToolSnapshotRequest
+) -> BaseModel:
+    result = await sh.tool_snapshot(ctx, p.session_id)
+    return ToolSnapshotResponse.model_validate(result)
+
+
 async def _handle_cancel(sh: SessionHandler, ctx: HandlerContext, p: CancelNotification) -> None:
     await sh.cancel(ctx, CancelParams(session_id=p.session_id))
 
@@ -708,6 +728,59 @@ async def _handle_commands_list(cm: Any, ctx: HandlerContext, p: ListCommandsReq
 
 
 # ---------------------------------------------------------------------------
+# web_fetch/* handler wrappers
+# ---------------------------------------------------------------------------
+
+
+async def _handle_web_fetch_backend_options(
+    tm: Any,
+    ctx: HandlerContext,
+    p: WebFetchBackendOptionsRequest,
+) -> BaseModel:
+    del ctx, p
+    return WebFetchBackendOptionsResponse.model_validate(tm.web_fetch_backend_options())
+
+
+async def _handle_web_fetch_set_backend(
+    tm: Any,
+    ctx: HandlerContext,
+    p: SetWebFetchBackendRequest,
+) -> BaseModel:
+    del ctx
+    try:
+        result = await tm.set_web_fetch_backend(
+            p.backend,
+            run_setup=p.run_setup,
+            api_key=p.api_key,
+        )
+    except ValueError as exc:
+        raise InvalidParams(str(exc))
+    return SetWebFetchBackendResponse.model_validate(result)
+
+
+async def _handle_web_fetch_get_config(
+    tm: Any,
+    ctx: HandlerContext,
+    p: WebFetchConfigRequest,
+) -> BaseModel:
+    del ctx, p
+    return WebFetchConfigResponse.model_validate(tm.web_fetch_config())
+
+
+async def _handle_web_fetch_set_config(
+    tm: Any,
+    ctx: HandlerContext,
+    p: SetWebFetchConfigRequest,
+) -> BaseModel:
+    del ctx
+    try:
+        result = await tm.set_web_fetch_config_value(p.path, p.value)
+    except ValueError as exc:
+        raise InvalidParams(str(exc))
+    return SetWebFetchConfigResponse.model_validate(result)
+
+
+# ---------------------------------------------------------------------------
 # Dispatch tables
 # ---------------------------------------------------------------------------
 
@@ -717,6 +790,30 @@ REQUEST_DISPATCH: dict[str, RequestSpec] = {
         params_type=ListCommandsRequest,
         result_type=ListCommandsResponse,
         target="commands",
+    ),
+    MustangMethod.WEB_FETCH_BACKEND_OPTIONS: RequestSpec(
+        handler=_handle_web_fetch_backend_options,
+        params_type=WebFetchBackendOptionsRequest,
+        result_type=WebFetchBackendOptionsResponse,
+        target="tools",
+    ),
+    MustangMethod.WEB_FETCH_SET_BACKEND: RequestSpec(
+        handler=_handle_web_fetch_set_backend,
+        params_type=SetWebFetchBackendRequest,
+        result_type=SetWebFetchBackendResponse,
+        target="tools",
+    ),
+    MustangMethod.WEB_FETCH_GET_CONFIG: RequestSpec(
+        handler=_handle_web_fetch_get_config,
+        params_type=WebFetchConfigRequest,
+        result_type=WebFetchConfigResponse,
+        target="tools",
+    ),
+    MustangMethod.WEB_FETCH_SET_CONFIG: RequestSpec(
+        handler=_handle_web_fetch_set_config,
+        params_type=SetWebFetchConfigRequest,
+        result_type=SetWebFetchConfigResponse,
+        target="tools",
     ),
     # session/* -- routed to SessionHandler (SessionManager)
     AcpMethod.SESSION_NEW: RequestSpec(
@@ -813,6 +910,12 @@ REQUEST_DISPATCH: dict[str, RequestSpec] = {
         handler=_handle_get_usage,
         params_type=GetUsageRequest,
         result_type=GetUsageResponse,
+        target="session",
+    ),
+    MustangMethod.SESSION_TOOL_SNAPSHOT: RequestSpec(
+        handler=_handle_tool_snapshot,
+        params_type=ToolSnapshotRequest,
+        result_type=ToolSnapshotResponse,
         target="session",
     ),
     # model/* -- routed to ModelHandler (LLMManager)

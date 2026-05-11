@@ -19,6 +19,7 @@ type GoldenFrame = {
 	name: string;
 	lines: string[];
 	mustInclude: string[];
+	mustExclude?: string[];
 };
 
 const fakeSession = {
@@ -94,6 +95,31 @@ bashComplete.setComplete(0, false, { output: "ok\n" });
 const toolPending = new ToolExecutionComponent("grep", { pattern: "foo", path: "src" }, {}, undefined, ui as never, process.cwd(), "t1");
 const toolComplete = new ToolExecutionComponent("grep", { pattern: "foo", path: "src" }, {}, undefined, ui as never, process.cwd(), "t2");
 toolComplete.updateResult({ content: [{ type: "text", text: "done" }] }, false, "t2");
+const backendTool = new ToolExecutionComponent("WebSearch", { query: "weather", limit: 5 }, {}, undefined, ui as never, process.cwd(), "t2b");
+backendTool.updateResult({
+	content: [{ type: "text", text: "result" }],
+	details: { backend: { backend: "duckduckgo", kind: "web_search" } },
+}, false, "t2b");
+const emptyBackendArgTool = new ToolExecutionComponent("WebFetch", { url: "https://example.com", backend: null }, {}, undefined, ui as never, process.cwd(), "t2c");
+emptyBackendArgTool.updateResult({
+	content: [{ type: "text", text: "body" }],
+	details: { backend: { backend: "httpx", kind: "web_fetch" } },
+}, false, "t2c");
+const explicitBackendArgTool = new ToolExecutionComponent("WebFetch", { url: "https://example.com", backend: "tavily" }, {}, undefined, ui as never, process.cwd(), "t2d");
+explicitBackendArgTool.updateResult({
+	content: [{ type: "text", text: "body" }],
+	details: { backend: { backend: "tavily (failed)", kind: "web_fetch" } },
+}, false, "t2d");
+const pendingBackendTool = new ToolExecutionComponent(
+	"WebFetch",
+	{ url: "https://example.com", backend: "tavily" },
+	{},
+	undefined,
+	ui as never,
+	process.cwd(),
+	"t2e",
+	{ backend: { backend: "tavily", kind: "web_fetch", phase: "pending" } },
+);
 const toolFailed = new ToolExecutionComponent("grep", { pattern: "foo" }, {}, undefined, ui as never, process.cwd(), "t3");
 toolFailed.updateResult({ content: [{ type: "text", text: "boom" }], isError: true }, false, "t3");
 
@@ -199,6 +225,29 @@ const frames: GoldenFrame[] = [
 		mustInclude: ["success grep", "done"],
 	},
 	{
+		name: "tool backend metadata",
+		lines: backendTool.render(80),
+		mustInclude: ["success WebSearch", "query=\"weather\"", "backend=duckduckgo", "result"],
+	},
+	{
+		name: "tool hides empty backend argument",
+		lines: emptyBackendArgTool.render(80),
+		mustInclude: ["success WebFetch", "url=\"https://example.com\"", "backend=httpx", "body"],
+		mustExclude: ["backend=null", "backend=none"],
+	},
+	{
+		name: "tool shows actual backend not backend argument",
+		lines: explicitBackendArgTool.render(80),
+		mustInclude: ["success WebFetch", "url=\"https://example.com\"", "backend=tavily (failed)", "body"],
+		mustExclude: ["backend=\"tavily\""],
+	},
+	{
+		name: "tool pending backend metadata",
+		lines: pendingBackendTool.render(80),
+		mustInclude: ["pending WebFetch", "url=\"https://example.com\"", "backend=tavily"],
+		mustExclude: ["backend=\"tavily\""],
+	},
+	{
 		name: "tool failed",
 		lines: toolFailed.render(80),
 		mustInclude: ["error grep", "boom"],
@@ -215,6 +264,9 @@ for (const frame of frames) {
 	assert(rendered.trim().length > 0, `${frame.name} should render non-empty output`);
 	for (const expected of frame.mustInclude) {
 		assert(rendered.includes(expected), `${frame.name} golden frame should include ${JSON.stringify(expected)}\n${rendered}`);
+	}
+	for (const unexpected of frame.mustExclude ?? []) {
+		assert(!rendered.includes(unexpected), `${frame.name} golden frame should not include ${JSON.stringify(unexpected)}\n${rendered}`);
 	}
 	if (frame.name === "assistant error text does not add unknown fallback") {
 		assert(!rendered.includes("Unknown error"), `${frame.name} should not include fallback text\n${rendered}`);

@@ -27,6 +27,12 @@ An implementation is **complete** when and only when:
    **invokes the real subsystem** — not a mock.
    See [`workflow.md`](workflow.md#phase-45--closure-seam-inventory-mandatory-hardest-to-catch-bugs-live-here)
    Phase 4.5 for the enumeration procedure and worked examples.
+   If the seam is reachable from the CLI through the supervised
+   Access Agent -> Agent Hub -> Primary Runtime path, the probe must
+   exercise that router path, not only an Access-local handler.
+   Adding an ACP method that reaches the Primary Runtime also requires
+   the Hub runtime contract checks in
+   `tests/kernel/agent_hub/test_agent_hub_transport_c.py` to pass.
 
 3. **Each probe has been run and its output pasted into the
    completion report.**  Output must show the assertion passed
@@ -119,8 +125,11 @@ When wrapping up an implementation:
 2. For each: does a real-system probe exist?
    - If yes: run it, paste output
    - If no: write one, then run it, then paste output
-3. Post the probe output verbatim in the report
-4. Only then say "done"
+3. If the feature is CLI-visible, confirm whether the real path is
+   router-backed.  For router-backed methods, run the Hub contract
+   tests and a router-path E2E/probe.
+4. Post the probe output verbatim in the report
+5. Only then say "done"
 ```
 
 If you catch yourself about to skip step 2 because "the mock test

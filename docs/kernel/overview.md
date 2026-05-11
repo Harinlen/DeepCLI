@@ -1,5 +1,11 @@
 # Kernel — Overview
 
+> **Quick header**
+> - **Role**: product and design-principle overview for DeepCLI's Kernel.
+> - **Current runtime shape**: Supervisor -> Agent Hub -> Access Agent -> Mustang Agent (`primary` default instance).
+> - **Owns**: why the Kernel exists and which product layers it supports.
+> - **Does not own**: concrete subsystem APIs or current file paths.
+
 > **Slogan**: _The agent that reinvents software._ 🐎
 
 ## DeepCLI 的定位：Personalize Dynamic Software
@@ -20,7 +26,7 @@ DeepCLI 走**长期协同构建**的路线——用户通过 chat 带着 agent �
 | 层 | 是什么 | 在哪儿 |
 |---|---|---|
 | **Home Screen** | 统一入口。浏览 / 启动 / widget / 分享用户 build 出来的软件，同时能观察 kernel 里正在跑的 agent / session 状态。 | *未来独立前端 repo，尚未启动* |
-| **Multi-agent Kernel** | 运行时引擎。**一个主 agent** 常驻跟用户对话；**session agent** 各自在自己 session 里跑（OpenClaw 风格，不是 CC 那种 sub-agent-as-tool）。通过 memory / skills / hooks 自我进化。 | *本 repo* |
+| **Multi-agent Kernel** | 运行时引擎。默认 Mustang Agent 实例 `primary` 常驻跟用户对话；未来更多 Mustang Agent 实例各自在自己的 session scope 里跑（OpenClaw 风格，不是 CC 那种 sub-agent-as-tool）。通过 memory / skills / hooks 自我进化。 | *本 repo* |
 | **用户软件库** | 产品本体。用户累积出来的那堆专属软件，下面说。 | *用户的 DeepCLI 数据目录* |
 
 ### 用户 build 出来的软件的三种形态
@@ -31,7 +37,7 @@ DeepCLI 走**长期协同构建**的路线——用户通过 chat 带着 agent �
 2. **Template-App** —— UI template + config + 少量胶水代码。一个
    成品小应用，**没有自己的 agent loop**，运行起来像 widget（例：
    定制化的 TradingView + 特定代币配置）。
-3. **Session Agent** —— 一套 agent 设定（自带 skill / tool / prompt /
+3. **Mustang Agent 实例** —— 一套 agent 设定（自带 skill / tool / prompt /
    memory scope），在自己的 session 里长期跑；用户可以随时打开对话
    跟它聊（例："Research Assistant"、"Email Triage"、某个 repo
    scope 的 pair-programmer）。

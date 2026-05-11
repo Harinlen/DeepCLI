@@ -203,6 +203,9 @@ class AskUserQuestionTool(Tool[dict[str, Any], dict[str, Any]]):
     # Read-only, concurrency-safe, not destructive.
     is_concurrency_safe = True  # type: ignore[assignment]
 
+    def is_read_only_call(self, input: dict[str, Any], ctx: RiskContext) -> bool:
+        return True
+
     def default_risk(self, input: dict[str, Any], ctx: RiskContext) -> PermissionSuggestion:
         """Force the permission channel — this is how the question reaches the user."""
         return PermissionSuggestion(

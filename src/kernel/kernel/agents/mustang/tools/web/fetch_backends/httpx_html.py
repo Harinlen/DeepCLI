@@ -129,6 +129,7 @@ class HttpxFetchBackend(FetchBackend):
                 raw_length=len(response_bytes),
             )
 
+        title = ""
         if "text/markdown" in content_type:
             content = body_text[:max_chars]
         elif "json" in content_type:
@@ -136,7 +137,12 @@ class HttpxFetchBackend(FetchBackend):
         elif "xml" in content_type or "text/plain" in content_type:
             content = body_text[:max_chars]
         elif "html" in content_type or _looks_like_html(body_text):
-            content = html_to_markdown(body_text, max_chars)
+            readable = _extract_readable_html(body_text, max_chars)
+            if readable is not None:
+                content, title = readable
+            else:
+                content = html_to_markdown(body_text, max_chars)
+                title = ""
         elif _looks_like_binary(body_bytes, content_type):
             return FetchResult(
                 url=final_url,
@@ -159,6 +165,7 @@ class HttpxFetchBackend(FetchBackend):
             url=final_url,
             content=content,
             content_type=content_type,
+            title=title,
             status_code=response.status_code,
             truncated=content_truncated,
             raw_length=len(response_bytes),
@@ -177,6 +184,28 @@ def _format_json(value: str) -> str:
         return value
 
 
+def _extract_readable_html(html: str, max_chars: int) -> tuple[str, str] | None:
+    """Use readability-lxml as an internal HTML extraction stage.
+
+    Readability is not a WebFetch backend: it does not define a transport
+    path.  It is a parser used after ``httpx`` has already fetched the
+    document.
+    """
+    try:
+        from readability import Document
+    except Exception:
+        return None
+    try:
+        doc = Document(html)
+        summary = doc.summary()
+        title = doc.title()
+        content = html_to_markdown(summary, max_chars)
+        return content, str(title or "")
+    except Exception:
+        logger.debug("readability extraction failed", exc_info=True)
+        return None
+
+
 def _looks_like_binary(value: bytes, content_type: str) -> bool:
     lower_type = content_type.lower()
     if lower_type.startswith(("image/", "audio/", "video/")):
@@ -186,4 +215,4 @@ def _looks_like_binary(value: bytes, content_type: str) -> bool:
     return b"\x00" in value[:1024]
 
 
-__all__ = ["HttpxFetchBackend", "_HEADERS", "get_fetch_headers"]
+__all__ = ["HttpxFetchBackend", "_HEADERS", "_extract_readable_html", "get_fetch_headers"]

@@ -1,6 +1,12 @@
 # ScheduleManager 设计 — Cron / Monitor / 定时调度
 
-Status: **draft** — 三参考源码审查完成，尚未实装。
+> **Quick header**
+> - **Role**: cron/monitor scheduling, execution, and delivery routing.
+> - **Current code**: `kernel.agents.mustang.schedule.*`, cron tools under `kernel.agents.mustang.tools.builtin.*`.
+> - **Runtime owner**: Mustang runtime after sessions, commands, and gateways.
+> - **Boundary**: scheduled execution only; `/loop` is a SkillManager bundled skill.
+
+Status: **landed** — 三参考源码审查完成，当前实现已迁入 `kernel.agents.mustang.schedule`.
 
 > 蓝图来源：
 > - **Claude Code** `src/tools/ScheduleCronTool/` (CronCreate/Delete/List),
@@ -136,7 +142,7 @@ OpenClaw 的 delivery-dispatch 和 Hermes 的 skill/model 能力。
 综合三个参考的数据模型设计。
 
 ```python
-# kernel/schedule/types.py
+# kernel/agents/mustang/schedule/types.py
 
 from __future__ import annotations
 
@@ -357,7 +363,7 @@ kernel shutdown 时 `shutdown()`。
 ### 3.2 包结构
 
 ```
-kernel/schedule/
+kernel/agents/mustang/schedule/
 ├── __init__.py          # ScheduleManager (Subsystem)
 ├── types.py             # CronTask, CronExecution, Schedule, DeliveryConfig, RepeatConfig, FailureAlertConfig
 ├── store.py             # CronStore (SQLite 持久化 + 内存 dict + 执行记录 CRUD)
@@ -778,7 +784,7 @@ class DeliveryRouter:
 #### 3.4.1 错误分类：transient vs permanent
 
 ```python
-# kernel/schedule/errors.py
+# kernel/agents/mustang/schedule/errors.py
 
 import re
 
@@ -1356,7 +1362,7 @@ Phase 1（设计）已完成。本文档是 Phase 2–6 的执行清单。
 
 ### Step 1：数据模型 + Store + Schema
 
-**目标**：`kernel/schedule/types.py` + `kernel/schedule/store.py` 能跑通 CRUD。
+**目标**：`kernel/agents/mustang/schedule/types.py` + `kernel/agents/mustang/schedule/store.py` 能跑通 CRUD。
 
 **实装**：
 - `types.py` — CronTaskStatus, ScheduleKind, Schedule, RepeatConfig,
@@ -1582,7 +1588,7 @@ ScheduleManager 中。但它是同一批 coverage gap，放在一起实装。
 `/cron` 命令列出所有 job。
 
 **实装**：
-- `kernel/skills/bundled/loop.md` — /loop skill (SKILL.md 格式),
+- `kernel/agents/mustang/skills/bundled/loop_skill.py` — /loop bundled skill,
   interval 解析 + CronCreate 调用指导 + dynamic 模式 prompt
 - CommandManager 注册 `/cron` 命令 — 调 ScheduleManager.list_tasks
 

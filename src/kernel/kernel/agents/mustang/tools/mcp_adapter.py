@@ -47,8 +47,7 @@ class MCPAdapter(Tool[dict[str, Any], dict[str, Any]]):
 
     # Class-level defaults for MCP tools.
     kind: ClassVar[ToolKind] = ToolKind.other
-    # TODO: flip to True once ToolSearchTool is implemented.
-    should_defer: ClassVar[bool] = False
+    should_defer: ClassVar[bool] = True
     always_load: ClassVar[bool] = False
     cache: ClassVar[bool] = True
     interrupt_behavior: ClassVar = "block"
@@ -100,6 +99,9 @@ class MCPAdapter(Tool[dict[str, Any], dict[str, Any]]):
             default_decision="ask",
             reason="MCP tool (external server)",
         )
+
+    def is_read_only_call(self, input: dict[str, Any], ctx: Any) -> bool:
+        return False
 
 
 # ── Naming utility ──────────────────────────────────────────────────

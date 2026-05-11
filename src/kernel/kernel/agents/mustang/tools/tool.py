@@ -161,6 +161,16 @@ class Tool(ABC, Generic[InputT, OutputT]):
         """
         return None
 
+    def execution_metadata(self, _input: InputT, _ctx: RiskContext) -> dict[str, Any] | None:
+        """Optional client-visible metadata for the tool-call start event.
+
+        Tools with runtime-selectable backends use this to expose the
+        effective backend preference while the call is still pending. The
+        terminal ``ToolCallResult.meta`` remains the authoritative source for
+        the backend that actually produced the result.
+        """
+        return None
+
     @property
     def is_read_only(self) -> bool:
         """True when ``kind`` is in the read-only category.
@@ -168,6 +178,15 @@ class Tool(ABC, Generic[InputT, OutputT]):
         Used by Orchestrator to partition concurrent tool batches.
         """
         return self.kind.is_read_only
+
+    def is_read_only_call(self, _input: InputT, _ctx: RiskContext) -> bool:
+        """True when this specific invocation is read-only.
+
+        Plan mode follows Claude Code's model: tools remain visible, and
+        authorization decides whether this concrete input is read-only.
+        The default preserves the existing kind-based classification.
+        """
+        return self.is_read_only
 
     @property
     def is_concurrency_safe(self) -> bool:

@@ -1,5 +1,11 @@
 # Memory 竞品研究
 
+> **Quick header**
+> - **Role**: research basis for MemoryManager design.
+> - **Current design owner**: [`design.md`](design.md).
+> - **Use for**: rationale, tradeoffs, and source-project comparison.
+> - **Do not use for**: current implementation paths without checking `kernel.agents.mustang.memory.*`.
+
 > 13 个项目的完整分析——3 个参考实现（Claude Code / OpenClaw /
 > Hermes Agent）+ 10 个专项 Memory 架构。
 >

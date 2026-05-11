@@ -1,5 +1,29 @@
 # Kernel Agent Layout Refactor Plan
 
+> **Status**: completed on 2026-05-11.
+>
+> The active code layout now follows the owner map below:
+> `core/`, `supervisor/`, `agent_hub/`, `agents/access/`, and
+> `agents/mustang/`.  Legacy top-level subsystem packages have been removed,
+> current docs use Access Agent / Agent Hub / Mustang Agent naming, and
+> `tests/kernel/test_kernel_layout_boundaries.py` guards the import/layout
+> regressions this refactor was meant to prevent.
+>
+> Final verification:
+>
+> ```bash
+> uv run pytest tests/kernel -q -W error
+> # 2132 passed, 24 deselected
+>
+> uv run pytest tests/e2e/test_probe_phase2_e2e.py::test_probe_session_lifecycle_resume_list_close -q -m e2e
+> # 1 passed
+> ```
+>
+> A full `tests/e2e -m e2e` run was attempted in this environment but the
+> process was killed with exit code 137 before a test failure was reported.
+> The targeted closure probe above covers the real Access -> Hub -> Mustang
+> session lifecycle path required by this layout refactor.
+
 ## 原始问题
 
 当前 `src/kernel/kernel/` 的问题不是"文件夹太多"，而是**运行时所有权
@@ -222,7 +246,7 @@ resource key 的 monotonic revision。
 放什么：
 
 - 具体 agent 类型的实现目录。
-- 目前包括 `access/` 和 `session/`。
+- 目前包括 `access/` 和 `mustang/`。
 
 为什么这样分：
 
@@ -704,7 +728,7 @@ agents.access  -> agents.mustang.*
    - Kernel 本身直接叫 Kernel，不再把 Mustang 当作整个 Kernel 的代号。
    - Mustang 专指 `agents/mustang/` 里的 agent runtime / compatibility lineage。
    - `primary` 是默认 Mustang Agent 实例 ID，不是目录名或类型名。
-   - 旧的 Primary Runtime / Session Agent 文字改为 Mustang Agent，除非上下文明确
+   - 旧的 runtime / session-agent 文字改为 Mustang Agent，除非上下文明确
      指 durable session state。
 2. 必须优先修正：
    - `docs/README.md`
@@ -716,12 +740,12 @@ agents.access  -> agents.mustang.*
    - 仍处于 active design status 的 `docs/kernel/subsystems/*`
    - `AGENTS.md` 是只读入口文件，不在本计划中直接修改；若入口文件需要
      同步，应通过它指向的 `docs/` 真相更新流程处理。
-3. 历史归档文件不批量重写。`docs/kernel/history/` 和
-   `docs/kernel/history/plans/` 中的旧术语只在会误导当前入口文档时加说明。
+3. 历史归档文件不批量重写。`docs/kernel/history/` 索引和各 owner
+   `*/history/` 归档中的旧术语只在会误导当前入口文档时加说明。
 4. 为 docs 增加一个术语审查清单，至少 grep：
 
    ```bash
-   rg "Mustang|Primary Runtime|Session Agent|primary agent|kernel codename" docs INIT.md
+   rg "Mustang|primary|codename" docs INIT.md
    ```
 
 完成标准：

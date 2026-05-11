@@ -24,6 +24,10 @@ export const MustangMethod = {
   modelSetCurrent: "_mustang.agent/model/set_current",
   modelAdd: "_mustang.agent/model/add",
   modelUpdate: "_mustang.agent/model/update",
+  webFetchBackendOptions: "_mustang.agent/web_fetch/backend_options",
+  webFetchSetBackend: "_mustang.agent/web_fetch/set_backend",
+  webFetchGetConfig: "_mustang.agent/web_fetch/get_config",
+  webFetchSetConfig: "_mustang.agent/web_fetch/set_config",
   runtimeStatus: "_mustang.agent/runtime/status",
   runtimeRestart: "_mustang.agent/runtime/restart",
 } as const;

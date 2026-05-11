@@ -122,8 +122,7 @@ class TestFetchFallbackE2E:
             monkeypatch.delenv(var, raising=False)
         result, backend = await fetch_with_fallback("https://example.com")
         assert "Example Domain" in result.content
-        # Should use a local backend (httpx or readability)
-        assert "httpx" in backend or "readability" in backend
+        assert "httpx" in backend
 
     async def test_preferred_backend(self):
         result, backend = await fetch_with_fallback(

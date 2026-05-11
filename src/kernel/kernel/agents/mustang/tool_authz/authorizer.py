@@ -253,16 +253,19 @@ class ToolAuthorizer(Subsystem):
         # -- Mode overrides ------------------------------------------
         from kernel.agents.mustang.orchestrator.types import ToolKind  # lazy — avoids circular import
 
-        if ctx.mode == "plan" and _is_mutating(tool.kind):
+        if ctx.mode == "plan" and not tool.is_read_only_call(tool_input, ctx):
+            if matches_name(tool, "ExitPlanMode"):
+                pass
             # Gap 4: Allow writing to the session's plan file even in plan mode.
-            if _is_plan_file_write(tool, tool_input, ctx):
+            elif _is_plan_file_write(tool, tool_input, ctx):
                 return PermissionAllow(
                     decision_reason=ReasonMode(mode="plan"),
                 )
-            return PermissionDeny(
-                message="plan mode forbids side effects",
-                decision_reason=ReasonMode(mode="plan"),
-            )
+            else:
+                return PermissionDeny(
+                    message="plan mode forbids side effects",
+                    decision_reason=ReasonMode(mode="plan"),
+                )
         if ctx.mode == "accept_edits" and tool.kind == ToolKind.edit:
             return PermissionAllow(decision_reason=ReasonMode(mode="accept_edits"))
         if ctx.mode == "bypass":
@@ -536,13 +539,6 @@ def _is_plan_file_write(tool: Tool, tool_input: dict[str, Any], ctx: Any) -> boo
     if not (matches_name(tool, "Edit") or matches_name(tool, "Write")):
         return False
     return is_session_plan_file(file_path, ctx.session_id)
-
-
-def _is_mutating(kind: Any) -> bool:
-    """True when ``kind`` is a write-category ToolKind."""
-    from kernel.agents.mustang.orchestrator.types import ToolKind
-
-    return kind in {ToolKind.edit, ToolKind.delete, ToolKind.move, ToolKind.execute}
 
 
 def _build_ask_message(tool: Tool, tool_input: dict[str, Any], reason: str) -> str:

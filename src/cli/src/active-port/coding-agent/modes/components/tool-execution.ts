@@ -111,6 +111,7 @@ export class ToolExecutionComponent extends Container {
 		isError?: boolean;
 		details?: any;
 	};
+	#initialDetails?: any;
 	// Edit preview state (single-file for legacy modes, multi-file for chunk)
 	#editMode?: EditMode;
 	#editDiffPreview?: PerFileDiffPreview[];
@@ -142,6 +143,7 @@ export class ToolExecutionComponent extends Container {
 		ui: TUI,
 		cwd: string = getProjectDir(),
 		_toolCallId?: string,
+		initialDetails?: any,
 	) {
 		super();
 		this.#toolName = toolName;
@@ -153,6 +155,7 @@ export class ToolExecutionComponent extends Container {
 		this.#ui = ui;
 		this.#cwd = cwd;
 		this.#args = cloneToolArgs(args);
+		this.#initialDetails = initialDetails;
 
 		this.addChild(new Spacer(1));
 
@@ -732,7 +735,7 @@ export class ToolExecutionComponent extends Container {
 		const icon = this.#isPartial ? "pending" : this.#result?.isError ? "error" : "success";
 		lines.push(renderStatusLine({ icon, title: this.#toolLabel }, theme));
 
-		const argsObject = this.#args && typeof this.#args === "object" ? (this.#args as Record<string, unknown>) : null;
+		const argsObject = this.#displayArgsObject();
 		if (!this.#expanded && argsObject && Object.keys(argsObject).length > 0) {
 			const preview = formatArgsInline(argsObject, 70);
 			if (preview) {
@@ -740,13 +743,16 @@ export class ToolExecutionComponent extends Container {
 			}
 		}
 
+		const backendLine = this.#formatBackendLine();
+		if (backendLine) {
+			lines.push(` ${theme.fg("dim", theme.tree.last)} ${theme.fg("dim", backendLine)}`);
+		}
+
 		if (this.#expanded && this.#args !== undefined) {
 			lines.push("");
 			lines.push(theme.fg("dim", "Args"));
 			const tree = renderJsonTreeLines(
-				this.#args && typeof this.#args === "object" && !Array.isArray(this.#args)
-					? stripInternalArgs(this.#args as Record<string, unknown>)
-					: this.#args,
+				argsObject ?? this.#args,
 				theme,
 				JSON_TREE_MAX_DEPTH_EXPANDED,
 				JSON_TREE_MAX_LINES_EXPANDED,
@@ -807,5 +813,22 @@ export class ToolExecutionComponent extends Container {
 		}
 
 		return lines.join("\n");
+	}
+
+	#displayArgsObject(): Record<string, unknown> | null {
+		if (!this.#args || typeof this.#args !== "object" || Array.isArray(this.#args)) return null;
+		const args = stripInternalArgs(this.#args as Record<string, unknown>);
+		// Backend is runtime execution metadata, not user-facing input state.
+		// Display the actual selected backend from result.details.backend only.
+		delete args.backend;
+		return args;
+	}
+
+	#formatBackendLine(): string {
+		const backend = this.#result?.details?.backend ?? this.#initialDetails?.backend;
+		if (!backend || typeof backend !== "object" || Array.isArray(backend)) return "";
+		const name = (backend as { backend?: unknown }).backend;
+		if (typeof name !== "string" || !name.trim()) return "";
+		return `backend=${name.trim()}`;
 	}
 }

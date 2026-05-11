@@ -133,6 +133,14 @@ _ROUTER_MODEL_METHODS = frozenset(
         MustangMethod.MODEL_UPDATE,
     }
 )
+_ROUTER_TOOLS_METHODS = frozenset(
+    {
+        MustangMethod.WEB_FETCH_BACKEND_OPTIONS,
+        MustangMethod.WEB_FETCH_SET_BACKEND,
+        MustangMethod.WEB_FETCH_GET_CONFIG,
+        MustangMethod.WEB_FETCH_SET_CONFIG,
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -388,11 +396,14 @@ class AcpSessionHandler:
             MustangMethod.SESSION_CANCEL_EXECUTION,
             MustangMethod.SESSION_GET_USAGE,
             *_ROUTER_MODEL_METHODS,
+            *_ROUTER_TOOLS_METHODS,
         }:
             if method == MustangMethod.COMMANDS_LIST:
                 return await self._route_commands_list_through_hub(conn)
             if method in _ROUTER_MODEL_METHODS:
                 return await self._route_model_request_through_hub(method, msg, conn)
+            if method in _ROUTER_TOOLS_METHODS:
+                return await self._route_tools_request_through_hub(method, msg, conn)
             if method == "session/new":
                 try:
                     new_params = NewSessionRequest.model_validate(msg.params)
@@ -898,6 +909,30 @@ class AcpSessionHandler:
         )
         return spec.result_type.model_validate(payload)
 
+    async def _route_tools_request_through_hub(
+        self,
+        method: str,
+        msg: AcpInboundRequest,
+        conn: ConnectionContext,
+    ) -> pydantic.BaseModel:
+        spec = REQUEST_DISPATCH.get(method)
+        if spec is None or spec.target != "tools":
+            raise MethodNotFound(f"Method not found: {method!r}")
+        try:
+            params = spec.params_type.model_validate(msg.params)
+        except pydantic.ValidationError as exc:
+            raise _make_invalid_params(exc)
+        payload = await self._route_agent_contract_through_hub(
+            contract="agent.tools_request",
+            params={
+                "method": method,
+                "params": params.model_dump(by_alias=True),
+            },
+            session_id=conn.bound_session_id,
+            conn=conn,
+        )
+        return spec.result_type.model_validate(payload)
+
     async def _route_agent_contract_through_hub(
         self,
         *,
@@ -1090,6 +1125,8 @@ class AcpSessionHandler:
             return self._get_secrets_handler()
         if target == "commands":
             return self._get_commands_handler()
+        if target == "tools":
+            return self._get_tools_handler()
         raise InternalError(f"Unknown routing target: {target!r}")
 
     def _get_session_handler(self) -> SessionHandler:
@@ -1139,6 +1176,15 @@ class AcpSessionHandler:
             return self._module_table.get(CommandManager)
         except KeyError:
             raise InternalError("CommandManager subsystem is not available")
+
+    def _get_tools_handler(self) -> Any:
+        """Retrieve the ToolManager for WebFetch management requests."""
+        try:
+            from kernel.agents.mustang.tools import ToolManager
+
+            return self._module_table.get(ToolManager)
+        except KeyError:
+            raise InternalError("ToolManager subsystem is not available")
 
     def _make_error_response(self, req_id: str | int, exc: Exception) -> AcpOutboundError:
         code = getattr(exc, "code", INTERNAL_ERROR)

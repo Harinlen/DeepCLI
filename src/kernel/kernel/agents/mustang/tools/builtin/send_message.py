@@ -71,6 +71,9 @@ class SendMessageTool(Tool[dict[str, Any], dict[str, Any]]):
         "required": ["to", "message"],
     }
 
+    def is_read_only_call(self, input: dict[str, Any], ctx: Any) -> bool:
+        return isinstance(input.get("message"), str)
+
     async def call(
         self,
         input: dict[str, Any],

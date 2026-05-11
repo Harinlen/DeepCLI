@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import ast
 from pathlib import Path
 
 import pytest
 import websockets
 
 from kernel.agent_hub import AgentHub, AgentHubManager, AgentHubWebSocketServer, request_hub
+from kernel.agent_hub.server import _runtime_timeout_for_contract
 from kernel.agents.mustang.runtime import MinimalAgentRuntimeServer, RuntimeClientPeer
 from kernel.agent_hub.contracts import (
+    AGENT_RUNTIME_FORWARDED_CONTRACTS,
     AgentRegistrationRequest,
     AgentRuntimeKind,
     HubFrame,
@@ -23,6 +26,36 @@ from kernel.agent_hub.contracts import (
 )
 
 pytestmark = pytest.mark.anyio
+
+_PROJECT_ROOT = Path(__file__).parents[3]
+_SESSION_HANDLER = _PROJECT_ROOT / "src/kernel/kernel/core/protocol/acp/session_handler.py"
+_RUNTIME_MAIN = _PROJECT_ROOT / "src/kernel/kernel/agents/mustang/runtime/__main__.py"
+
+
+def _agent_contract_literals(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    contracts: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if node.value.startswith("agent."):
+                contracts.add(node.value)
+    return contracts
+
+
+def test_access_router_agent_contracts_are_hub_forwardable() -> None:
+    contracts = _agent_contract_literals(_SESSION_HANDLER)
+    forwarded = {str(contract) for contract in AGENT_RUNTIME_FORWARDED_CONTRACTS}
+    ignored = {"agent requested self-restart"}
+    missing = sorted(contracts - forwarded - ignored)
+    assert missing == []
+
+
+def test_runtime_dispatch_contracts_are_declared_forwardable() -> None:
+    contracts = _agent_contract_literals(_RUNTIME_MAIN)
+    forwarded = {str(contract) for contract in AGENT_RUNTIME_FORWARDED_CONTRACTS}
+    ignored = {"agent.register"}
+    missing = sorted(contracts - forwarded - ignored)
+    assert missing == []
 
 
 def _registration_payload(secret: str) -> dict:
@@ -270,6 +303,121 @@ async def test_hub_prompt_waits_for_long_running_runtime_turn(tmp_path: Path) ->
     finally:
         await server.stop()
         await runtime.stop()
+
+
+async def test_hub_forwards_tools_request_to_registered_runtime(tmp_path: Path) -> None:
+    async def runtime_handler(frame: HubFrame) -> HubFrame:
+        return HubFrame(
+            frame_id=f"{frame.frame_id}:response",
+            frame_type=HubFrameType.RESPONSE,
+            contract=frame.contract,
+            correlation_id=frame.frame_id,
+            payload={
+                "ok": True,
+                "current": "auto",
+                "options": [{"id": "httpx"}],
+            },
+        )
+
+    runtime = MinimalAgentRuntimeServer(handler=runtime_handler)
+    await runtime.start()
+    hub = AgentHub(
+        manager=AgentHubManager(
+            [default_primary_agent_definition(home=tmp_path, workspace=tmp_path)]
+        )
+    )
+    server = AgentHubWebSocketServer(
+        hub,
+        registration_tokens={"primary": "secret"},
+    )
+    await server.start()
+    try:
+        await request_hub(
+            server.endpoint,
+            HubFrame(
+                frame_id="reg-tools-runtime",
+                frame_type=HubFrameType.REQUEST,
+                contract="agent.register",
+                payload=AgentRegistrationRequest(
+                    agent_id="primary",
+                    runtime_kind=AgentRuntimeKind.in_process_session_agent,
+                    websocket_endpoint=runtime.endpoint,
+                    registration_token=RegistrationToken(
+                        token_id="token-1",
+                        secret="secret",
+                        issued_to_agent_id="primary",
+                    ),
+                ).model_dump(),
+            ),
+        )
+
+        response = await request_hub(
+            server.endpoint,
+            HubFrame(
+                frame_id="tools-request-1",
+                frame_type=HubFrameType.REQUEST,
+                contract="agent.tools_request",
+                payload={
+                    "routerFrame": RouterFrame(
+                        frame_id="tools-route",
+                        kind=RouterFrameKind.USER_MESSAGE,
+                        source="access:native",
+                        target=RouterTarget(),
+                        caller=CallerIdentity(
+                            kind=CallerIdentityKind.ACCESS,
+                            subject_id="probe",
+                        ),
+                        session_id="session-1",
+                    ).model_dump(),
+                    "params": {
+                        "method": "_mustang.agent/web_fetch/backend_options",
+                        "params": {},
+                    },
+                },
+            ),
+        )
+
+        assert response.payload["ok"] is True
+        assert response.payload["current"] == "auto"
+        assert response.payload["options"][0]["id"] == "httpx"
+    finally:
+        await server.stop()
+        await runtime.stop()
+
+
+def test_tools_request_runtime_timeout_matches_webfetch_management() -> None:
+    regular = HubFrame(
+        frame_id="tools-timeout-regular",
+        frame_type=HubFrameType.REQUEST,
+        contract="agent.tools_request",
+        payload={
+            "params": {
+                "method": "_mustang.agent/web_fetch/set_backend",
+                "params": {"backend": "tavily", "runSetup": False},
+            }
+        },
+    )
+    setup = HubFrame(
+        frame_id="tools-timeout-setup",
+        frame_type=HubFrameType.REQUEST,
+        contract="agent.tools_request",
+        payload={
+            "params": {
+                "method": "_mustang.agent/web_fetch/set_backend",
+                "params": {"backend": "crawl4ai", "runSetup": True},
+            }
+        },
+    )
+    model = HubFrame(
+        frame_id="model-timeout",
+        frame_type=HubFrameType.REQUEST,
+        contract="agent.model_request",
+        payload={},
+    )
+
+    assert _runtime_timeout_for_contract("agent.tools_request", regular) == 120
+    assert _runtime_timeout_for_contract("agent.tools_request", setup) == 600
+    assert _runtime_timeout_for_contract("agent.model_request", model) == 5
 
 
 async def test_hub_proxies_runtime_client_permission_request(tmp_path: Path) -> None:

@@ -45,6 +45,9 @@ class AgentTool(Tool[dict[str, Any], str]):
     description = "Launch a subagent to handle complex, multi-step tasks."
     kind = ToolKind.orchestrate
 
+    def is_read_only_call(self, input: dict[str, Any], ctx: Any) -> bool:
+        return True
+
     input_schema = {
         "type": "object",
         "properties": {

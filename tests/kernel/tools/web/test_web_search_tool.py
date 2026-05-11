@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from kernel.agents.mustang.tools.builtin.web_search import WebSearchTool
 from kernel.agents.mustang.tools.types import ToolInputError
+from kernel.agents.mustang.tools.web.search_backends.base import SearchResult
 
 
 @pytest.fixture
@@ -63,3 +64,28 @@ def test_activity_description_truncates(tool):
     desc = tool.activity_description({"query": long_query})
     assert "..." in desc
     assert len(desc) < 100
+
+
+async def test_result_metadata_exposes_selected_backend(tool, ctx):
+    search_mock = AsyncMock(
+        return_value=(
+            [SearchResult(title="Example", url="https://example.com", snippet="body")],
+            "duckduckgo",
+        )
+    )
+
+    with patch(
+        "kernel.agents.mustang.tools.web.search_backends.search_with_fallback",
+        new=search_mock,
+    ):
+        results = []
+        async for ev in tool.call({"query": "python", "limit": 1}, ctx):
+            results.append(ev)
+
+    assert results[0].data["backend"] == "duckduckgo"
+    assert results[0].meta == {
+        "mustang.agent/toolBackend": {
+            "backend": "duckduckgo",
+            "kind": "web_search",
+        }
+    }

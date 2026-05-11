@@ -39,7 +39,7 @@
 | **MCP OAuth** | ✅ 完成 | OAuth 2.1 Authorization Code + PKCE + RFC 9728/8414 discovery + Dynamic Client Registration + McpAuthTool 伪工具 + token refresh + NeedsAuth 状态机 |
 | **PromptBuilder 缓存排序** | ✅ 完成 | cacheable 节（identity→system→memory→skills→git_commit_pr）置于 volatile 节（MCP instructions→Git context→Environment）之前。Environment（含时间戳）正确放在最后，与 CC `getSystemPrompt()` 顺序对齐 |
 | **PromptManager 用户覆盖** | ✅ 完成 | PromptManager 支持用户级 prompt 文件覆盖 builtin 默认值（`~/.mustang/prompts/` 覆盖层） |
-| **AgentTool kind=orchestrate** | ✅ 完成 | AgentTool `kind` 由 `execute` 改为 `orchestrate`，plan mode 下正确保留 Agent 工具（plan mode 过滤仅移除 mutating kinds），与 CC plan mode 行为对齐 |
+| **AgentTool kind=orchestrate** | ✅ 完成 | AgentTool `kind` 由 `execute` 改为 `orchestrate`，plan mode 下保留 Agent 工具；当前 plan mode 不再按 mutating kind 裁剪 schema，与 CC 行为对齐 |
 | **Memory strategy 指导扩展** | ✅ 完成 | `memory_strategy.txt` 从 17 行扩展到 125 行，包含完整的 4 类型 (profile/semantic/episodic/procedural) 说明、衰减规则、使用时机 |
 
 ## 未实现的功能

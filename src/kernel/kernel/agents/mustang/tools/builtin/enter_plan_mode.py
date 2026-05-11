@@ -27,6 +27,9 @@ class EnterPlanModeTool(Tool[dict[str, Any], None]):
     should_defer = True
     search_hint = "plan mode enter planning read-only explore design"
 
+    def is_read_only_call(self, input: dict[str, Any], ctx: RiskContext) -> bool:
+        return True
+
     input_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {},

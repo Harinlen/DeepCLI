@@ -56,6 +56,7 @@ class MustangMethod:
     SESSION_ARCHIVE = "_mustang.agent/session/archive"
     SESSION_DELETE = "_mustang.agent/session/delete"
     SESSION_GET_USAGE = "_mustang.agent/session/get_usage"
+    SESSION_TOOL_SNAPSHOT = "_mustang.agent/session/tool_snapshot"
     MODEL_PROFILE_LIST = "_mustang.agent/model/profile_list"
     MODEL_PROVIDER_LIST = "_mustang.agent/model/provider_list"
     MODEL_PROVIDER_ADD = "_mustang.agent/model/provider_add"
@@ -64,6 +65,10 @@ class MustangMethod:
     MODEL_SET_CURRENT = "_mustang.agent/model/set_current"
     MODEL_ADD = "_mustang.agent/model/add"
     MODEL_UPDATE = "_mustang.agent/model/update"
+    WEB_FETCH_BACKEND_OPTIONS = "_mustang.agent/web_fetch/backend_options"
+    WEB_FETCH_SET_BACKEND = "_mustang.agent/web_fetch/set_backend"
+    WEB_FETCH_GET_CONFIG = "_mustang.agent/web_fetch/get_config"
+    WEB_FETCH_SET_CONFIG = "_mustang.agent/web_fetch/set_config"
     SECRETS_AUTH = "_mustang.agent/secrets/auth"
     RUNTIME_STATUS = "_mustang.agent/runtime/status"
     RUNTIME_RESTART = "_mustang.agent/runtime/restart"
@@ -81,6 +86,7 @@ MUSTANG_EXTENSION_METHODS = frozenset(
         MustangMethod.SESSION_ARCHIVE,
         MustangMethod.SESSION_DELETE,
         MustangMethod.SESSION_GET_USAGE,
+        MustangMethod.SESSION_TOOL_SNAPSHOT,
         MustangMethod.MODEL_PROFILE_LIST,
         MustangMethod.MODEL_PROVIDER_LIST,
         MustangMethod.MODEL_PROVIDER_ADD,
@@ -89,6 +95,10 @@ MUSTANG_EXTENSION_METHODS = frozenset(
         MustangMethod.MODEL_SET_CURRENT,
         MustangMethod.MODEL_ADD,
         MustangMethod.MODEL_UPDATE,
+        MustangMethod.WEB_FETCH_BACKEND_OPTIONS,
+        MustangMethod.WEB_FETCH_SET_BACKEND,
+        MustangMethod.WEB_FETCH_GET_CONFIG,
+        MustangMethod.WEB_FETCH_SET_CONFIG,
         MustangMethod.SECRETS_AUTH,
         MustangMethod.RUNTIME_STATUS,
         MustangMethod.RUNTIME_RESTART,

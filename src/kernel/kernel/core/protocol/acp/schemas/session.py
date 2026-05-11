@@ -275,6 +275,18 @@ class GetUsageRequest(AcpModel):
     meta: dict[str, Any] | None = None
 
 
+class ToolSnapshotRequest(AcpModel):
+    session_id: str
+    meta: dict[str, Any] | None = None
+
+
+class ToolSnapshotResponse(AcpModel):
+    schemas: list[str]
+    deferred: list[str]
+    lookup: list[str]
+    meta: dict[str, Any] | None = None
+
+
 class TokenUsageSummary(AcpModel):
     input: int = 0
     output: int = 0

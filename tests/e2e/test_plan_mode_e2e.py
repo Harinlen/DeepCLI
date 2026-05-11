@@ -96,6 +96,27 @@ def test_enter_plan_mode(kernel: tuple[int, str]) -> None:
     assert "enterplanmode" in title_str or "enter" in title_str or "plan" in title_str
 
 
+def test_probe_plan_mode_keeps_mutating_tool_schemas(kernel: tuple[int, str]) -> None:
+    """Probe E2E: plan mode changes authorization, not schema visibility."""
+    port, token = kernel
+
+    async def _run_probe() -> dict[str, Any]:
+        async with _client(port, token) as client:
+            await client.initialize()
+            sid = await client.new_session()
+            await client.set_mode(sid, "plan")
+            return await client._request(
+                "_mustang.agent/session/tool_snapshot",
+                {"sessionId": sid},
+            )
+
+    snapshot = _run(_run_probe())
+    schemas = set(snapshot["schemas"])
+
+    assert {"Bash", "Edit", "Write", "TodoWrite"}.issubset(schemas)
+    assert "AskUserQuestion" in set(snapshot["deferred"])
+
+
 # ---------------------------------------------------------------------------
 # 2. Plan mode blocks mutations
 # ---------------------------------------------------------------------------

@@ -24,6 +24,7 @@ import { FileSessionStorage } from "../../session/session-storage";
 import { isSearchProviderPreference, setPreferredImageProvider, setPreferredSearchProvider } from "../../tools";
 import { setSessionTerminalTitle } from "@/terminal-title.js";
 import { configureDeepSeekPreset } from "@/startup/oobe.js";
+import { formatWebFetchSetupFailure } from "@/webfetch/diagnostics.js";
 import { AgentDashboard } from "../components/agent-dashboard";
 import { AssistantMessageComponent } from "../components/assistant-message";
 import { DeepSeekOobeSetupComponent } from "../components/deepseek-oobe-setup";
@@ -41,6 +42,7 @@ import { ThemeSelectorComponent } from "../components/theme-selector";
 import { ToolExecutionComponent } from "../components/tool-execution";
 import { TreeSelectorComponent } from "../components/tree-selector";
 import { UserMessageSelectorComponent } from "../components/user-message-selector";
+import { WebFetchConfigEditorComponent, type WebFetchConfigField } from "../components/webfetch-config-editor";
 import type { SessionObserverRegistry } from "../session-observer-registry";
 
 const CALLBACK_SERVER_PROVIDERS = new Set<OAuthProvider>([
@@ -52,6 +54,35 @@ const CALLBACK_SERVER_PROVIDERS = new Set<OAuthProvider>([
 ]);
 
 const MANUAL_LOGIN_TIP = "Tip: You can complete pairing with /login <redirect URL>.";
+
+function formatWebFetchBackendStatus(option: any): string {
+	switch (option.status) {
+		case "current":
+			return "current";
+		case "configured":
+			return "configured";
+		case "available":
+			return "available";
+		case "setup_needed":
+			return "setup needed";
+		case "api_key_needed":
+			return "API key needed";
+		case "unavailable":
+			return "unavailable";
+		default:
+			return option.current
+				? "current"
+				: option.setupRequired
+					? "setup needed"
+					: option.credentialRequired
+						? "API key needed"
+						: option.available
+							? "available"
+							: option.hasCredentials
+								? "configured"
+								: "unavailable";
+	}
+}
 
 export class SelectorController {
 	constructor(private ctx: InteractiveModeContext) {}
@@ -487,6 +518,185 @@ export class SelectorController {
 				undefined,
 			);
 			return { component: selector, focus: selector };
+		});
+	}
+
+	showWebFetchBackendSelector(): void {
+		this.ctx.session.listWebFetchBackends?.().then(state => {
+			const options = (state?.options ?? []).map(option => {
+				const current = formatWebFetchBackendStatus(option);
+				return {
+					label: option.id,
+					description: `${current} - ${option.role}`,
+				};
+			});
+			if (options.length === 0) {
+				this.ctx.showWarning("No WebFetch backends are available.");
+				return;
+			}
+			this.showSelector(done => {
+				const selector = new SimpleOptionSelectorComponent(
+					"WebFetch backend",
+					options,
+					index => {
+						const selected = state.options[index];
+						if (!selected) return;
+						if (selected.current) {
+							this.ctx.showStatus(`WebFetch backend ${selected.id} is already selected.`);
+							done();
+							this.ctx.ui.requestRender();
+							return;
+						}
+						const apply = async (runSetup = false) => {
+							const stopInstallNotice = runSetup
+								? showWebFetchInstallNotice(this.ctx, selected.id)
+								: undefined;
+							let result: any;
+							try {
+								result = await this.ctx.session.setWebFetchBackend?.(selected.id, runSetup);
+							} finally {
+								stopInstallNotice?.();
+							}
+							if (result?.setupRequired && result.setupPlan && !runSetup) {
+								const confirmed = await this.ctx.showHookConfirm(
+									`Install ${selected.id}`,
+									[
+										`WebFetch backend "${selected.id}" needs local dependencies.`,
+										(result.setupPlan.commands ?? []).join("\n"),
+									].filter(Boolean).join("\n\n"),
+								);
+								if (confirmed) {
+									done();
+									this.ctx.ui.requestRender();
+									return apply(true);
+								}
+								this.ctx.showWarning(`WebFetch backend ${selected.id} was not changed.`);
+								return;
+							}
+							if (result?.credentialRequired && result.credentialRequest) {
+								if (selected.hasCredentials) {
+									this.ctx.showError(result.message ?? `WebFetch backend ${selected.id} is not available.`);
+								}
+								const key = await this.ctx.showHookInput(
+									selected.hasCredentials
+										? `Enter replacement ${result.credentialRequest.label ?? selected.id + " API key"}`
+										: (result.credentialRequest.prompt ?? `Enter ${selected.id} API key`),
+									result.credentialRequest.envKey ?? "API key",
+								);
+								if (!key?.trim()) {
+									this.ctx.showWarning(`WebFetch backend ${selected.id} was not changed.`);
+									return;
+								}
+								const validated = await this.ctx.session.setWebFetchBackend?.(
+									selected.id,
+									false,
+									key.trim(),
+								);
+								if (validated?.credentialRequired) {
+									this.ctx.showError(validated.message ?? `Failed to validate ${selected.id} API key`);
+									return;
+								}
+								this.ctx.showStatus(validated?.message ?? `WebFetch backend set to ${selected.id}`);
+								return;
+							}
+							if (result?.setupRequired) {
+								this.ctx.showError(formatWebFetchSetupFailure(result.message ?? `Failed to set WebFetch backend ${selected.id}`, result.setupResult));
+								return;
+							}
+							this.ctx.showStatus(result?.message ?? `WebFetch backend set to ${selected.id}`);
+						};
+						void apply()
+							.catch(error => {
+								const message = error instanceof Error ? error.message : String(error);
+								this.ctx.showError(`Failed to set WebFetch backend ${selected.id}: ${message}`);
+							})
+							.finally(() => {
+								done();
+								this.ctx.ui.requestRender();
+							});
+					},
+					() => {
+						done();
+						this.ctx.ui.requestRender();
+					},
+				);
+				return { component: selector, focus: selector };
+			});
+		}).catch(error => {
+			const message = error instanceof Error ? error.message : String(error);
+			this.ctx.showError(`Failed to load WebFetch backends: ${message}`);
+		});
+	}
+
+	showWebFetchConfigSelector(): void {
+		Promise.all([
+			this.ctx.session.getWebFetchConfig?.(),
+			this.ctx.session.listWebFetchBackends?.(),
+		]).then(([config, backendState]) => {
+			const current = String(config?.backend ?? backendState?.current ?? "auto");
+			const backendOptions = backendState?.options ?? [];
+			const selectedBackend = backendOptions.find(option => option.id === current)
+				?? backendOptions.find(option => option.id !== "auto")
+				?? backendOptions[0];
+			const targetBackend = selectedBackend?.id ?? current;
+			const fields: WebFetchConfigField[] = [];
+
+			if (selectedBackend?.credentialRequest || selectedBackend?.credentialRequired || selectedBackend?.hasCredentials !== undefined) {
+				const status = selectedBackend?.hasCredentials ? "configured" : "missing";
+				fields.push({
+					label: "API key:",
+					path: `${targetBackend}.api_key`,
+					kind: "secret",
+					status,
+				});
+			}
+
+			for (const [backend, values] of Object.entries(config?.backends ?? {})) {
+				if (backend !== targetBackend || !values || typeof values !== "object" || Array.isArray(values)) continue;
+				for (const [key, value] of Object.entries(values as Record<string, unknown>)) {
+					if (key === "api_key" || key === "api_key_ref" || key.endsWith("_key_ref")) continue;
+					fields.push({
+						label: `${key}:`,
+						path: `${backend}.${key}`,
+						kind: "value",
+						value,
+					});
+				}
+			}
+
+			if (fields.length === 0) {
+				this.ctx.showWarning(`No configurable WebFetch fields for ${targetBackend}.`);
+				return;
+			}
+
+			this.showSelector(done => {
+				const editor = new WebFetchConfigEditorComponent(
+					this.ctx.ui,
+					`WebFetch config (${targetBackend})`,
+					fields,
+					async updates => {
+						try {
+							for (const update of updates) {
+								await this.ctx.session.setWebFetchConfig?.(update.path, update.value);
+							}
+						} catch (error) {
+							const message = error instanceof Error ? error.message : String(error);
+							throw new Error(`Failed to update WebFetch config: ${message}`);
+						}
+						this.ctx.showStatus(`WebFetch ${targetBackend} config updated.`);
+						done();
+						this.ctx.ui.requestRender();
+					},
+					() => {
+							done();
+							this.ctx.ui.requestRender();
+					},
+				);
+				return { component: editor, focus: editor };
+			});
+		}).catch(error => {
+			const message = error instanceof Error ? error.message : String(error);
+			this.ctx.showError(`Failed to load WebFetch config: ${message}`);
 		});
 	}
 
@@ -1164,6 +1374,21 @@ function blankProviderModel(provider): any {
 		modelId: "",
 		roles: [],
 		contextWindow: null,
+	};
+}
+
+function showWebFetchInstallNotice(ctx: any, backend: string): () => void {
+	const message = `Installing WebFetch backend ${backend}...`;
+	ctx.showStatus?.(message);
+	ctx.setWorkingMessage?.(message);
+	ctx.ensureLoadingAnimation?.();
+	return () => {
+		ctx.setWorkingMessage?.();
+		if (ctx.loadingAnimation) {
+			ctx.loadingAnimation.stop?.();
+			ctx.loadingAnimation = undefined;
+			ctx.statusContainer?.clear?.();
+		}
 	};
 }
 

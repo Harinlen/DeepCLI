@@ -195,6 +195,7 @@ class ToolPipelineMixin:
                 title=tool.user_facing_name(effective_input),
                 kind=tool.kind,
                 raw_input=raw_input_json,
+                meta=tool.execution_metadata(effective_input, tool_ctx),
             ),
             None,
         )

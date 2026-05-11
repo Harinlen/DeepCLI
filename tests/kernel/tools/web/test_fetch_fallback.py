@@ -19,10 +19,10 @@ from kernel.agents.mustang.tools.web.fetch_backends.base import FetchBackend, Fe
 from kernel.agents.mustang.tools.web.fetch_backends.httpx_html import (
     _HEADERS,
     HttpxFetchBackend,
+    _extract_readable_html,
     _send_with_redirect_check,
 )
-from kernel.agents.mustang.tools.web.fetch_backends.playwright_be import PlaywrightFetchBackend
-from kernel.agents.mustang.tools.web.fetch_backends.readability_be import ReadabilityFetchBackend
+from kernel.agents.mustang.tools.web.fetch_backends.crawl4ai_be import Crawl4AIFetchBackend
 
 
 # ── Mock backend ──
@@ -88,6 +88,7 @@ async def test_fallback_all_fail():
         "https://example.com", backends=[fail1, fail2]
     )
     assert result.error
+    assert name == "a, b (failed)"
     assert "All backends failed" in (result.error or name)
 
 
@@ -213,6 +214,8 @@ def test_get_available_fetch_backends_always_includes_httpx(monkeypatch):
 
     assert names[-1] == "httpx"
     assert "httpx" in names
+    assert "readability" not in names
+    assert "playwright" not in names
 
 
 async def test_httpx_fetch_blocks_private_domain_before_network():
@@ -391,7 +394,7 @@ async def test_send_with_redirect_check_blocks_bad_redirect():
         raise AssertionError("redirect should have been blocked")
 
 
-async def test_readability_fetch_success_and_http_error(monkeypatch):
+async def test_httpx_readability_is_internal_extraction_stage(monkeypatch):
     class _Document:
         def __init__(self, html: str) -> None:
             self.html = html
@@ -402,41 +405,74 @@ async def test_readability_fetch_success_and_http_error(monkeypatch):
         def title(self) -> str:
             return "Readable"
 
-    class _Client:
-        def __init__(self, *, fail: bool = False, **_: Any) -> None:
-            self.fail = fail
+    monkeypatch.setitem(sys.modules, "readability", SimpleNamespace(Document=_Document))
 
-        async def __aenter__(self) -> "_Client":
+    extracted = _extract_readable_html("<html><body>Hello</body></html>", 20)
+
+    assert _HEADERS["User-Agent"].startswith("Mozilla/5.0")
+    assert extracted is not None
+    content, title = extracted
+    assert title == "Readable"
+    assert "Hello" in content
+
+
+async def test_crawl4ai_fetch_blocks_domain_before_optional_import():
+    result = await Crawl4AIFetchBackend().fetch("http://127.0.0.1/private")
+
+    assert result.error
+
+
+async def test_crawl4ai_fetch_uses_markdown_and_html_fallback(monkeypatch):
+    class _BrowserConfig:
+        def __init__(self, **_: Any) -> None:
+            pass
+
+    class _RunConfig:
+        def __init__(self, **_: Any) -> None:
+            pass
+
+    class _CacheMode:
+        ENABLED = "enabled"
+
+    class _Result:
+        success = True
+        markdown = ""
+        cleaned_html = "<main><h1>Rendered</h1><p>Body</p></main>"
+        metadata = {"title": "Rendered Page"}
+        status_code = 200
+        url = "https://example.test/final"
+
+    class _Crawler:
+        def __init__(self, **_: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "_Crawler":
             return self
 
         async def __aexit__(self, *_: object) -> None:
             return None
 
-        async def request(self, method: str, url: str) -> httpx.Response:
-            assert method == "GET"
-            if self.fail:
-                raise httpx.ConnectError("offline", request=httpx.Request("GET", url))
-            return httpx.Response(
-                200,
-                text="<html><body>Hello</body></html>",
-                headers={"content-type": "text/html"},
-                request=httpx.Request("GET", url),
-            )
+        async def arun(self, **_: Any) -> _Result:
+            return _Result()
 
-    monkeypatch.setitem(sys.modules, "readability", SimpleNamespace(Document=_Document))
-    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client(**kwargs))
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name == "crawl4ai" else None,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "crawl4ai",
+        SimpleNamespace(
+            AsyncWebCrawler=_Crawler,
+            BrowserConfig=_BrowserConfig,
+            CacheMode=_CacheMode,
+            CrawlerRunConfig=_RunConfig,
+        ),
+    )
 
-    result = await ReadabilityFetchBackend().fetch("https://example.test", max_chars=20)
-    assert _HEADERS["User-Agent"].startswith("Mozilla/5.0")
-    assert result.title == "Readable"
-    assert "Hello" in result.content
+    result = await Crawl4AIFetchBackend().fetch("https://example.test")
 
-    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client(fail=True, **kwargs))
-    failed = await ReadabilityFetchBackend().fetch("https://example.test")
-    assert failed.error == "HTTP error: offline"
-
-
-async def test_playwright_fetch_blocks_domain_before_optional_import():
-    result = await PlaywrightFetchBackend().fetch("http://127.0.0.1/private")
-
-    assert result.error
+    assert result.error is None
+    assert result.title == "Rendered Page"
+    assert "Rendered" in result.content
+    assert "Body" in result.content

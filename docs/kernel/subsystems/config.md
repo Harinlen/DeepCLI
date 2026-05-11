@@ -1,5 +1,11 @@
 # ConfigManager
 
+> **Quick header**
+> - **Role**: runtime business configuration service.
+> - **Current code**: `kernel.core.config.*`.
+> - **Lifecycle**: bootstrap service, fatal on startup failure, not a `Subsystem`.
+> - **Boundary**: config owns YAML loading, validation, updates, and signals; flags own startup-frozen switches.
+
 ## Purpose
 
 ConfigManager 是 kernel 的 **bootstrap 服务**，第二个加载

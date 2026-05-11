@@ -29,7 +29,7 @@ Hermes Agent → Python realisation (ACP adapter, multi-platform messaging
                                     caching, skill/tool config)
 DeepCLI      → kernel = inner + outer + multi-agent + Python idioms, fused
                         into one engine
-                PDS  = the product layer above the kernel — primary agent
+                PDS  = the product layer above the kernel — default Mustang Agent
                         chat + user-built software library (plugin /
                         template-app / session-agent) + Home Screen
 ```

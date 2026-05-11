@@ -84,18 +84,18 @@ def test_snapshot_honors_agent_whitelist() -> None:
     assert names == ["Alpha"]
 
 
-def test_snapshot_in_plan_mode_excludes_write_tools() -> None:
+def test_snapshot_in_plan_mode_keeps_write_tools_visible() -> None:
     class _Writer(_Fake):
         name = "Writer"
         kind = ToolKind.edit
 
     reg = ToolRegistry()
-    reg.register(_Fake(), layer="core")  # read
-    reg.register(_Writer(), layer="core")  # edit → excluded in plan
+    reg.register(_Fake(), layer="core")
+    reg.register(_Writer(), layer="core")
 
     snap = reg.snapshot(plan_mode=True)
     names = [s.name for s in snap.schemas]
-    assert "Writer" not in names
+    assert "Writer" in names
     assert "Alpha" in names
 
 
@@ -119,8 +119,8 @@ def test_orchestrate_kind_survives_plan_mode() -> None:
     assert "Orchestrate" in snap.lookup
 
 
-def test_execute_kind_excluded_in_plan_mode() -> None:
-    """ToolKind.execute is mutating — must be filtered by plan mode."""
+def test_execute_kind_visible_in_plan_mode() -> None:
+    """Plan mode keeps schemas visible; authorization enforces read-only calls."""
 
     class _ExecTool(_Fake):
         name = "Executor"
@@ -131,8 +131,8 @@ def test_execute_kind_excluded_in_plan_mode() -> None:
 
     snap = reg.snapshot(plan_mode=True)
     names = {s.name for s in snap.schemas}
-    assert "Executor" not in names
-    assert "Executor" not in snap.lookup
+    assert "Executor" in names
+    assert "Executor" in snap.lookup
 
 
 # ---------------------------------------------------------------------------

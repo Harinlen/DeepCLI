@@ -174,6 +174,23 @@ async def test_plan_mode_denies_mutating_tool(
 
 
 @pytest.mark.anyio
+async def test_plan_mode_denies_non_readonly_other_tool(
+    authorizer: ToolAuthorizer, fake_auth: AuthContext
+) -> None:
+    class TodoLikeTool(FakeTool):
+        name = "TodoWrite"
+        kind = ToolKind.other
+
+        def is_read_only_call(self, input: dict[str, Any], ctx: Any) -> bool:
+            return False
+
+    decision = await authorizer.authorize(
+        tool=TodoLikeTool(), tool_input={"todos": []}, ctx=_ctx(fake_auth, mode="plan")
+    )
+    assert isinstance(decision, PermissionDeny)
+
+
+@pytest.mark.anyio
 async def test_plan_mode_does_not_deny_read_tool(
     authorizer: ToolAuthorizer, fake_auth: AuthContext
 ) -> None:
@@ -182,6 +199,50 @@ async def test_plan_mode_does_not_deny_read_tool(
         tool=FakeTool(), tool_input={"text": "x"}, ctx=_ctx(fake_auth, mode="plan")
     )
     assert isinstance(decision, PermissionAllow)
+
+
+@pytest.mark.anyio
+async def test_plan_mode_allows_readonly_bash_command(
+    authorizer: ToolAuthorizer, fake_auth: AuthContext
+) -> None:
+    decision = await authorizer.authorize(
+        tool=BashTool(),
+        tool_input={"command": "git status"},
+        ctx=_ctx(fake_auth, mode="plan"),
+    )
+    assert isinstance(decision, PermissionAllow)
+
+
+@pytest.mark.anyio
+async def test_plan_mode_denies_non_readonly_bash_command(
+    authorizer: ToolAuthorizer, fake_auth: AuthContext
+) -> None:
+    decision = await authorizer.authorize(
+        tool=BashTool(),
+        tool_input={"command": "touch changed.txt"},
+        ctx=_ctx(fake_auth, mode="plan"),
+    )
+    assert isinstance(decision, PermissionDeny)
+
+
+@pytest.mark.anyio
+async def test_plan_mode_allows_exit_plan_mode_to_request_approval(
+    authorizer: ToolAuthorizer, fake_auth: AuthContext
+) -> None:
+    class ExitTool(FakeTool):
+        name = "ExitPlanMode"
+        kind = ToolKind.other
+
+        def default_risk(self, input: dict[str, Any], ctx: Any) -> PermissionSuggestion:
+            return PermissionSuggestion(risk="low", default_decision="ask", reason="exit plan")
+
+        def is_read_only_call(self, input: dict[str, Any], ctx: Any) -> bool:
+            return False
+
+    decision = await authorizer.authorize(
+        tool=ExitTool(), tool_input={}, ctx=_ctx(fake_auth, mode="plan")
+    )
+    assert isinstance(decision, PermissionAsk)
 
 
 @pytest.mark.anyio

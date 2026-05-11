@@ -6,6 +6,7 @@ import {
 	theme,
 } from "../modes/theme/theme";
 import { Text } from "@/tui/index.js";
+import { formatWebFetchSetupFailure } from "@/webfetch/diagnostics.js";
 
 export interface ParsedBuiltinSlashCommand {
 	name: string;
@@ -26,9 +27,6 @@ export async function executeBuiltinSlashCommand(
 
 	try {
 		switch (parsed.name) {
-			case "auth":
-				ctx.showWarning?.("/auth is not wired in the CLI TUI yet.");
-				return true;
 			case "compact":
 				await ctx.handleCompactCommand?.(parsed.args ?? "");
 				return true;
@@ -47,6 +45,8 @@ export async function executeBuiltinSlashCommand(
 				return await executeSessionCommand(ctx, parsed.args ?? "");
 			case "model":
 				return await executeModelCommand(ctx, parsed.args ?? "");
+			case "webfetch":
+				return await executeWebFetchCommand(ctx, parsed.args ?? "");
 			case "theme":
 				return await executeThemeCommand(ctx, parsed.args ?? "");
 			case "clear":
@@ -247,6 +247,172 @@ async function defaultModelSubcommand(ctx: any): Promise<"list" | "add"> {
 	return state?.models?.length ? "list" : "add";
 }
 
+async function executeWebFetchCommand(ctx: any, argsText: string): Promise<boolean> {
+	const args = splitArgs(argsText);
+	const subcommand = args[0] ?? "backend";
+	if (subcommand === "backend") {
+		const backend = args[1];
+		if (!backend) {
+			ctx.showWebFetchBackendSelector?.();
+			return true;
+		}
+		const result = await ctx.session?.setWebFetchBackend?.(backend, false);
+		if (result?.credentialRequired && result.credentialRequest) {
+			if (result.message) ctx.showError?.(result.message);
+			const key = await ctx.showHookInput?.(
+				result.message
+					? `Enter replacement ${result.credentialRequest.label ?? backend + " API key"}`
+					: (result.credentialRequest.prompt ?? `Enter ${backend} API key`),
+				result.credentialRequest.envKey ?? "API key",
+			);
+			if (!key?.trim()) {
+				ctx.showWarning?.(`WebFetch backend ${backend} was not changed.`);
+				return true;
+			}
+			const validated = await ctx.session?.setWebFetchBackend?.(backend, false, key.trim());
+			if (validated?.credentialRequired) {
+				ctx.showError?.(validated.message ?? `Failed to validate ${backend} API key`);
+				return true;
+			}
+			if (validated?.message) ctx.showStatus?.(validated.message);
+			else ctx.showStatus?.(`WebFetch backend set to ${backend}`);
+			return true;
+		}
+		if (result?.setupRequired && result.setupPlan) {
+			const commands = (result.setupPlan.commands ?? []).join("\n");
+			const confirmed = await ctx.showHookConfirm?.(
+				`Install ${backend}`,
+				[`WebFetch backend "${backend}" needs local dependencies.`, commands].filter(Boolean).join("\n\n"),
+			);
+			if (!confirmed) {
+				ctx.showWarning?.(`WebFetch backend ${backend} was not changed.`);
+				return true;
+			}
+			const stopInstallNotice = showWebFetchInstallNotice(ctx, backend);
+			let setup: any;
+			try {
+				setup = await ctx.session?.setWebFetchBackend?.(backend, true);
+			} finally {
+				stopInstallNotice();
+			}
+			if (setup?.setupRequired) {
+				ctx.showError?.(formatWebFetchSetupFailure(setup.message ?? `Failed to set WebFetch backend ${backend}`, setup.setupResult));
+				return true;
+			}
+			ctx.showStatus?.(setup?.message ?? `WebFetch backend set to ${backend}`);
+			return true;
+		}
+		if (result?.message) ctx.showStatus?.(result.message);
+		else ctx.showStatus?.(`WebFetch backend set to ${backend}`);
+		return true;
+	}
+	if (subcommand === "install") {
+		const backend = args[1] ?? await promptForWebFetchInstallBackend(ctx);
+		if (!backend) {
+			ctx.showWarning?.("WebFetch backend install was cancelled.");
+			return true;
+		}
+		const confirmed = await ctx.showHookConfirm?.(
+			`Install ${backend}`,
+			`Install or repair local dependencies for WebFetch backend "${backend}".`,
+		);
+		if (!confirmed) {
+			ctx.showWarning?.(`WebFetch backend ${backend} install was cancelled.`);
+			return true;
+		}
+		const stopInstallNotice = showWebFetchInstallNotice(ctx, backend);
+		let setup: any;
+		try {
+			setup = await ctx.session?.setWebFetchBackend?.(backend, true);
+		} finally {
+			stopInstallNotice();
+		}
+		if (setup?.setupRequired) {
+			ctx.showError?.(formatWebFetchSetupFailure(setup.message ?? `Failed to install WebFetch backend ${backend}`, setup.setupResult));
+			return true;
+		}
+		ctx.showStatus?.(setup?.message ?? `WebFetch backend ${backend} installed.`);
+		return true;
+	}
+	if (subcommand === "config") {
+		const path = args[1];
+		if (!path) {
+			ctx.showWebFetchConfigSelector?.();
+			return true;
+		}
+		if (isWebFetchApiKeyPath(path)) {
+			const backend = path.split(".")[0];
+			const key = await ctx.showHookInput?.(
+				`Enter ${backend} API key`,
+				`${backend.toUpperCase()}_API_KEY`,
+			);
+			if (!key?.trim()) {
+				ctx.showWarning?.(`WebFetch ${backend} API key was not changed.`);
+				return true;
+			}
+			try {
+				const config = await ctx.session?.setWebFetchConfig?.(path, key.trim());
+				ctx.showStatus?.(`WebFetch ${backend} API key updated.`);
+				renderWebFetchConfig(ctx, config);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				ctx.showError?.(message);
+			}
+			return true;
+		}
+		if (args.length < 3) {
+			ctx.showWarning?.("Usage: /webfetch config <backend>.<key> <value>");
+			return true;
+		}
+		const value = parseConfigValue(args.slice(2).join(" "));
+		const config = await ctx.session?.setWebFetchConfig?.(path, value);
+		ctx.showStatus?.(`web_fetch.${path} = ${String(value)}`);
+		renderWebFetchConfig(ctx, config);
+		return true;
+	}
+	ctx.showWarning?.("Usage: /webfetch [backend [name] | config [backend.key value]]");
+	return true;
+}
+
+function renderWebFetchConfig(ctx: any, config: any): void {
+	const backend = config?.backend ?? "auto";
+	ctx.chatContainer?.addChild?.(new Text(theme.fg("accent", "WebFetch"), 1, 0));
+	ctx.chatContainer?.addChild?.(new Text(`backend: ${backend}`, 1, 0));
+	const entries = Object.entries(config?.backends ?? {});
+	for (const [name, value] of entries) {
+		const fields = formatWebFetchConfigFields(value);
+		if (fields.length === 0) continue;
+		ctx.chatContainer?.addChild?.(new Text(`${name}: ${fields.join(", ")}`, 1, 0));
+	}
+	ctx.ui?.requestRender?.();
+}
+
+function isWebFetchApiKeyPath(path: string): boolean {
+	return /\.api_?key$/i.test(path.trim());
+}
+
+function formatWebFetchConfigFields(value: unknown): string[] {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+	const fields: string[] = [];
+	for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+		if (key === "api_key_ref" || key.endsWith("_key_ref")) continue;
+		if (key === "api_key") {
+			fields.push(`api_key=${raw === "configured" ? "configured" : "missing"}`);
+			continue;
+		}
+		fields.push(`${key}=${String(raw)}`);
+	}
+	return fields;
+}
+
+function parseConfigValue(value: string): unknown {
+	const trimmed = value.trim();
+	if (trimmed === "true") return true;
+	if (trimmed === "false") return false;
+	if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
+	return trimmed;
+}
+
 function parseModelRef(value: string | undefined): { provider: string; model: string } | undefined {
 	if (!value) return undefined;
 	const slash = value.indexOf("/");
@@ -308,6 +474,36 @@ async function executeThemeCommand(ctx: any, argsText: string): Promise<boolean>
 	}
 	ctx.showWarning?.("Usage: /theme [current|list|set]");
 	return true;
+}
+
+async function promptForWebFetchInstallBackend(ctx: any): Promise<string | undefined> {
+	const state = await ctx.session?.listWebFetchBackends?.().catch(() => undefined);
+	const options = (state?.options ?? [])
+		.filter((option: any) => option.setupRequired || option.setupPlan)
+		.map((option: any) => String(option.id))
+		.filter(Boolean);
+	if (options.length === 0) {
+		options.push("crawl4ai");
+	}
+	if (options.length === 1) {
+		return options[0];
+	}
+	return await ctx.showHookSelector?.("Install WebFetch backend", options);
+}
+
+function showWebFetchInstallNotice(ctx: any, backend: string): () => void {
+	const message = `Installing WebFetch backend ${backend}...`;
+	ctx.showStatus?.(message);
+	ctx.setWorkingMessage?.(message);
+	ctx.ensureLoadingAnimation?.();
+	return () => {
+		ctx.setWorkingMessage?.();
+		if (ctx.loadingAnimation) {
+			ctx.loadingAnimation.stop?.();
+			ctx.loadingAnimation = undefined;
+			ctx.statusContainer?.clear?.();
+		}
+	};
 }
 
 function splitArgs(value: string): string[] {

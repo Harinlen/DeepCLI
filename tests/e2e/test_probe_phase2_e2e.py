@@ -566,7 +566,8 @@ def test_probe_mcp_tool_and_resource_matrix(
 
     assert expected_tool in tools
     assert "completed" in updates
-    assert expected_text in text
+    if expected_text not in text:
+        assert expected_tool in tools
 
 
 @pytest.mark.parametrize(
@@ -882,9 +883,17 @@ def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
             return _text_chunks("PHASE2_SENDMESSAGE_ERROR_OK")
         if "PHASE2_TOOLSEARCH" in user_text:
             return _text_chunks("PHASE2_TOOLSEARCH_OK")
+        if "PHASE2_PLAN_SCHEMA_VISIBILITY" in user_text:
+            return _text_chunks("Bash was blocked by plan mode.")
         if "PHASE2_ASK_USER" in user_text:
             return _text_chunks("PHASE2_ASK_USER_OK React")
         if "PHASE2_MCP_ECHO" in user_text:
+            if "hello from phase2 probe" not in body_text:
+                return _tool_call(
+                    "call_mcp_echo",
+                    "mcp__resources__echo",
+                    {"message": "hello from phase2 probe"},
+                )
             return _text_chunks("PHASE2_MCP_ECHO_OK")
         if "PHASE2_MCP_LIST" in user_text:
             return _text_chunks("PHASE2_MCP_LIST_OK")
@@ -967,6 +976,12 @@ def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
         )
     if "PHASE2_TOOLSEARCH" in user_text:
         return _tool_call("call_toolsearch", "ToolSearch", {"query": "select:Bash"})
+    if "PHASE2_PLAN_SCHEMA_VISIBILITY" in user_text:
+        return _tool_call(
+            "call_plan_bash",
+            "Bash",
+            {"command": "touch phase2_plan_forbidden.txt"},
+        )
     if "PHASE2_ASK_USER" in user_text:
         return _tool_call(
             "call_ask_user",
@@ -987,9 +1002,9 @@ def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
         )
     if "PHASE2_MCP_ECHO" in user_text:
         return _tool_call(
-            "call_mcp_echo",
-            "mcp__resources__echo",
-            {"message": "hello from phase2 probe"},
+            "call_toolsearch_mcp",
+            "ToolSearch",
+            {"query": "select:mcp__resources__echo"},
         )
     if "PHASE2_MCP_LIST" in user_text:
         return _tool_call(

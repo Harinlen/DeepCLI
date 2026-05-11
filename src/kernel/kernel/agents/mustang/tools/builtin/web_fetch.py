@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import AsyncGenerator
 from fnmatch import fnmatch
 from typing import Any, ClassVar
@@ -52,6 +51,11 @@ class WebFetchTool(Tool[dict[str, Any], dict[str, Any]]):
                 "default": 50_000,
                 "description": "Maximum characters of content to return.",
             },
+            "backend": {
+                "type": "string",
+                "enum": ["auto", "httpx", "crawl4ai", "firecrawl", "parallel", "exa", "tavily"],
+                "description": "Optional WebFetch backend override for this call.",
+            },
         },
         "required": ["url"],
     }
@@ -97,6 +101,16 @@ class WebFetchTool(Tool[dict[str, Any], dict[str, Any]]):
         host = urlparse(url).hostname or url[:40]
         return f"Fetching {host}"
 
+    def execution_metadata(self, input: dict[str, Any], ctx: Any) -> dict[str, Any] | None:
+        preferred = input.get("backend") or _configured_backend(ctx)
+        return {
+            "mustang.agent/toolBackend": {
+                "backend": preferred or "auto",
+                "kind": "web_fetch",
+                "phase": "pending",
+            }
+        }
+
     # ------------------------------------------------------------------
     # Execution
     # ------------------------------------------------------------------
@@ -112,12 +126,12 @@ class WebFetchTool(Tool[dict[str, Any], dict[str, Any]]):
         url = input["url"]
         user_prompt = input.get("prompt")
         max_chars = input.get("max_chars", 50_000)
-        preferred = os.getenv("MUSTANG_FETCH_BACKEND")
+        preferred = input.get("backend") or _configured_backend(ctx)
 
         result, backend_name = await fetch_with_fallback(
             url,
             max_chars=max_chars,
-            preferred=preferred,
+            preferred=preferred if preferred != "auto" else None,
         )
 
         # Format header + raw content.
@@ -177,6 +191,12 @@ class WebFetchTool(Tool[dict[str, Any], dict[str, Any]]):
             },
             llm_content=[TextBlock(text=output_text)],
             display=TextDisplay(text=output_text),
+            meta={
+                "mustang.agent/toolBackend": {
+                    "backend": backend_name,
+                    "kind": "web_fetch",
+                }
+            },
         )
 
 
@@ -219,3 +239,20 @@ def _make_secondary_model_prompt(
 
 
 __all__ = ["WebFetchTool"]
+
+
+def _configured_backend(ctx: Any) -> str:
+    module_table = getattr(ctx, "module_table", None)
+    if module_table is None:
+        return "auto"
+    try:
+        from kernel.agents.mustang.tools.web.config import WebFetchConfig
+
+        section = module_table.config.get_section(
+            file="config",
+            section="web_fetch",
+            schema=WebFetchConfig,
+        )
+        return section.get().backend
+    except Exception:
+        return "auto"

@@ -1,5 +1,11 @@
 # Protocol Layer
 
+> **Quick header**
+> - **Role**: Kernel ACP/JSON-RPC implementation contract.
+> - **Current code**: `kernel.core.protocol.*`, `kernel.agents.access.routes.session`, `kernel.agents.mustang.sessions.*`, `kernel.agent_hub.*`.
+> - **Owns**: dispatch boundaries, DeepCLI `_mustang.agent/*` extensions, event mapping, cancellation, `_meta`.
+> - **Does not own**: ACP upstream schema truth; use `docs/kernel/references/acp/` for that.
+
 ## Purpose
 
 协议层是 WebSocket 传输层和会话层之间的中间层。它把**原始
@@ -63,10 +69,39 @@ ACP 里有很多"可选"能力。Kernel 作为 Agent 的采纳状态：
 | `session/compact` | Request | Session | DeepCLI 扩展 —— 待实现 |
 | `session/delete` | Request | Session | DeepCLI 扩展 —— 待实现 |
 | `_mustang.agent/session/get_usage` | Request | Session | DeepCLI 扩展 —— Implemented（`/cost` 用量面板） |
+| `_mustang.agent/session/tool_snapshot` | Request | Session | DeepCLI 扩展 —— Implemented（Probe/诊断用，返回当前 session 的 upfront schema、deferred names、lookup names） |
+| `_mustang.agent/web_fetch/backend_options` | Request | Tools (ToolManager) | DeepCLI 扩展 —— Implemented（`/webfetch backend` 数据源） |
+| `_mustang.agent/web_fetch/set_backend` | Request | Tools (ToolManager) | DeepCLI 扩展 —— Implemented（切换 WebFetch 后端，必要时返回 setup plan） |
+| `_mustang.agent/web_fetch/get_config` | Request | Tools (ToolManager) | DeepCLI 扩展 —— Implemented（读取 WebFetch 后端配置） |
+| `_mustang.agent/web_fetch/set_config` | Request | Tools (ToolManager) | DeepCLI 扩展 —— Implemented（写入 WebFetch 后端配置） |
 | `commands/list` | Request | Commands (CommandManager) | DeepCLI 扩展 —— 待实现 |
 | `$/cancel_request` | Notification | Protocol | Optional (RFD) —— 一期不实现，二期再加 |
 
-`model/*`、`session/compact`、`session/delete`、`_mustang.agent/session/get_usage`、`commands/list` 均是 DeepCLI 在 ACP 规范外新增的命名空间（[ACP 扩展机制](../references/acp/protocol/extensibility.md)允许非标准方法）。新实现优先使用 `_mustang.agent/*` 前缀，避免与未来 ACP 标准方法碰撞。
+`model/*`、`session/compact`、`session/delete`、`_mustang.agent/session/get_usage`、`_mustang.agent/session/tool_snapshot`、`commands/list` 均是 DeepCLI 在 ACP 规范外新增的命名空间（[ACP 扩展机制](../references/acp/protocol/extensibility.md)允许非标准方法）。新实现优先使用 `_mustang.agent/*` 前缀，避免与未来 ACP 标准方法碰撞。
+
+### 新增 Runtime ACP 方法的必备步骤
+
+如果新增或修改的方法在真实 CLI 路径下需要进入 Mustang Agent
+runtime，不能只改 Access 侧 `REQUEST_DISPATCH`。必须同步完成以下四件事：
+
+1. 在 `kernel.core.protocol.acp.namespaces.MustangMethod` 中声明
+   `_mustang.agent/*` 方法名，并加入 `MUSTANG_EXTENSION_METHODS`。
+2. 在 `kernel.core.protocol.acp.routing.REQUEST_DISPATCH` 中绑定 ACP schema、
+   handler wrapper 和目标 subsystem。
+3. 在 `AcpSessionHandler` 的 router 模式中把该方法映射到一个
+   `agent.*` Hub runtime contract，例如 `agent.model_request` 或
+   `agent.tools_request`。
+4. 在 `kernel.agent_hub.contracts.AgentRuntimeContract` 中声明这个
+   `agent.*` contract，并确保 Mustang Agent runtime dispatcher 实现它。
+
+验证要求：
+
+- `tests/kernel/agent_hub/test_agent_hub_transport_c.py` 必须覆盖 Hub
+  转发。该测试会扫描 Access/Runtime 中的 `agent.*` 字面量，并断言它们
+  都属于 `AGENT_RUNTIME_FORWARDED_CONTRACTS`。
+- 需要再跑一个真实 ACP/E2E probe，证明 CLI 会用到的 router 路径能从
+  Access 走到 Hub，再走到 Mustang Agent runtime。只测 Access 本地 handler
+  不足以证明真实 CLI 可用。
 
 ### 我们实现的方法（Client 方向，Kernel → Client）
 
@@ -807,6 +842,7 @@ ACP 所有消息类型都有 `_meta: { [key: string]: unknown }` 字段，用于
 | `mustang/agent_end` | `session/update._meta` | 子 agent 结束 |
 | `mustang/token_usage` | `PromptResponse._meta` | 本次 turn 的 token 统计 |
 | `mustang/context_usage` | `session/update._meta` | 上下文使用率（百分比）|
+| `mustang.agent/toolBackend` | `tool_call._meta`, `tool_call_update._meta` | 后端可切换 Tool 的后端信息；pending 阶段是 effective backend preference，completed 阶段是实际结果 backend，例如 WebSearch/WebFetch 的 `{backend, kind, phase?}` |
 | `traceparent` / `tracestate` / `baggage` | 任意 request 的 `_meta` | W3C Trace Context |
 
 ### 将来可能的扩展
@@ -825,7 +861,7 @@ ACP 所有消息类型都有 `_meta: { [key: string]: unknown }` 字段，用于
 协议层的代码组织建议（和文档对应）：
 
 ```
-kernel/protocol/
+kernel/core/protocol/
   __init__.py              # 导出 ProtocolLayer 主入口
   dispatch.py              # REQUEST_DISPATCH / NOTIFICATION_DISPATCH / OUTGOING_METHODS
   schemas/                 # Pydantic 复刻 ACP schema.json
@@ -845,9 +881,9 @@ kernel/protocol/
 
 **不**在协议层的代码：
 
-- WebSocket IO → `kernel/transport/`
-- Session 业务逻辑 → `kernel/session/` (SessionManager 实现 SessionHandler Protocol)
-- Tool 执行 → `kernel/tools/` (通过 ProtocolAPI.request 发 permission request)
+- WebSocket IO → `kernel.agents.access.routes.session`
+- Session 业务逻辑 → `kernel/agents/mustang/sessions/` (SessionManager 实现 SessionHandler Protocol)
+- Tool 执行 → `kernel/agents/mustang/tools/` (通过 ProtocolAPI.request 发 permission request)
 
 ## Open Questions (TODO)
 

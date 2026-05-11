@@ -135,4 +135,17 @@ assert(rendered.includes("list"), "slash argument autocomplete should survive sp
 assert(rendered.includes("add"), "slash argument autocomplete should survive repeated space entry");
 assert(editor.isShowingAutocomplete(), "autocomplete should remain open after repeated slash argument transition");
 
+let submitted = "";
+const submitEditor = new Editor(editorTheme);
+submitEditor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands));
+submitEditor.onSubmit = text => {
+	submitted = text;
+};
+
+await type(submitEditor, "/model a");
+assert(submitEditor.isShowingAutocomplete(), "argument autocomplete should be visible before submit");
+submitEditor.handleInput("\r");
+await tick();
+assert(submitted === "/model a", "Enter should submit the typed text without accepting autocomplete");
+
 console.log("PASS: editor slash argument autocomplete");

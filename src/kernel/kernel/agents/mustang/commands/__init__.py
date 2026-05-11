@@ -82,6 +82,13 @@ _BUILTIN_COMMANDS: list[CommandDef] = [
         acp_method=MustangMethod.RUNTIME_STATUS,
         subcommands=["status", "restart"],
     ),
+    CommandDef(
+        name="webfetch",
+        description="Manage WebFetch backend and backend config",
+        usage="/webfetch [backend | config]",
+        acp_method=MustangMethod.WEB_FETCH_BACKEND_OPTIONS,
+        subcommands=["backend", "config"],
+    ),
 ]
 
 

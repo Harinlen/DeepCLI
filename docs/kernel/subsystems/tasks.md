@@ -1,14 +1,20 @@
 # TaskManager + AgentTool 统一设计
 
-Status: **draft** — 参考 Claude Code main 源码设计，尚未实装。
+> **Quick header**
+> - **Role**: in-memory task registry, AgentTool background runs, task output/stop tools, and TodoWrite state.
+> - **Current code**: `kernel.agents.mustang.tasks.*`, `tools/builtin/agent.py`, `task_output.py`, `task_stop.py`, `todo_write.py`.
+> - **Runtime owner**: Mustang runtime tools/orchestrator path.
+> - **Boundary**: task state and notifications only; durable session event storage lives in `sessions/`.
+
+Status: **landed** — 参考 Claude Code main 源码设计，当前实现已迁入 `kernel.agents.mustang.tasks`.
 
 > 蓝图来源：
 > - Claude Code `src/Task.ts`, `src/tasks.ts`, `src/utils/tasks.ts`
 > - Claude Code `src/tasks/LocalShellTask/`, `src/tasks/LocalAgentTask/`
 > - Claude Code `src/tools/AgentTool/`, `src/tools/TaskOutputTool/`, `src/tools/TaskStopTool/`
 > - Claude Code `src/utils/task/framework.ts`, `src/utils/task/TaskOutput.ts`, `src/utils/task/diskOutput.ts`
-> - DeepCLI `src/kernel/kernel/agents/mustang/orchestrator/orchestrator.py` (query loop, step 6d TODO)
-> - DeepCLI `src/kernel/kernel/agents/mustang/tools/context.py` (`ToolContext.tasks` stub)
+> - DeepCLI `src/kernel/kernel/agents/mustang/orchestrator/orchestrator.py` (query loop task-notification drain)
+> - DeepCLI `src/kernel/kernel/agents/mustang/tools/context.py` (`ToolContext.tasks` integration)
 > - DeepCLI `docs/kernel/subsystems/orchestrator.md` (Sub-agent 章节)
 
 ---
@@ -49,7 +55,7 @@ notify → evict 生命周期、同一个 `TaskOutputTool`、同一套 notificat
 ### 1.1 数据模型
 
 ```python
-# kernel/tasks/types.py
+# kernel/agents/mustang/tasks/types.py
 
 from __future__ import annotations
 
@@ -153,7 +159,7 @@ TaskState = ShellTaskState | AgentTaskState
 ### 1.2 ID 生成
 
 ```python
-# kernel/tasks/id.py
+# kernel/agents/mustang/tasks/id.py
 
 import secrets
 
@@ -176,7 +182,7 @@ def generate_task_id(task_type: TaskType) -> str:
 ### 1.3 TaskRegistry
 
 ```python
-# kernel/tasks/registry.py
+# kernel/agents/mustang/tasks/registry.py
 
 from __future__ import annotations
 
@@ -325,7 +331,7 @@ class TaskRegistry:
 ### 1.4 TaskOutput — 输出收集
 
 ```python
-# kernel/tasks/output.py
+# kernel/agents/mustang/tasks/output.py
 
 from __future__ import annotations
 
@@ -438,7 +444,7 @@ task 完成
 #### 1.5.1 OrchestratorDeps 新增字段
 
 ```python
-# kernel/orchestrator/types.py — OrchestratorDeps 新增
+# kernel/agents/mustang/orchestrator/types.py — OrchestratorDeps 新增
 
     task_registry: TaskRegistry | None = field(default=None)
     """TaskRegistry | None — 后台 task 注册表。当 BashTool
@@ -448,10 +454,10 @@ task 完成
 
 #### 1.5.2 Orchestrator 注入点
 
-在 `orchestrator.py` step 6d 的 TODO 位置实现：
+在 `orchestrator.py` 的 task-notification drain 阶段实现：
 
 ```python
-# orchestrator.py — step 6d（现有 TODO 位置）
+# orchestrator.py — task-notification drain
 
 # 6d. Drain task notifications（只取属于当前 agent 的）
 if self._deps.task_registry is not None:
@@ -550,7 +556,7 @@ def _format_task_notification(task: TaskState) -> str:
 将 `ToolContext.tasks: Any = None` 替换为强类型：
 
 ```python
-# kernel/tools/context.py — 修改
+# kernel/agents/mustang/tools/context.py — 修改
 
 from kernel.agents.mustang.tasks.registry import TaskRegistry
 
@@ -571,7 +577,7 @@ Session 结束时（disconnect、`/clear`、进程退出），必须清理所有
 running tasks，否则 orphan 进程会泄漏。
 
 ```python
-# kernel/tasks/registry.py — TaskRegistry 新增
+# kernel/agents/mustang/tasks/registry.py — TaskRegistry 新增
 
 async def shutdown(self) -> None:
     """Kill 所有 running tasks 并清理 output 文件。
@@ -1055,8 +1061,8 @@ async def _run_agent_background(
         async for event in spawn_fn(prompt, [], agent_id=task_id):
             if isinstance(event, TextDelta):
                 result_parts.append(event.content)
-            # TODO: 写 output 文件供 TaskOutputTool 读取
-            # TODO: 更新 AgentProgress
+            # 实现时写 output 文件供 TaskOutputTool 读取
+            # 实现时更新 AgentProgress
 
         result = "".join(result_parts) or "(agent produced no output)"
         registry.update_status(task_id, TaskStatus.completed, result=result)
@@ -1172,7 +1178,7 @@ async for chunk in tool.call(parsed_input, ctx):
 ### 4.1 TaskOutputTool
 
 ```python
-# kernel/tools/builtin/task_output.py
+# kernel/agents/mustang/tools/builtin/task_output.py
 
 class TaskOutputTool(Tool[dict[str, Any], str]):
     """读取后台 task 的输出。"""
@@ -1294,7 +1300,7 @@ class TaskOutputTool(Tool[dict[str, Any], str]):
 ### 4.2 TaskStopTool
 
 ```python
-# kernel/tools/builtin/task_stop.py
+# kernel/agents/mustang/tools/builtin/task_stop.py
 
 class TaskStopTool(Tool[dict[str, Any], str]):
     """停止一个运行中的后台 task。"""
@@ -1378,7 +1384,7 @@ TodoWriteTool 是 LLM 的自管理 checklist，与后台 task framework **完全
 ### 5.1 数据模型
 
 ```python
-# kernel/tools/builtin/todo_write.py
+# kernel/agents/mustang/tools/builtin/todo_write.py
 
 @dataclass
 class TodoItem:
@@ -1391,7 +1397,7 @@ class TodoItem:
 存在 `TaskRegistry` 上（复用同一个 session 级对象）：
 
 ```python
-# kernel/tasks/registry.py — TaskRegistry 新增
+# kernel/agents/mustang/tasks/registry.py — TaskRegistry 新增
 
 class TaskRegistry:
     def __init__(self) -> None:
@@ -1468,14 +1474,14 @@ tool listing 里。LLM 通过 ToolSearch 按需加载。
 ## 6. 目录结构
 
 ```
-kernel/tasks/
+kernel/agents/mustang/tasks/
 ├── __init__.py          # TaskManager(Subsystem)? 或纯工具模块（见 §7 讨论）
 ├── types.py             # TaskType, TaskStatus, TaskStateBase, ShellTaskState, AgentTaskState
 ├── id.py                # generate_task_id()
 ├── registry.py          # TaskRegistry
 └── output.py            # TaskOutput, get_task_output_path()
 
-kernel/tools/builtin/
+kernel/agents/mustang/tools/builtin/
 ├── bash.py              # BashTool（扩展 run_in_background）
 ├── agent.py             # AgentTool（新增）
 ├── task_output.py       # TaskOutputTool（新增）
@@ -1560,7 +1566,7 @@ subprocess 的 file descriptor 写入文件（`stdout=fd, stderr=fd`），
 - `_drain_orphan_notifications(ended_agent_id)` — 接管已终止子 agent
 - `ToolContext.agent_id` — 传给工具，标识当前执行上下文
 
-**修改清单**新增一行：`kernel/orchestrator/orchestrator.py` —
+**修改清单**新增一行：`kernel/agents/mustang/orchestrator/orchestrator.py` —
 `StandardOrchestrator.__init__` 新增 `agent_id` 参数。
 
 ### 7.8 多 Orchestrator 共享 TaskRegistry + 通知路由
@@ -1614,32 +1620,32 @@ TaskRegistry (session 级, 所有 Orchestrator 共享)
 
 **A. 基础层 — Task Framework**
 
-1. 创建 `kernel/tasks/types.py` — TaskType, TaskStatus, TaskStateBase, ShellTaskState, AgentTaskState, AgentProgress
-2. 创建 `kernel/tasks/id.py` — generate_task_id()
-3. 创建 `kernel/tasks/output.py` — TaskOutput, get_task_output_path()
-4. 创建 `kernel/tasks/registry.py` — TaskRegistry（注册/更新/查询/通知队列/GC）
-5. 创建 `kernel/tasks/__init__.py` — 模块入口，public exports
+1. 创建 `kernel/agents/mustang/tasks/types.py` — TaskType, TaskStatus, TaskStateBase, ShellTaskState, AgentTaskState, AgentProgress
+2. 创建 `kernel/agents/mustang/tasks/id.py` — generate_task_id()
+3. 创建 `kernel/agents/mustang/tasks/output.py` — TaskOutput, get_task_output_path()
+4. 创建 `kernel/agents/mustang/tasks/registry.py` — TaskRegistry（注册/更新/查询/通知队列/GC）
+5. 创建 `kernel/agents/mustang/tasks/__init__.py` — 模块入口，public exports
 
 **B. 接入层 — Orchestrator + ToolContext 对接**
 
-6. `kernel/tools/context.py` — `tasks: Any` → `tasks: TaskRegistry | None`
-7. `kernel/orchestrator/types.py` — `OrchestratorDeps` 新增 `task_registry: TaskRegistry | None`
-8. `kernel/orchestrator/orchestrator.py` — step 6d 实现 `drain_task_notifications()` + GC
-9. `kernel/tools/types.py` — `ToolCallProgress` 新增 `passthrough_event: OrchestratorEvent | None`
-10. `kernel/orchestrator/tool_executor.py` — 处理 `passthrough_event`（透传而非包装）
-11. `kernel/session/__init__.py` — 创建 `TaskRegistry` 实例并注入 `OrchestratorDeps`
+6. `kernel/agents/mustang/tools/context.py` — `tasks: Any` → `tasks: TaskRegistry | None`
+7. `kernel/agents/mustang/orchestrator/types.py` — `OrchestratorDeps` 新增 `task_registry: TaskRegistry | None`
+8. `kernel/agents/mustang/orchestrator/orchestrator.py` — step 6d 实现 `drain_task_notifications()` + GC
+9. `kernel/agents/mustang/tools/types.py` — `ToolCallProgress` 新增 `passthrough_event: OrchestratorEvent | None`
+10. `kernel/agents/mustang/orchestrator/tool_executor.py` — 处理 `passthrough_event`（透传而非包装）
+11. `kernel/agents/mustang/sessions/__init__.py` — 创建 `TaskRegistry` 实例并注入 `OrchestratorDeps`
 
 **C. 消费者 — 工具实现**
 
-12. `kernel/tools/builtin/bash.py` — 扩展 input_schema（run_in_background + description）+ 后台分支 _spawn_background / _wait_and_notify
-13. `kernel/tools/builtin/agent.py` — AgentTool（前台同步 + 后台异步双模式）+ spawn_subagent 回调实现（Orchestrator 侧）
-14. `kernel/tools/builtin/task_output.py` — TaskOutputTool
-15. `kernel/tools/builtin/task_stop.py` — TaskStopTool
-16. `kernel/tools/builtin/todo_write.py` — TodoWriteTool
+12. `kernel/agents/mustang/tools/builtin/bash.py` — 扩展 input_schema（run_in_background + description）+ 后台分支 _spawn_background / _wait_and_notify
+13. `kernel/agents/mustang/tools/builtin/agent.py` — AgentTool（前台同步 + 后台异步双模式）+ spawn_subagent 回调实现（Orchestrator 侧）
+14. `kernel/agents/mustang/tools/builtin/task_output.py` — TaskOutputTool
+15. `kernel/agents/mustang/tools/builtin/task_stop.py` — TaskStopTool
+16. `kernel/agents/mustang/tools/builtin/todo_write.py` — TodoWriteTool
 
 **D. 注册 + 集成**
 
-17. `kernel/tools/builtin/__init__.py` — 注册 AgentTool, TaskOutputTool, TaskStopTool, TodoWriteTool
+17. `kernel/agents/mustang/tools/builtin/__init__.py` — 注册 AgentTool, TaskOutputTool, TaskStopTool, TodoWriteTool
 18. Stall watchdog — BashTool 后台命令的交互式 prompt 检测
 
 ---
@@ -1648,22 +1654,22 @@ TaskRegistry (session 级, 所有 Orchestrator 共享)
 
 | 文件 | 修改 |
 |------|------|
-| `kernel/tools/context.py` | `tasks: Any` → `tasks: TaskRegistry \| None` |
-| `kernel/orchestrator/types.py` | `OrchestratorDeps` 新增 `task_registry` |
-| `kernel/orchestrator/orchestrator.py` | `__init__` 新增 `agent_id` 参数；step 6d notification drain；`_make_spawn_subagent`；`_drain_orphan_notifications` |
-| `kernel/orchestrator/events.py` | (已有 SubAgentStart/End，无需改) |
-| `kernel/tools/types.py` | `ToolCallProgress` 新增 `passthrough_event` |
-| `kernel/orchestrator/tool_executor.py` | 处理 `passthrough_event` |
-| `kernel/tools/builtin/bash.py` | 扩展 schema + 后台分支 + stall watchdog |
-| `kernel/tools/builtin/__init__.py` | 注册新工具 |
-| `kernel/session/__init__.py` | 创建 TaskRegistry 并注入 deps；session teardown 调 `registry.shutdown()` |
+| `kernel/agents/mustang/tools/context.py` | `tasks: Any` → `tasks: TaskRegistry \| None` |
+| `kernel/agents/mustang/orchestrator/types.py` | `OrchestratorDeps` 新增 `task_registry` |
+| `kernel/agents/mustang/orchestrator/orchestrator.py` | `__init__` 新增 `agent_id` 参数；step 6d notification drain；`_make_spawn_subagent`；`_drain_orphan_notifications` |
+| `kernel/agents/mustang/orchestrator/events.py` | (已有 SubAgentStart/End，无需改) |
+| `kernel/agents/mustang/tools/types.py` | `ToolCallProgress` 新增 `passthrough_event` |
+| `kernel/agents/mustang/orchestrator/tool_executor.py` | 处理 `passthrough_event` |
+| `kernel/agents/mustang/tools/builtin/bash.py` | 扩展 schema + 后台分支 + stall watchdog |
+| `kernel/agents/mustang/tools/builtin/__init__.py` | 注册新工具 |
+| `kernel/agents/mustang/sessions/__init__.py` | 创建 TaskRegistry 并注入 deps；session teardown 调 `registry.shutdown()` |
 | **新文件** | |
-| `kernel/tasks/__init__.py` | 模块入口 |
-| `kernel/tasks/types.py` | 数据模型 |
-| `kernel/tasks/id.py` | ID 生成 |
-| `kernel/tasks/registry.py` | TaskRegistry（含 shutdown + todos） |
-| `kernel/tasks/output.py` | TaskOutput |
-| `kernel/tools/builtin/agent.py` | AgentTool |
-| `kernel/tools/builtin/task_output.py` | TaskOutputTool |
-| `kernel/tools/builtin/task_stop.py` | TaskStopTool |
-| `kernel/tools/builtin/todo_write.py` | TodoWriteTool |
+| `kernel/agents/mustang/tasks/__init__.py` | 模块入口 |
+| `kernel/agents/mustang/tasks/types.py` | 数据模型 |
+| `kernel/agents/mustang/tasks/id.py` | ID 生成 |
+| `kernel/agents/mustang/tasks/registry.py` | TaskRegistry（含 shutdown + todos） |
+| `kernel/agents/mustang/tasks/output.py` | TaskOutput |
+| `kernel/agents/mustang/tools/builtin/agent.py` | AgentTool |
+| `kernel/agents/mustang/tools/builtin/task_output.py` | TaskOutputTool |
+| `kernel/agents/mustang/tools/builtin/task_stop.py` | TaskStopTool |
+| `kernel/agents/mustang/tools/builtin/todo_write.py` | TodoWriteTool |

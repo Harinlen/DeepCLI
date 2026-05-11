@@ -1001,59 +1001,10 @@ export class Editor implements Component, Focusable {
 					return;
 				}
 
-				// If Enter was pressed on a slash command, apply completion and submit
-				if ((kb.matches(data, "tui.input.submit") || data === "\n") && this.#autocompletePrefix.startsWith("/")) {
-					// Check for stale autocomplete state due to debounce
-					const currentLine = this.#state.lines[this.#state.cursorLine] ?? "";
-					const currentTextBeforeCursor = currentLine.slice(0, this.#state.cursorCol);
-					if (currentTextBeforeCursor !== this.#autocompletePrefix) {
-						// Autocomplete is stale - cancel and fall through to normal submission
-						this.#cancelAutocomplete();
-					} else {
-						const selected = this.#autocompleteList.getSelectedItem();
-						if (selected && this.#autocompleteProvider) {
-							const result = this.#autocompleteProvider.applyCompletion(
-								this.#state.lines,
-								this.#state.cursorLine,
-								this.#state.cursorCol,
-								selected,
-								this.#autocompletePrefix,
-							);
-
-							this.#state.lines = result.lines;
-							this.#state.cursorLine = result.cursorLine;
-							this.#setCursorCol(result.cursorCol);
-							result.onApplied?.();
-						}
-						this.#cancelAutocomplete();
-					}
+				// Enter submits the current text. Tab is the only key that accepts autocomplete.
+				if (kb.matches(data, "tui.input.submit") || data === "\n") {
+					this.#cancelAutocomplete();
 					// Don't return - fall through to submission logic
-				}
-				// If Enter was pressed on a file path, apply completion
-				else if (kb.matches(data, "tui.input.submit") || data === "\n") {
-					const selected = this.#autocompleteList.getSelectedItem();
-					if (selected && this.#autocompleteProvider) {
-						const result = this.#autocompleteProvider.applyCompletion(
-							this.#state.lines,
-							this.#state.cursorLine,
-							this.#state.cursorCol,
-							selected,
-							this.#autocompletePrefix,
-						);
-
-						this.#state.lines = result.lines;
-						this.#state.cursorLine = result.cursorLine;
-						this.#setCursorCol(result.cursorCol);
-
-						this.#cancelAutocomplete();
-
-						if (this.onChange) {
-							this.onChange(this.getText());
-						}
-
-						result.onApplied?.();
-					}
-					return;
 				}
 			}
 			// For other keys (like regular typing), DON'T return here

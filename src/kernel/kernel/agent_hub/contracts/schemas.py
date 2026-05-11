@@ -53,6 +53,36 @@ class ManagementCapability(StrEnum):
     GLOBAL_RESOURCE_WRITE = "global_resource.write"
 
 
+class AgentRuntimeContract(StrEnum):
+    """Contracts that Agent Hub may forward to a registered runtime."""
+
+    PROMPT = "agent.prompt"
+    ACTIVATE_SKILL = "agent.activate_skill"
+    COMMANDS_LIST = "agent.commands_list"
+    SESSION_NEW = "agent.session_new"
+    SESSION_LIST = "agent.session_list"
+    SESSION_LOAD = "agent.session_load"
+    RESUME = "agent.resume"
+    CANCEL = "agent.cancel"
+    EXECUTE_SHELL = "agent.execute_shell"
+    EXECUTE_PYTHON = "agent.execute_python"
+    CANCEL_EXECUTION = "agent.cancel_execution"
+    SET_MODE = "agent.set_mode"
+    GET_USAGE = "agent.get_usage"
+    CLOSE = "agent.close"
+    MODEL_REQUEST = "agent.model_request"
+    TOOLS_REQUEST = "agent.tools_request"
+
+
+AGENT_RUNTIME_STREAMING_CONTRACTS = frozenset(
+    {
+        AgentRuntimeContract.PROMPT,
+        AgentRuntimeContract.ACTIVATE_SKILL,
+    }
+)
+AGENT_RUNTIME_FORWARDED_CONTRACTS = frozenset(AgentRuntimeContract)
+
+
 class RouterFrameKind(StrEnum):
     """Router message-plane frame kinds.
 

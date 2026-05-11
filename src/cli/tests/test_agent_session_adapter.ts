@@ -5,9 +5,21 @@ import { assert } from "./helpers.js";
 const updates = [
 	{ sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "thinking" } },
 	{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "hello" } },
-	{ sessionUpdate: "tool_call", toolCallId: "tool-1", title: "Bash", rawInput: "{\"command\":\"pwd\"}" },
+	{
+		sessionUpdate: "tool_call",
+		toolCallId: "tool-1",
+		title: "Bash",
+		rawInput: "{\"command\":\"pwd\"}",
+		_meta: { "mustang.agent/toolBackend": { backend: "shell", kind: "command", phase: "pending" } },
+	},
 	{ sessionUpdate: "tool_call_update", toolCallId: "tool-1", status: "in_progress", content: "running" },
-	{ sessionUpdate: "tool_call_update", toolCallId: "tool-1", status: "completed", content: "done" },
+	{
+		sessionUpdate: "tool_call_update",
+		toolCallId: "tool-1",
+		status: "completed",
+		content: "done",
+		_meta: { "mustang.agent/toolBackend": { backend: "shell", kind: "command" } },
+	},
 	{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "after" } },
 	{ sessionUpdate: "usage_update", inputTokens: 123, outputTokens: 45, used: 234, size: 64_000, durationMs: 1500 },
 	{ sessionUpdate: "session_info_update", title: "New title" },
@@ -74,6 +86,8 @@ const adapter = new MustangAgentSessionAdapter({
 
 const events: string[] = [];
 const renderOrder: string[] = [];
+let toolBackendDetails: Record<string, unknown> | undefined;
+let pendingToolBackendDetails: Record<string, unknown> | undefined;
 adapter.subscribe(event => {
 	events.push(event.type);
 	const message = event.message as { role?: string; content?: Array<{ type: string; text?: string; thinking?: string }> } | undefined;
@@ -89,6 +103,14 @@ adapter.subscribe(event => {
 	}
 	if (event.type === "tool_execution_start") {
 		renderOrder.push(`tool:${event.toolCallId}`);
+		if (event.toolCallId === "tool-1") {
+			const details = event.details as { backend?: Record<string, unknown> } | undefined;
+			pendingToolBackendDetails = details?.backend;
+		}
+	}
+	if (event.type === "tool_execution_end" && event.toolCallId === "tool-1") {
+		const result = event.result as { details?: Record<string, unknown> } | undefined;
+		toolBackendDetails = result?.details?.backend as Record<string, unknown> | undefined;
 	}
 });
 
@@ -99,6 +121,8 @@ assert(events.includes("message_update"), "adapter should emit streaming message
 assert(events.includes("tool_execution_start"), "adapter should emit tool start");
 assert(events.includes("tool_execution_update"), "adapter should emit tool progress");
 assert(events.includes("tool_execution_end"), "adapter should emit tool completion");
+assert(pendingToolBackendDetails?.backend === "shell", "adapter should expose pending tool backend metadata");
+assert(toolBackendDetails?.backend === "shell", "adapter should expose tool backend metadata");
 assert(events.includes("agent_end"), "adapter should emit agent_end");
 assert(adapter.messages.length === 2, "adapter should retain user and assistant messages");
 assert(adapter.sessionManager.getSessionName() === "New title", "session_info_update should refresh local title");

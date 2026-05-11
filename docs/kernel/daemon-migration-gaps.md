@@ -1,5 +1,11 @@
 # Kernel vs Daemon — 核心功能差距分析
 
+> **Quick header**
+> - **Role**: historical daemon-era gap audit.
+> - **Current status**: mostly superseded by shipped Kernel milestones in [`history.md`](history.md) and current subsystem docs.
+> - **Use for**: understanding why daemon features were migrated, replaced, or intentionally left behind.
+> - **Do not use for**: current implementation truth without checking `src/kernel/kernel/`.
+
 > **Date**: 2026-04-21
 >
 > 对比 `src/kernel/` (当前实现) 与 `archive/daemon/` (已归档的前代实现)，

@@ -19,6 +19,8 @@ from kernel.agent_hub.contracts.control_plane import (
     StatusSnapshot,
 )
 from kernel.agent_hub.contracts.schemas import (
+    AGENT_RUNTIME_FORWARDED_CONTRACTS,
+    AGENT_RUNTIME_STREAMING_CONTRACTS,
     AGENT_CONTRACT_SCHEMA_VERSION,
     DEFAULT_AGENT_ROOT,
     PRIMARY_AGENT_ID,
@@ -28,6 +30,7 @@ from kernel.agent_hub.contracts.schemas import (
     AgentRegistrationRequest,
     AgentResources,
     AgentRole,
+    AgentRuntimeContract,
     AgentRuntimeDeclaration,
     AgentRuntimeRecord,
     BindingPlan,
@@ -64,6 +67,9 @@ __all__ = [
     "AgentRegistrationRequest",
     "AgentResources",
     "AgentRole",
+    "AgentRuntimeContract",
+    "AGENT_RUNTIME_FORWARDED_CONTRACTS",
+    "AGENT_RUNTIME_STREAMING_CONTRACTS",
     "AgentRuntimeController",
     "AgentRuntimeDeclaration",
     "AgentRuntimeKind",

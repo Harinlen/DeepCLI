@@ -1,9 +1,8 @@
 """ToolRegistry — core + deferred two-layer tool catalog.
 
-Phase 1 populates only the ``core`` layer with six built-in tools;
-the ``deferred`` layer is implemented but left empty because the
-prompt-budget win from deferred schemas only matters at 15+ tools
-(Claude Code has 43+).
+The ``core`` layer is surfaced to the LLM every turn. The ``deferred``
+layer appears by name in a system reminder and can be promoted through
+``ToolSearch``.
 
 Responsibilities
 ----------------
@@ -32,7 +31,6 @@ if TYPE_CHECKING:
 
     from kernel.agents.mustang.llm.types import ToolSchema
     from kernel.agents.mustang.module_table import KernelModuleTable
-    from kernel.agents.mustang.orchestrator.types import ToolKind
     from kernel.agents.mustang.prompts import PromptManager
     from kernel.agents.mustang.tools.tool import Tool
 
@@ -161,12 +159,9 @@ class ToolRegistry:
         """Build a ``ToolSnapshot`` for the next LLM turn.
 
         Filters:
-          - ``plan_mode``: excludes mutating kinds (edit / delete / move /
-            execute) so the LLM can't emit a write call in the first place
-            (defense-in-depth with ToolAuthorizer's plan-mode rejection).
-            ``orchestrate`` (AgentTool) and ``other`` (ExitPlanMode) are
-            intentionally NOT mutating — they survive plan-mode, matching
-            CC's behavior where Agent stays visible in plan mode.
+          - ``plan_mode``: no schema-level filtering.  Claude Code keeps
+            tools visible in plan mode and enforces read-only behavior at
+            permission time, so DeepCLI follows the same model here.
           - ``repl_mode``: hides primitive tools from the LLM's schema
             list (they are only accessible via the REPL tool).  Hidden
             tools remain in ``lookup`` so REPL can dispatch internally.
@@ -191,8 +186,6 @@ class ToolRegistry:
             if tool.name in denied:
                 continue
             if agent_whitelist is not None and tool.name not in agent_whitelist:
-                continue
-            if plan_mode and _is_mutating(tool.kind):
                 continue
 
             hidden_by_repl = repl_mode and tool.name in REPL_PRIMITIVE_TOOLS
@@ -242,20 +235,6 @@ class ToolRegistry:
             deferred_names=set(deferred_stubs),
             deferred_listing=listing,
         )
-
-
-_MUTATING_KINDS: set[ToolKind] = set()
-
-
-def _is_mutating(kind: ToolKind) -> bool:
-    # Lazy init — avoid importing ToolKind at module load to dodge
-    # any future circular-import shenanigans.
-    global _MUTATING_KINDS
-    if not _MUTATING_KINDS:
-        from kernel.agents.mustang.orchestrator.types import ToolKind as TK
-
-        _MUTATING_KINDS = {TK.edit, TK.delete, TK.move, TK.execute}
-    return kind in _MUTATING_KINDS
 
 
 __all__ = ["Layer", "ToolRegistry", "ToolSnapshot"]

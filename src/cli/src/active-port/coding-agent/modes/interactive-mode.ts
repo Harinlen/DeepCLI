@@ -1529,6 +1529,14 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#selectorController.showModelSelector(options);
 	}
 
+	showWebFetchBackendSelector(): void {
+		this.#selectorController.showWebFetchBackendSelector();
+	}
+
+	showWebFetchConfigSelector(): void {
+		this.#selectorController.showWebFetchConfigSelector();
+	}
+
 	showModelAdd(): void {
 		this.#selectorController.showModelAdd();
 	}

@@ -158,7 +158,7 @@ DeepCLI variable substitution).  Drift is gated by a canary test under
   `Claude Code is available` / `Fast mode`.  DeepCLI is not Claude
   Code and is multi-provider.
 
-See `docs/kernel/history/plans/prompt-alignment-with-cc.md` § Phase 3 for the full
+See `docs/kernel/subsystems/prompts/history/prompt-alignment-with-cc.md` § Phase 3 for the full
 rationale.
 
 ## AGENTS.md Discovery

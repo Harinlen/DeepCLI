@@ -1,5 +1,11 @@
 # Transport
 
+> **Quick header**
+> - **Role**: Access Agent WebSocket `/session` transport loop.
+> - **Current code**: `kernel.agents.access.routes.session`, `kernel.agents.access.routes.flags`, `kernel.core.protocol.*`.
+> - **Runtime owner**: Access Agent.
+> - **Boundary**: socket accept/auth/recv/send only; protocol dispatch and session logic live below.
+
 ## Purpose
 
 WebSocket `/session` 是用户进入 kernel 的唯一 IO 入口。按
@@ -300,7 +306,7 @@ transport:
 ```
 
 ```python
-# kernel/routes/flags.py
+# kernel/agents/access/routes/flags.py
 class TransportFlags(BaseModel):
     stack: Literal["acp"] = Field(
         "acp",
@@ -311,7 +317,7 @@ class TransportFlags(BaseModel):
 注册由 lifespan 直接做（transport 不是 Subsystem）：
 
 ```python
-# kernel/app.py
+# kernel/agents/access/app.py
 flags.register("transport", TransportFlags)
 ```
 

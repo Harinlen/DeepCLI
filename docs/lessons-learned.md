@@ -85,6 +85,26 @@ wall twice.
 
 ## Tool Contracts
 
+- **CLI-visible runtime ACP methods must be tested through Agent Hub,
+  not only Access-local dispatch**: the real supervised CLI path is
+  `Access Agent -> Agent Hub -> Primary Runtime`.  A method can pass
+  Access-side ACP/E2E tests and still fail in the CLI if Hub does not
+  forward its `agent.*` runtime contract.  Keep runtime contracts in
+  `kernel.agent_hub.contracts.AgentRuntimeContract`, not ad hoc string
+  sets, and run `tests/kernel/agent_hub/test_agent_hub_transport_c.py`
+  plus a router-path probe for every new runtime ACP method.  This
+  caught `/webfetch backend` failing with `unknown hub contract:
+  agent.tools_request` after Access-local WebFetch probes had passed.
+
+- **Agent Hub `agent.tools_request` is not a 5s control-plane ping**:
+  tool-management slash commands can validate remote credentials, install
+  local dependencies, or call provider APIs.  If Hub keeps a short
+  forwarded-runtime timeout while the CLI allows a longer request timeout,
+  the user sees `[-32603] Internal error` even though the operation is
+  still ordinary latency.  Align Hub forwarded timeouts with the CLI
+  command timeout, and test the timeout selection in
+  `tests/kernel/agent_hub/test_agent_hub_transport_c.py`.
+
 - **Tool implementation class names are not the LLM contract**:
   Claude Code's file reader is implemented as `FileReadTool`, but the
   exposed tool name is `Read`.  When porting tools, align the schema

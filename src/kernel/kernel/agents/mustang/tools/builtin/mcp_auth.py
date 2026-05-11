@@ -89,6 +89,9 @@ class McpAuthTool(Tool[dict[str, Any], dict[str, Any]]):
             reason="opens browser for OAuth authorization",
         )
 
+    def is_read_only_call(self, input: dict[str, Any], ctx: Any = None) -> bool:
+        return False
+
     async def call(
         self, input: dict[str, Any], ctx: ToolContext
     ) -> AsyncGenerator[ToolCallResult, None]:

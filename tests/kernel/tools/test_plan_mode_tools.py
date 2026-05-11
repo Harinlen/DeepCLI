@@ -188,7 +188,7 @@ class TestPlanModeToolsInRegistry:
         assert "ExitPlanMode" not in schema_names
 
     def test_not_filtered_in_plan_mode(self):
-        """Plan mode tools have kind=other which is NOT in _MUTATING_KINDS."""
+        """Plan mode does not schema-filter deferred plan mode tools."""
         reg = ToolRegistry()
         reg.register(EnterPlanModeTool(), layer="deferred")
         reg.register(ExitPlanModeTool(), layer="deferred")

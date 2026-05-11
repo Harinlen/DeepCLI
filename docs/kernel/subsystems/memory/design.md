@@ -1,5 +1,11 @@
 # Memory Subsystem — 设计方案
 
+> **Quick header**
+> - **Role**: long-term memory storage, indexing, selection, tools, and prompt injection strategy.
+> - **Current code**: `kernel.agents.mustang.memory.*`.
+> - **Runtime owner**: Mustang runtime after HookManager and before GitManager.
+> - **Boundary**: memory files and relevance scoring only; PromptBuilder/Orchestrator own final injection timing.
+
 > 综合 13 个竞品项目分析（见 [research.md](research.md)）、
 > 用户明确需求、D17 架构决策，以及 DeepCLI kernel 约束。
 >

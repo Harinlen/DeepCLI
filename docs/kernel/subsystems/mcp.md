@@ -1,6 +1,12 @@
 # MCPManager — Design
 
-Status: **pending** — 参考 Claude Code main 源码设计，尚未实装。
+> **Quick header**
+> - **Role**: MCP server lifecycle, transports, health, OAuth, and tool/resource adapters.
+> - **Current code**: `kernel.agents.mustang.mcp.*`, `kernel.agents.mustang.tools.mcp_adapter`.
+> - **Runtime owner**: Mustang runtime before ToolManager.
+> - **Boundary**: MCP connection truth; ToolManager owns final tool registry snapshots.
+
+Status: **landed** — 参考 Claude Code main 源码设计，当前实现已迁入 `kernel.agents.mustang.mcp`.
 
 > 前置阅读：
 > - 架构子系统表：[kernel/architecture.md](../../kernel/architecture.md)
@@ -76,7 +82,7 @@ Status: **pending** — 参考 Claude Code main 源码设计，尚未实装。
 ```
 
 ```python
-# kernel/mcp/types.py
+# kernel/agents/mustang/mcp/types.py
 
 @dataclass(frozen=True)
 class ConnectedServer:
@@ -130,7 +136,7 @@ MCPServerConnection = (
 对标 Claude Code `config.ts` 的 `McpServerConfig`，只支持 stdio 和 SSE 两种 transport（覆盖 >95% 使用场景）：
 
 ```python
-# kernel/mcp/config.py
+# kernel/agents/mustang/mcp/config.py
 
 class StdioServerConfig(BaseModel):
     """stdio transport — 启动本地子进程。"""
@@ -225,7 +231,7 @@ class MCPPolicyConfig(BaseModel):
 ### 5.1 Transport Protocol
 
 ```python
-# kernel/mcp/transport/base.py
+# kernel/agents/mustang/mcp/transport/base.py
 
 class Transport(Protocol):
     """MCP 传输层抽象。"""
@@ -303,7 +309,7 @@ class Transport(Protocol):
 JSON-RPC 2.0 协议层，对标 Claude Code 使用 `@modelcontextprotocol/sdk` 的 `Client`：
 
 ```python
-# kernel/mcp/client.py
+# kernel/agents/mustang/mcp/client.py
 
 class McpClient:
     """Transport-agnostic MCP client session。"""
@@ -396,7 +402,7 @@ class McpToolCallError(McpError):
 ### 7.1 接口
 
 ```python
-# kernel/mcp/__init__.py
+# kernel/agents/mustang/mcp/__init__.py
 
 class MCPManager(Subsystem):
     """MCP server 连接生命周期管理。"""
@@ -575,14 +581,14 @@ async def shutdown(self) -> None:
 ### 8.1 MCPAdapter
 
 ```python
-# kernel/tools/mcp_adapter.py
+# kernel/agents/mustang/tools/mcp_adapter.py
 
 class MCPAdapter(Tool):
     """把单个 MCP tool 包装成 kernel Tool。"""
 
     is_mcp: ClassVar[bool] = True
     should_defer: ClassVar[bool] = True   # MCP tools 默认 deferred
-    kind: ClassVar[ToolKind] = ToolKind.mcp
+    kind: ClassVar[ToolKind] = ToolKind.other
 
     def __init__(
         self,
@@ -648,6 +654,13 @@ async def _sync_mcp(self) -> None:
             adapter = MCPAdapter(server.name, tool_def, mcp)
             self._registry.register(adapter, layer="deferred")
 ```
+
+动态 MCP tools 默认进入 `deferred` 层，除非未来 MCP 元数据显式要求
+`always_load`。这与 Claude Code main 的 ToolSearch 模型一致：LLM 先在
+deferred listing 里看到 `mcp__<server>__<tool>` 名称，再通过 ToolSearch
+加载完整 schema。MCP proxy tool 的 `is_read_only_call()` 默认 false，因为
+MCP tool definition 本身不可靠携带副作用语义；plan mode 下真实执行会被
+ToolAuthorizer 拒绝。
 
 ---
 
@@ -749,6 +762,6 @@ uv run python -m probe     # 终端 2
 
 | Bug | 根因 | 修法 |
 |-----|------|------|
-| MCP tools 不在 LLM tool schemas 中 | `_sync_mcp` 注册到 `deferred` 层，但 ToolSearchTool 未实装，deferred tools 不出 schema | 改注册为 `core` 层 |
+| MCP tools 不在 LLM tool schemas 中 | 早期 `_sync_mcp` 注册到 `deferred` 层，但 ToolSearchTool 尚未实装，deferred tools 不出 schema | 当时临时改为 `core`；ToolSearch 落地后已恢复为默认 `deferred` |
 | ToolManager 启动时没有 MCP tools | MCPManager 先启动并 emit signal，ToolManager 后启动后才连接 signal，错过初始 emit | ToolManager 连接 signal 后立即执行一次 `_sync_mcp()` |
 | Permission 弹窗阻塞 prompt | MCP tools default_risk=ask，e2e 测试未处理 PermissionRequest | e2e 测试 auto-approve PermissionRequest |

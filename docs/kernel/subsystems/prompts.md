@@ -1,5 +1,11 @@
 # PromptManager — Design
 
+> **Quick header**
+> - **Role**: file-backed prompt text loader for Mustang prompts and tool descriptions.
+> - **Current code**: `kernel.agents.mustang.prompts.*`, defaults under `kernel/agents/mustang/prompts/default/`.
+> - **Lifecycle**: bootstrap service loaded before regular subsystems.
+> - **Boundary**: prompt file discovery/rendering only; PromptBuilder owns assembly order.
+
 Status: **landed** — shipped as bootstrap service (Phase 8, D18).
 
 ## 0. 动机

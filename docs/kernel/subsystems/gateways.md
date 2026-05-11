@@ -1,5 +1,11 @@
 # GatewayManager — Design
 
+> **Quick header**
+> - **Role**: external platform gateway adapters for Mustang sessions.
+> - **Current code**: `kernel.agents.mustang.gateways.*`.
+> - **Runtime owner**: Mustang runtime after `SessionManager` and `CommandManager`.
+> - **Boundary**: platform ingress/reply mapping only; WebSocket `/session` is Access transport.
+
 Status: **superseded for future work**. This document records the older
 GatewayManager design; any current `kernel.agents.mustang.gateways` code should be treated as
 legacy/transition code until it is migrated into the Access Agent Platform
@@ -7,7 +13,7 @@ Adapter model.
 
 > 2026-04-30 architecture note: this standalone GatewayManager design is
 > superseded for future implementation by
-> [`agent-control-plane.md`](../history/plans/agent-control-plane.md). Platform
+> [`agent-control-plane.md`](../architecture/history/agent-control-plane.md). Platform
 > integrations should become Access Agent Platform Adapters with ingress/reply
 > sinks owned by Access Agent and target routing handled by Agent Hub.Router.
 > Do not implement new platform entrypoints that deliver directly to

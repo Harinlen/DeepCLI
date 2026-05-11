@@ -1,6 +1,12 @@
 # ToolAuthorizer — Design
 
-Status: **pending** —— 基于 Claude Code 的 permission 系统蓝图,mustang
+> **Quick header**
+> - **Role**: tool-call authorization policy engine.
+> - **Current code**: `kernel.agents.mustang.tool_authz.*`.
+> - **Runtime owner**: Mustang runtime core subsystem before ToolManager and SessionManager.
+> - **Boundary**: DSL parsing, rule layers, session grants, Bash LLM judge; UI prompts and execution live downstream.
+
+Status: **landed** —— 基于 Claude Code 的 permission 系统蓝图,mustang
 侧按 kernel 架构适配。与 [ToolManager](tools.md) 紧密配对:
 ToolAuthorizer 决定"**允不允许调**",但很多决策**信息源**来自 Tool 本身
 (`default_risk` / `prepare_permission_matcher` / `is_destructive` / `aliases`)。
@@ -101,7 +107,26 @@ Authorizer 在 `authorize()` 的流程中 **无条件调**(对齐 CC 的
 **BashTool 的 argv 解析 + safe/dangerous 清单是 `default_risk` 的内部
 实现**,不是 Authorizer 的代码。Authorizer 只看结果 struct。
 
-### 3.2 Tool.prepare_permission_matcher(input)
+### 3.2 Tool.is_read_only_call(input, ctx)
+
+```python
+def is_read_only_call(input, ctx) -> bool:
+    ...
+```
+
+这是 plan mode 的关键判定点。Mustang 对齐 Claude Code main：plan mode
+不从 LLM schema 中移除 mutating tool，而是在每次执行前问工具"这一次调用
+是否 read-only"。
+
+默认实现返回 `tool.kind.is_read_only`。输入相关的工具必须覆盖：
+
+- `Bash` / `PowerShell` / `Cmd`：复用 `default_risk` 的安全分类，只有
+  `risk == "low"` 且 `default_decision == "allow"` 的命令视为 read-only。
+- `SendMessage`：`message` 是 string 时视为 read-only。
+- `TodoWrite` / `RestartSelf` / MCP proxy / MCP auth：显式返回 false。
+- `Agent` / `AskUserQuestion` / `EnterPlanMode`：显式 read-only。
+
+### 3.3 Tool.prepare_permission_matcher(input)
 
 ```python
 def prepare_permission_matcher(input) -> Callable[[str], bool]:
@@ -117,7 +142,7 @@ apply 到这个具体 tool 的 input。
 Authorizer **不**维护 `BashPrefixMatcher` / `GlobMatcher` 这样的子类,
 因为"pattern 怎么 apply"的领域语义无法抽象——只有 Tool 自己懂。
 
-### 3.3 Tool.is_destructive(input)
+### 3.4 Tool.is_destructive(input)
 
 ```python
 def is_destructive(input) -> bool:
@@ -143,14 +168,14 @@ def is_destructive(input) -> bool:
 - `FileWrite.is_destructive(path)` 返 True 当目标文件已存在且会被覆盖
 - 绝大多数 read-only tool 返 False
 
-### 3.4 Tool.aliases 和 `matches_name()` helper
+### 3.5 Tool.aliases 和 `matches_name()` helper
 
 规则匹配 tool name 时,rule `"Bash(...)"` 必须同时匹配 primary name
 `"Bash"` 和所有 aliases。这个逻辑由 `matches_name()` helper 实现,
 **ToolRegistry 和 ToolAuthorizer 共用同一份**(对齐 CC 的 `toolMatchesName`
 同时服务 tool lookup 和 rule matching)。
 
-放在 `kernel/tools/matching.py` 作为 shared utility,两个子系统 import:
+放在 `kernel/agents/mustang/tools/matching.py` 作为 shared utility,两个子系统 import:
 ```python
 def matches_name(tool: Tool, candidate: str) -> bool:
     return candidate == tool.name or candidate in tool.aliases
@@ -566,8 +591,11 @@ rules 匹配结果: rule_deny | rule_ask | rule_allow | none
 ### 10.4 Mode override
 
 进入上面的流程**之前**:
-- `ctx.mode == "plan"` 且 `tool.kind ∈ {edit, delete, execute}` →
+- `ctx.mode == "plan"` 且 `tool.is_read_only_call(input, ctx) == False` →
   `PermissionDeny("plan mode forbids side effects")` + `ReasonMode(mode="plan")`
+- 当前 session plan file 的 `Edit` / `Write` 是特例，允许在 plan mode 下写入
+- `ExitPlanMode` 是特例：虽然不是 read-only，但允许进入普通权限确认流程，用于
+  提交计划并恢复执行模式
 - `ctx.mode == "bypass"` → `PermissionAllow` + `ReasonMode(mode="bypass")`
 - `ctx.mode == "default"` → 正常走
 
@@ -690,7 +718,7 @@ sub-agent 的 `AuthorizeContext.should_avoid_prompts` 由 Session 层计算,
 **触发判定**(对齐 Claude Code `bashPermissions.ts` 内部通过 tool name 匹配):
 
 ```python
-# kernel/tool_authz/constants.py
+# kernel/agents/mustang/tool_authz/constants.py
 BASH_TOOL_NAME: Final = "Bash"   # 与 kernel.agents.mustang.tools.builtin.bash.BashTool.name 必须相等
 ```
 
@@ -801,7 +829,7 @@ permissions.bash_llm_judge_fail_closed: bool = True  # 对齐 CC tengu_iron_gate
 
 发给 LLM 的 prompt 包含 bash 命令原文时,**必须**用固定模板 + XML 标签
 包裹,避免命令里的 `</instructions>` 等 prompt injection。模板文件
-`kernel/tool_authz/bash_classifier/prompts.py`,作为 security review
+`kernel/agents/mustang/tool_authz/bash_classifier/prompts.py`,作为 security review
 的一部分强制 review。
 
 ---
@@ -923,7 +951,7 @@ class PermissionDeniedEvent(BaseModel):
 
 ```
 启动时:
-  1. ConnectionAuthenticator 已就绪(step 2)
+  1. SecretManager / ConfigManager 已就绪
   2. ToolAuthorizer.startup():
      - bind ConfigManager "permissions" section
      - RuleStore 加载 4 层(user/project/local → ConfigManager;
@@ -932,7 +960,7 @@ class PermissionDeniedEvent(BaseModel):
      - 构造 RuleEngine(无状态)
      - 构造空 SessionGrantCache
      - 构造 BashClassifier(不绑定 LLMManager,懒绑定)
-  3. Provider(step 4) / Tools(step 5) / ... 继续启动
+  3. LLMProviderManager / LLMManager / MCPManager / ToolManager / ... 继续启动
 ```
 
 ### 15.2 降级策略

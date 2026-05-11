@@ -514,6 +514,22 @@ class SessionHandlerMixin(_SessionMixinBase):
             cost_note="Pricing is not estimated until provider/model pricing tables are trusted.",
         )
 
+    async def tool_snapshot(self, ctx: HandlerContext, session_id: str) -> dict[str, Any]:
+        """Return the current LLM-facing tool snapshot for probes."""
+        session = self._get_or_raise(session_id)
+        from kernel.agents.mustang.tools import ToolManager
+
+        tools = self._module_table.get(ToolManager)
+        snapshot = tools.snapshot_for_session(
+            session_id=session.session_id,
+            plan_mode=session.mode_id == "plan",
+        )
+        return {
+            "schemas": sorted(schema.name for schema in snapshot.schemas),
+            "deferred": sorted(snapshot.deferred_names),
+            "lookup": sorted(snapshot.lookup),
+        }
+
     async def _usage_update_for_turn(
         self,
         session: Session,

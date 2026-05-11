@@ -189,10 +189,9 @@ async def run() -> int:  # noqa: C901 — long, but flat
             )
         print(f"  ✓ all gate-dependent names present: {sorted(required)}")
 
-        # ── Seam 2b: plan-mode snapshot still contains Agent ─────────
-        # CC parity: Agent (kind=orchestrate) is NOT in _MUTATING_KINDS so
-        # it survives plan-mode filtering.  Session guidance must keep its
-        # agent/search/explore bullets even when plan_mode=True.
+        # ── Seam 2b: plan-mode snapshot keeps schemas visible ─────────
+        # CC parity: plan mode is enforced at permission time, not by
+        # hiding mutating tool schemas from the model.
         pm_snapshot = tool_mgr.snapshot_for_session(session_id="probe", plan_mode=True)
         pm_names = {s.name for s in pm_snapshot.schemas}  # LLM-visible only
 
@@ -201,17 +200,18 @@ async def run() -> int:  # noqa: C901 — long, but flat
 
         if "Agent" not in pm_names:
             return _fail(
-                "AgentTool absent from plan-mode snapshot — kind must be "
-                "ToolKind.orchestrate (not execute) to survive plan-mode filter."
+                "AgentTool absent from plan-mode snapshot — plan mode must "
+                "not hide schemas needed for planning guidance."
             )
         print("  ✓ Agent present in plan-mode snapshot")
 
         for mutating in ("Bash", "Edit", "Write"):
-            if mutating in pm_names:
+            if mutating not in pm_names:
                 return _fail(
-                    f"{mutating} should be filtered in plan mode (kind=execute/edit)"
+                    f"{mutating} should remain visible in plan mode; "
+                    "ToolAuthorizer handles non-readonly calls."
                 )
-        print("  ✓ Bash / Edit / Write absent (mutating, correctly filtered)")
+        print("  ✓ Bash / Edit / Write present (CC-style schema visibility)")
         # (Guidance builder check follows after orchestrator construction below.)
 
         # ── 2. Build an Orchestrator wired to the real ToolManager.

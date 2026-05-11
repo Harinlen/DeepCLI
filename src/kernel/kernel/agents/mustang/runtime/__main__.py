@@ -253,6 +253,13 @@ async def _dispatch_runtime_contract(
             dict(payload.get("params", {})),
         )
         return {"ok": True, **result}
+    if frame.contract == "agent.tools_request":
+        payload = dict(frame.payload.get("params", {}))
+        result = await session_service.tools_request(
+            str(payload.get("method", "")),
+            dict(payload.get("params", {})),
+        )
+        return {"ok": True, **result}
     return None
 
 

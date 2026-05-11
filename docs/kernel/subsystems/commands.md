@@ -1,5 +1,11 @@
 # CommandManager — Design
 
+> **Quick header**
+> - **Role**: slash-command catalog design.
+> - **Current code**: `kernel.agents.mustang.commands.*`.
+> - **Runtime owner**: Mustang runtime; Access/CLI only consume command lists over ACP.
+> - **Boundary**: catalog only, not command dispatch or CLI autocomplete UI.
+
 Status: **landed** — 全部实装。内置命令加上 `user-invocable`
 Skills 的 `/skill-name` 投影共同组成 Kernel-owned command catalog。
 
@@ -102,7 +108,7 @@ Kernel → { result: { commands: [ { name, description, usage, acpMethod, source
 ```
 
 这是 DeepCLI 扩展方法。router backend 下该请求通过 Access -> Hub ->
-Primary Runtime，避免 CLI 看到 Access-local 的 stale catalog。
+Mustang Agent runtime，避免 CLI 看到 Access-local 的 stale catalog。
 
 ---
 
@@ -174,7 +180,7 @@ provider/model pricing table。
 `_mustang.agent/session/get_usage` 从 session store 和内存 session 读取累计值。
 
 ### 需要新建（本设计的主体）
-- `kernel/commands/` 目录 + `CommandDef` + `CommandRegistry` + `CommandManager` — 小
+- `kernel/agents/mustang/commands/` 目录 + `CommandDef` + `CommandRegistry` + `CommandManager` — 小
 
 ---
 

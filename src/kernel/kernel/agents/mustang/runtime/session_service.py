@@ -402,6 +402,25 @@ class AgentSessionRuntimeService:
         result = await spec.handler(model_handler, ctx, request_params)
         return result.model_dump(by_alias=True)
 
+    async def tools_request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Run a tool-management ACP request inside the Mustang Agent runtime."""
+        from kernel.core.protocol.acp.routing import REQUEST_DISPATCH
+
+        if self.module_table is None:
+            raise RuntimeError("session runtime service is not started")
+        spec = REQUEST_DISPATCH.get(method)
+        if spec is None or spec.target != "tools":
+            raise ValueError(f"unsupported tools request: {method}")
+
+        from kernel.agents.mustang.tools import ToolManager
+
+        tools_handler = self.module_table.get(ToolManager)
+        sender = CollectingRuntimeSender()
+        ctx = _handler_context(sender)
+        request_params = spec.params_type.model_validate(params)
+        result = await spec.handler(tools_handler, ctx, request_params)
+        return result.model_dump(by_alias=True)
+
     def _manager(self) -> SessionManager:
         if self._session_manager is None:
             raise RuntimeError("session runtime service is not started")

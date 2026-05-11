@@ -14,7 +14,7 @@ in, Pydantic objects out.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from kernel.core.protocol.interfaces.contracts.archive_session_params import ArchiveSessionParams
 from kernel.core.protocol.interfaces.contracts.archive_session_result import ArchiveSessionResult
@@ -154,6 +154,10 @@ class SessionHandler(Protocol):
         self, ctx: HandlerContext, params: GetUsageParams
     ) -> GetUsageResult:
         """Return context and token usage for one session."""
+        ...
+
+    async def tool_snapshot(self, ctx: HandlerContext, session_id: str) -> dict[str, Any]:
+        """Return the current tool snapshot for diagnostics and probes."""
         ...
 
     async def close_session(

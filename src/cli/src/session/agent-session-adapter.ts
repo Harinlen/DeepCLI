@@ -8,6 +8,7 @@ import { MustangSession, type CostUsageReport, type PermissionMode } from "@/ses
 import { SessionService } from "@/sessions/service.js";
 import type { CliSessionInfo } from "@/sessions/types.js";
 import { Box, Text } from "@/tui/index.js";
+import { WebFetchService, type SetWebFetchBackendResult, type WebFetchBackendState, type WebFetchConfigState } from "@/webfetch/service.js";
 
 type Listener = (event: AgentSessionEvent) => void | Promise<void>;
 
@@ -84,6 +85,7 @@ export class MustangAgentSessionAdapter {
 	constructor(
 		private readonly options: MustangAgentSessionAdapterOptions,
 		private readonly modelService = new ModelService(options.client),
+		private readonly webFetchService = new WebFetchService(options.client),
 	) {
 		this.sessionManager = new MustangSessionManagerAdapter(options);
 		const defaultModel = options.defaultModel || options.modelProfiles?.find(profile => profile.isDefault)?.name || "no-model";
@@ -405,6 +407,22 @@ export class MustangAgentSessionAdapter {
 		const result = await this.modelService.setCurrent(role, provider, model);
 		await this.refreshModelProfiles().catch(() => {});
 		return result.role === role && result.provider === provider && result.model === model;
+	}
+
+	async listWebFetchBackends(): Promise<WebFetchBackendState> {
+		return this.webFetchService.backendOptions();
+	}
+
+	async setWebFetchBackend(backend: string, runSetup = false, apiKey?: string): Promise<SetWebFetchBackendResult> {
+		return this.webFetchService.setBackend(backend, runSetup, apiKey);
+	}
+
+	async getWebFetchConfig(): Promise<WebFetchConfigState> {
+		return this.webFetchService.getConfig();
+	}
+
+	async setWebFetchConfig(path: string, value: unknown): Promise<WebFetchConfigState> {
+		return this.webFetchService.setConfig(path, value);
 	}
 
 	async setCurrentModelFromItem(item: ProviderModelItem, role = "default"): Promise<boolean> {
@@ -731,11 +749,13 @@ export class MustangAgentSessionAdapter {
 		const toolName = String(update.title ?? "tool");
 		this.#toolNames.set(toolCallId, toolName);
 		const args = parseJsonObject(typeof update.rawInput === "string" ? update.rawInput : typeof update.raw_input === "string" ? update.raw_input : "") ?? {};
+		const meta = readUpdateMeta(update);
+		const details = buildToolDetails(update, meta);
 		if (this.#activeAssistant) {
 			this.#activeAssistant.content.push({ type: "toolCall", id: toolCallId, name: toolName, arguments: args });
 		}
 		this.#endAssistantSegment("tool_use");
-		this.#emit({ type: "tool_execution_start", toolCallId, toolName, args });
+		this.#emit({ type: "tool_execution_start", toolCallId, toolName, args, details });
 	}
 
 	#updateTool(update: SessionUpdateParams, final: boolean): void {
@@ -943,10 +963,25 @@ function buildToolDetails(update: SessionUpdateParams, meta: Record<string, unkn
 	if (update.locations) details.locations = update.locations;
 	if (meta) {
 		details.meta = meta;
+		const backend = readToolBackend(meta);
+		if (backend) details.backend = backend;
 		const agent = readAgentStats(meta);
 		if (agent) details.agent = agent;
 	}
 	return Object.keys(details).length > 0 ? details : undefined;
+}
+
+function readToolBackend(meta: Record<string, unknown> | undefined): { backend: string; kind?: string } | undefined {
+	const raw = meta?.["mustang.agent/toolBackend"];
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+	const source = raw as Record<string, unknown>;
+	const backend = source.backend;
+	if (typeof backend !== "string" || !backend.trim()) return undefined;
+	const kind = source.kind;
+	return {
+		backend,
+		kind: typeof kind === "string" && kind.trim() ? kind : undefined,
+	};
 }
 
 type AgentStats = {

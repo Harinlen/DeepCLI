@@ -1,5 +1,11 @@
 # Orchestrator
 
+> **Quick header**
+> - **Role**: Mustang agent query loop and tool-execution coordinator.
+> - **Current code**: `kernel.agents.mustang.orchestrator.*`.
+> - **Runtime owner**: constructed by `SessionManager` inside Mustang runtime.
+> - **Boundary**: provider/tool loop, history, prompt sections, permissions, compaction; durable session persistence stays in `sessions/`.
+
 ## Purpose
 
 Orchestrator 是对话引擎核心。它接收用户消息，驱动"LLM 推理 → 工具执行
@@ -110,7 +116,7 @@ class Orchestrator(Protocol):
 class OrchestratorConfig:
     """
     User-visible config.  Returned by Orchestrator.config property.
-    Lives in kernel/orchestrator/__init__.py.
+    Lives in kernel/agents/mustang/orchestrator/__init__.py.
     """
     provider: str
     """LLM provider identifier, e.g. "anthropic".  Informational only —
@@ -188,7 +194,7 @@ StandardOrchestrator
 ### 文件布局
 
 ```
-kernel/orchestrator/
+kernel/agents/mustang/orchestrator/
   __init__.py          # 导出 Orchestrator Protocol + 所有公共类型
   orchestrator.py      # StandardOrchestrator（实现 Orchestrator Protocol）
   history.py           # ConversationHistory
@@ -808,7 +814,7 @@ Orchestrator **不持有 `KernelModuleTable`**。依赖由 `SessionManager` 从
 传入。Orchestrator 只知道它需要的那一小块接口，不知道也不访问其他子系统。
 
 ```python
-# kernel/orchestrator/types.py
+# kernel/agents/mustang/orchestrator/types.py
 
 @dataclass
 class OrchestratorDeps:

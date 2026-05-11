@@ -13,7 +13,6 @@ const commands: SlashCommand[] = [
 	{ name: "session", description: "List, resume, or delete sessions" },
 	{ name: "cost", description: "Show usage and cost" },
 	{ name: "memory", description: "List, show, or delete memories" },
-	{ name: "auth", description: "Manage secrets and auth values" },
 	{ name: "quit", description: "Exit DeepCLI" },
 	{ name: "exit", description: "Exit DeepCLI" },
 ];
@@ -24,7 +23,7 @@ const all = await provider.getSuggestions(["/"], 0, 1);
 assert(all !== null, "expected slash command suggestions");
 assert(
 	all.items.map(item => item.value).join(",") ===
-		"auth,compact,cost,exit,help,memory,model,plan,quit,session",
+		"compact,cost,exit,help,memory,model,plan,quit,session",
 	"slash commands should be alphabetized when scores tie",
 );
 
@@ -96,6 +95,25 @@ assert(activePortThemeArgs !== null, "expected active-port /theme set suggestion
 assert(
 	activePortThemeArgs.items.some(item => item.value === "light"),
 	"active-port /theme set should complete loaded themes",
+);
+
+const activePortWebFetchInstallArgs = await activePortProvider.getSuggestions(["/webfetch install c"], 0, 19);
+assert(activePortWebFetchInstallArgs !== null, "expected active-port /webfetch install suggestions");
+assert(
+	activePortWebFetchInstallArgs.items.some(item => item.value === "crawl4ai"),
+	"/webfetch install should complete installable backend names",
+);
+assert(activePortWebFetchInstallArgs.prefix === "c", "/webfetch install should replace only the backend token");
+const activePortWebFetchInstallApply = activePortProvider.applyCompletion(
+	["/webfetch install c"],
+	0,
+	19,
+	activePortWebFetchInstallArgs.items.find(item => item.value === "crawl4ai")!,
+	activePortWebFetchInstallArgs.prefix,
+);
+assert(
+	activePortWebFetchInstallApply.lines.join("\n") === "/webfetch install crawl4ai",
+	"/webfetch install completion should keep the install subcommand",
 );
 
 let copiedPrompt = false;

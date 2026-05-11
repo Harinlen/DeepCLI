@@ -210,6 +210,7 @@ class AcpEventMapper:
                     title=event.title,
                     kind=cast(AcpToolKind, event.kind.value),
                     raw_input=event.raw_input,
+                    meta=event.meta,
                 ),
             )
 

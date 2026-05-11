@@ -1,5 +1,11 @@
 # LLMManager
 
+> **Quick header**
+> - **Role**: model/profile config, alias resolution, and role-based model routing.
+> - **Current code**: `kernel.agents.mustang.llm.*`.
+> - **Runtime owner**: Mustang runtime after `LLMProviderManager`.
+> - **Boundary**: chooses model/provider profile; provider transport details live in `llm_provider.md`.
+
 ## Purpose
 
 LLMManager 管理用户定义的 provider 配置，实现 `LLMProvider` Protocol，
@@ -79,7 +85,7 @@ llm:
 
 ---
 
-## 配置 Schema（`kernel/llm/config.py`）
+## 配置 Schema（`kernel/agents/mustang/llm/config.py`）
 
 ```python
 class ModelSpec(BaseModel):
@@ -192,7 +198,7 @@ one provider/model ref; when the ref changes, `current_used` roles and
 model aliases are retargeted to the new ref.
 
 In Supervisor router mode, model-management ACP methods are routed to
-the Primary Runtime, not handled by the Access Agent's local LLMManager.
+the Mustang Agent runtime, not handled by the Access Agent's local LLMManager.
 This keeps `/model` mutations, active session orchestrators, and the
 provider instance that will serve the next prompt in the same process.
 When `current_used.default` changes, SessionManager updates active
@@ -218,7 +224,7 @@ sessions that already have a different session-specific model.
 ## 文件布局
 
 ```
-kernel/llm/
+kernel/agents/mustang/llm/
   __init__.py      # LLMManager (Subsystem, 实现 LLMProvider + ModelHandler Protocol)
   types.py         # LLMChunk、PromptSection、Message、ToolSchema、ModelInfo
   config.py        # ProviderConfig、ModelSpec、ModelRef、LLMConfig（Pydantic schema）
@@ -226,7 +232,7 @@ kernel/llm/
 ```
 
 ```
-kernel/llm_provider/   # Provider 实现（内部，不对外暴露）
+kernel/agents/mustang/llm_provider/   # Provider 实现（内部，不对外暴露）
   __init__.py      # LLMProviderManager (Subsystem)
   base.py          # Provider ABC + discover_models()
   errors.py        # ProviderError、PromptTooLongError
@@ -245,7 +251,7 @@ kernel/llm_provider/   # Provider 实现（内部，不对外暴露）
 ## 启动顺序
 
 ```python
-# kernel/app.py
+# kernel/agents/access/app.py
 _CORE_SUBSYSTEMS = [
     ("provider",    LLMProviderManager),   # 先起：建 Provider 实例缓存
     ("llm",         LLMManager),           # 后起：读 config，调 get_provider() 预热缓存
@@ -275,7 +281,7 @@ _CORE_SUBSYSTEMS = [
 
 # LLMManager — `default_model` → `current_used` 重构
 
-Status: **pending**
+Status: **landed**
 
 ---
 
@@ -319,7 +325,7 @@ Vision 工具都通过 `llm_manager.model_for(role)` 取自己需要的模型。
 ### 新配置 schema
 
 ```python
-# kernel/llm/config.py
+# kernel/agents/mustang/llm/config.py
 
 class CurrentUsedConfig(BaseModel):
     """角色 → model ref 映射。`default` 是唯一必填角色。"""
@@ -335,7 +341,7 @@ class LLMConfig(BaseModel):
 ### LLMManager 内部状态
 
 ```python
-# kernel/llm/__init__.py
+# kernel/agents/mustang/llm/__init__.py
 
 async def startup(self) -> None:
     ...

@@ -18,13 +18,17 @@ class TavilySearchBackend(SearchBackend):
         return bool(os.getenv("TAVILY_API_KEY", "").strip())
 
     async def search(self, query: str, *, limit: int = 10) -> list[SearchResult]:
+        api_key = os.getenv("TAVILY_API_KEY", "").strip()
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
                 "https://api.tavily.com/search",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
                 json={
                     "query": query,
                     "max_results": min(limit, 20),
-                    "api_key": os.getenv("TAVILY_API_KEY", ""),
                     "include_raw_content": False,
                     "include_images": False,
                 },

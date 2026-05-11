@@ -1,5 +1,11 @@
 # Kernel History
 
+> **Quick header**
+> - **Role**: durable shipped-milestone ledger for Kernel work.
+> - **Current code root**: `src/kernel/kernel/`.
+> - **Owns**: what landed and which current doc owns the behavior.
+> - **Does not own**: detailed behavior, test logs, or future plans.
+
 This is the durable milestone map for shipped kernel work.  It records what
 landed and where to read the current design.  Keep low-level behavior in the
 subsystem docs rather than expanding this into a second progress log.
@@ -19,9 +25,9 @@ subsystem docs rather than expanding this into a second progress log.
 | Milestone | What Landed | Current Docs |
 |---|---|---|
 | SessionManager | SQLite session store, event persistence, FIFO prompt turns, cancellation, multi-connection broadcast. | [session.md](subsystems/session.md) |
-| Session ACP compliance | ACP `SessionInfo` shape, `_meta`, `updatedAt`, config options, modes, archive/rename/delete lifecycle actions. | [session.md](subsystems/session.md), [history/plans/session-acp-compliance-refactor.md](history/plans/session-acp-compliance-refactor.md) |
+| Session ACP compliance | ACP `SessionInfo` shape, `_meta`, `updatedAt`, config options, modes, archive/rename/delete lifecycle actions. | [session.md](subsystems/session.md), [subsystems/session/history/session-acp-compliance-refactor.md](subsystems/session/history/session-acp-compliance-refactor.md) |
 | Orchestrator | LLM/tool loop, history, prompt assembly, compaction, plan mode, cancellation hygiene. | [orchestrator.md](subsystems/orchestrator.md), [compaction.md](subsystems/compaction.md) |
-| Prompt alignment | PromptManager, file-backed prompt templates, CC-aligned tool descriptions, language section, MCP instructions. | [prompts.md](subsystems/prompts.md), [history/plans/prompt-alignment-with-cc.md](history/plans/prompt-alignment-with-cc.md) |
+| Prompt alignment | PromptManager, file-backed prompt templates, CC-aligned tool descriptions, language section, MCP instructions. | [prompts.md](subsystems/prompts.md), [subsystems/prompts/history/prompt-alignment-with-cc.md](subsystems/prompts/history/prompt-alignment-with-cc.md) |
 
 ## Tools, Authz, And Extensibility
 
@@ -43,15 +49,15 @@ subsystem docs rather than expanding this into a second progress log.
 
 | Milestone | What Landed | Current Docs |
 |---|---|---|
-| ACP namespace migration | DeepCLI extensions moved to `_mustang.agent/*`; temporary legacy aliases removed after CLI/probe migration. | [interfaces/protocol.md](interfaces/protocol.md), [history/plans/acp-acpx-schema-alignment-plan.md](history/plans/acp-acpx-schema-alignment-plan.md) |
+| ACP namespace migration | DeepCLI extensions moved to `_mustang.agent/*`; temporary legacy aliases removed after CLI/probe migration. | [interfaces/protocol.md](interfaces/protocol.md), [interfaces/protocol/history/acp-acpx-schema-alignment-plan.md](interfaces/protocol/history/acp-acpx-schema-alignment-plan.md) |
 | ACP `_meta` migration | Request `_meta` reaches schema models; session filters/worktree/archive/title metadata use `mustang.agent/*`; REPL execution updates are namespaced. | [interfaces/protocol.md](interfaces/protocol.md) |
-| Agent Control Plane Batch A | Shared runtime kinds, statuses, queue states, control operations, identity/status/result dataclasses, and `AgentRuntimeController`. No runtime control dispatch yet. | [history/plans/agent-control-plane.md](history/plans/agent-control-plane.md) |
+| Agent Control Plane Batch A | Shared runtime kinds, statuses, queue states, control operations, identity/status/result dataclasses, and `AgentRuntimeController`. No runtime control dispatch yet. | [architecture/history/agent-control-plane.md](architecture/history/agent-control-plane.md) |
 
 ## Refactors And Quality Work
 
 | Milestone | What Landed | Current Docs |
 |---|---|---|
-| Session module split | `SessionManager` moved out of monolithic `session/__init__.py`; session internals grouped by API/lifecycle/turns/client-stream/orchestration/persistence/runtime. | [session.md](subsystems/session.md), [history/plans/session-module-refactor-plan.md](history/plans/session-module-refactor-plan.md) |
+| Session module split | `SessionManager` moved out of monolithic `session/__init__.py`; session internals grouped by API/lifecycle/turns/client-stream/orchestration/persistence/runtime. | [session.md](subsystems/session.md), [subsystems/session/history/session-module-refactor-plan.md](subsystems/session/history/session-module-refactor-plan.md) |
 | Kernel file-length plan | Repo-wide Python file-length audit and batch plan. | [../plans/kernel-file-length-refactor-plan.md](../plans/kernel-file-length-refactor-plan.md) |
 
 ## Notes For Future Updates

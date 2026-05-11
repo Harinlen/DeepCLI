@@ -1,5 +1,11 @@
 # ToolManager — Design
 
+> **Quick header**
+> - **Role**: Mustang tool abstraction, registry, built-in tools, MCP adapter, and ToolContext.
+> - **Current code**: `kernel.agents.mustang.tools.*`.
+> - **Runtime owner**: Mustang runtime after MCP and before Skills/Hooks/Memory.
+> - **Boundary**: tool catalog and tool business logic only; ToolAuthorizer decides permission and Orchestrator executes.
+
 Status: **landed** — 全部实装。Phase 1–6 已完成（含 ToolSearchTool + deferred 层 + AgentTool + TaskManager）。
 
 > 前置阅读：
@@ -46,6 +52,7 @@ Claude Code 的 [`src/Tool.ts`](../../../../../projects/claude-code-main/src/Too
 | `preparePermissionMatcher` | ✅ `Tool` 接口 → `prepare_permission_matcher()` | Tool 提供"rule pattern 怎么匹 input"的闭包（FileEdit 用 glob 匹 path；Bash 用前缀匹 command），ToolAuthorizer 无法抽象这种 per-tool 领域逻辑 |
 | `renderToolResultMessage` | ✅ `Tool` 接口 → `display_payload()` | **Tool 是"渲染需要哪些结构化数据"的信息源**。不返回 ReactNode，而是返回 `ToolDisplayPayload` union（TextDisplay / DiffDisplay / LocationsDisplay / …），客户端按 payload 类型路由到自己的 renderer |
 | `isDestructive` | ✅ `Tool` 接口 → 独立 bool 字段 | 与 `ToolKind` 正交（edit kind 可能不破坏；execute kind 可能不破坏）。ToolAuthorizer 用此信号对不可逆操作用更严策略（allow_always 只对非 destructive 生效等） |
+| `isReadOnly(input)` | ✅ `Tool` 接口 → `is_read_only_call(input, ctx)` | Plan mode 的执行约束按**具体输入**判断，而不是按 schema/kind 裁剪工具池。Bash/PowerShell/Cmd 会基于命令风险判断，其他工具默认回落到 `kind.is_read_only` |
 | `contextModifier` | ✅ `Tool` 接口（在 `ToolCallResult` 上） | Tool 改了**不能编进 tool_result 喂 LLM** 的 session state（cwd、env、worktree path）时，用 modifier 显式告诉 Orchestrator。客户端同步走 ACP 事件，但下一个 tool 调用看到新 state 必须靠这个 |
 | `extractSearchText` | ❌ | transcript search 是客户端 feature，kernel 不做 |
 | `mcpMeta`, `isMcp`, `isLsp` | ✅ `Tool` 接口 | 由 `MCPAdapter` 填写，built-in 不动 |
@@ -64,7 +71,7 @@ Claude Code 的 [`src/Tool.ts`](../../../../../projects/claude-code-main/src/Too
 ### 3.1 接口（Python ABC）
 
 ```python
-# kernel/tools/tool.py
+# kernel/agents/mustang/tools/tool.py
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
@@ -233,6 +240,14 @@ class Tool(ABC, Generic[InputT, OutputT]):
     def is_read_only(self) -> bool:
         return self.kind.is_read_only
 
+    def is_read_only_call(self, input: InputT, ctx: RiskContext) -> bool:
+        """True when this concrete invocation is read-only.
+
+        Default returns ``self.is_read_only``. Tools with input-dependent
+        safety, especially shells and messaging tools, override this.
+        """
+        return self.is_read_only
+
     @property
     def is_concurrency_safe(self) -> bool:
         """Default: read-only tools are safe, others aren't.  Override when
@@ -393,7 +408,7 @@ class BashTool(Tool[BashInput, str]):
 ### 4.1 目录结构
 
 ```
-kernel/tools/
+kernel/agents/mustang/tools/
 ├── __init__.py            # ToolManager(Subsystem) + public exports
 ├── tool.py                # Tool ABC、ToolCallProgress/Result、ToolInputError
 ├── context.py             # ToolContext 定义
@@ -425,12 +440,14 @@ class ToolRegistry:
 
         Filters by:
           - FlagManager (tool disabled via config → excluded)
-          - Plan mode (write/edit tools excluded when active)
+          - Plan mode does **not** remove schemas. Claude Code keeps tools
+            visible and relies on prompt + per-input permission checks; Mustang
+            follows that model.
           - ctx.agent_whitelist (sub-agent tool scoping)
 
-        Ordering: core tools alphabetical, then deferred (name-only stubs),
-        then MCP tools alphabetical — keeps prompt-cache prefix stable
-        even when MCP pool churns (mirrors Claude Code tools.ts:345-390).
+        Ordering: core tools alphabetical, then deferred name-only entries.
+        Dynamic MCP tools default to deferred, so MCP churn affects the
+        deferred listing instead of the upfront schema list.
         """
 
 
@@ -489,9 +506,15 @@ class ToolManager(Subsystem):
 | `ToolSearch` | think | core | 解锁 deferred 工具的前置 |
 | `Agent` (Task) | other | core | 递归调 Orchestrator（见 §6） |
 
-Deferred 层已激活：ToolManager 按 `Tool.should_defer` 自动路由到 `deferred` 层，ToolSearchTool 解锁 deferred 工具的 schema。PlanMode 工具（EnterPlanMode / ExitPlanMode）将作为首批 deferred 消费者。
+Deferred 层已激活：ToolManager 按 `Tool.should_defer` 自动路由到 `deferred` 层，ToolSearchTool 解锁 deferred 工具的 schema。PlanMode 工具（EnterPlanMode / ExitPlanMode）、Web 工具、schedule/monitor 工具、动态 MCP tools 等默认走 deferred。
 
-### 4.5 REPL Tool
+### 4.5 Plan Mode Tool Visibility
+
+Mustang 对齐 Claude Code main：plan mode **不在 schema 层移除 mutating tools**。`ToolRegistry.snapshot(plan_mode=True)` 仍会让 `Bash` / `Edit` / `Write` / `TodoWrite` 等工具保持可见，避免模型在 planning 阶段失去完整能力地图。
+
+真正的执行限制在授权层：`ToolAuthorizer` 调 `tool.is_read_only_call(input, ctx)` 判断这一次调用是否 read-only。默认实现等同 `tool.kind.is_read_only`；shell 工具按具体命令风险判断，`Edit` / `Write` 只有当前 session plan file 例外可写，其他副作用在 plan mode 下拒绝。
+
+### 4.6 REPL Tool
 
 `REPL` 不是旧的 JSON batch dispatcher。当前实现位于
 [`src/kernel/kernel/agents/mustang/tools/builtin/repl_python.py`](../../../src/kernel/kernel/agents/mustang/tools/builtin/repl_python.py)，
@@ -619,7 +642,7 @@ mustang 的 ToolContext **刻意窄**：
 
 ## 6. 执行流水（Orchestrator.ToolExecutor 的改写）
 
-当前 [`src/kernel/kernel/agents/mustang/orchestrator/tool_executor.py`](../../../src/kernel/kernel/agents/mustang/orchestrator/tool_executor.py) 是 Phase 1 stub。真实实现分四段：
+[`src/kernel/kernel/agents/mustang/orchestrator/tool_executor.py`](../../../src/kernel/kernel/agents/mustang/orchestrator/tool_executor.py) 是当前 ToolExecutor 入口。执行流水分四段：
 
 ```python
 async def _run_impl(self, tool_calls, on_permission, plan_mode):
@@ -995,7 +1018,7 @@ ToolManager 要做的是**在接口上预留好数据通道**。
 
 | 特性 | 归属子系统 | ToolManager 侧需要做的 |
 |---|---|---|
-| **Speculative bash classifier**（输入 Bash 命令时后台先跑分类器，2s race timeout，high-confidence 安全命令自动 approve 不弹 UI） | ToolAuthorizer | **职责拆分（对齐 Claude Code bashPermissions.ts + dangerousPatterns.ts）**：1) BashTool 的 `default_risk(input, ctx)` 独占 argv 解析 + safe/dangerous 清单（`dangerousPatterns.ts` 等价物），返回 low/medium/high + allow/ask/deny；2) ToolAuthorizer 的 BashClassifier 组件**只**含 LLMJudge（对齐 `bashClassifier.ts`），当 `default_risk` 返 ask 且 `tool.name == "Bash"` 时由 authorizer 用 LLM 做二次仲裁；3) 触发方式是 tool name 字符串相等（抄 CC，不用 isinstance / class flag），name constant 定义在 `kernel/tool_authz/constants.py` |
+| **Speculative bash classifier**（输入 Bash 命令时后台先跑分类器，2s race timeout，high-confidence 安全命令自动 approve 不弹 UI） | ToolAuthorizer | **职责拆分（对齐 Claude Code bashPermissions.ts + dangerousPatterns.ts）**：1) BashTool 的 `default_risk(input, ctx)` 独占 argv 解析 + safe/dangerous 清单（`dangerousPatterns.ts` 等价物），返回 low/medium/high + allow/ask/deny；2) ToolAuthorizer 的 BashClassifier 组件**只**含 LLMJudge（对齐 `bashClassifier.ts`），当 `default_risk` 返 ask 且 `tool.name == "Bash"` 时由 authorizer 用 LLM 做二次仲裁；3) 触发方式是 tool name 字符串相等（抄 CC，不用 isinstance / class flag），name constant 定义在 `kernel/agents/mustang/tool_authz/constants.py` |
 | **prompt cache 稳定前缀**（built-in 字母序 + MCP 字母序）| ToolManager 内部 | `ToolRegistry.snapshot()` 保证排序稳定 (§ 4.2 已写) |
 | **`deniedTools: ["mcp__slack"]` server-level deny** | ToolAuthorizer | ToolManager 保证 MCP 工具名是 `mcp__<server>__<tool>` 格式；ToolAuthorizer 的 rule parser 识别 server-only rule (§ 12.5) |
 | **Non-interactive 降级（background agent 不能弹 UI）** | ToolAuthorizer | ToolContext 里把 `ask` 转 `deny` 的判断走 ToolAuthorizer 的 `shouldAvoidPermissionPrompts` 字段，ToolManager 不参与 |
@@ -1128,7 +1151,7 @@ Claude Code 源码里无直接答案、需要 mustang 自己决定的：
 
 # Web Tools — WebFetchTool + WebSearchTool 设计
 
-Status: **pending**
+Status: **landed**
 
 > 前置阅读：
 > - Tool ABC：[tool-manager.md](tools.md) § 3
@@ -1277,7 +1300,7 @@ input_schema = {
 ### 3.2 FetchBackend ABC
 
 ```python
-# kernel/tools/web/fetch_backends/base.py
+# kernel/agents/mustang/tools/web/fetch_backends/base.py
 
 @dataclass(frozen=True, slots=True)
 class FetchResult:
@@ -1559,7 +1582,7 @@ Playwright（如已安装）
 ```
 
 ```python
-# kernel/tools/web/fetch_backends/__init__.py
+# kernel/agents/mustang/tools/web/fetch_backends/__init__.py
 
 _BACKEND_PRIORITY: list[type[FetchBackend]] = [
     FirecrawlFetchBackend,    # 最强：JS 渲染 + anti-bot
@@ -1629,7 +1652,7 @@ def _looks_like_anti_bot(result: FetchResult) -> bool:
 
 ### 3.5 安全层
 
-#### 3.5.1 DomainFilter（`kernel/tools/web/domain_filter.py`）
+#### 3.5.1 DomainFilter（`kernel/agents/mustang/tools/web/domain_filter.py`）
 
 从 archived daemon 的 `domain_filter.py` 迁移，增强：
 
@@ -1723,6 +1746,10 @@ Main content in Markdown...
 - JSON API → 原始 body，不做转换
 - 二进制文件 → 存磁盘，返回：`Saved 2.3 MB to /tmp/mustang-fetch/<hash>.pdf`
 - 尾行标注实际使用的 backend
+- `ToolCallResult.meta["mustang.agent/toolBackend"]` 必须标注实际 backend，CLI
+  在 tool header 中显示 `backend=<name>`。
+- `Tool.execution_metadata()` 在 pending 阶段标注 effective backend
+  preference；completed 阶段仍以 `ToolCallResult.meta` 的实际 backend 为准。
 
 ### 3.8 Display Payload
 
@@ -1776,7 +1803,7 @@ input_schema = {
 ### 4.2 SearchBackend ABC
 
 ```python
-# kernel/tools/web/search_backends/base.py
+# kernel/agents/mustang/tools/web/search_backends/base.py
 
 @dataclass(frozen=True, slots=True)
 class SearchResult:
@@ -2087,7 +2114,7 @@ class DuckDuckGoSearchBackend(SearchBackend):
 ### 4.5 Search Fallback Chain
 
 ```python
-# kernel/tools/web/search_backends/__init__.py
+# kernel/agents/mustang/tools/web/search_backends/__init__.py
 
 _BACKEND_PRIORITY: list[type[SearchBackend]] = [
     BraveSearchBackend,
@@ -2146,6 +2173,11 @@ Note: Dates in snippets below are from the original pages, not the current date.
 (10 results via brave)
 ```
 
+`WebSearchTool` 也必须在 `ToolCallResult.meta["mustang.agent/toolBackend"]`
+中标注实际 search backend。凡是未来新增“可选择/可 fallback 后端”的 Tool，
+都沿用同一个 meta key，让 CLI 通用展示层显示 pending backend preference
+和 completed actual backend。
+
 ### 4.7 权限模型
 
 ```python
@@ -2163,7 +2195,7 @@ def default_risk(self, input, ctx) -> PermissionSuggestion:
 ### 5.1 模块结构
 
 ```
-kernel/tools/
+kernel/agents/mustang/tools/
 ├── web/
 │   ├── __init__.py
 │   ├── domain_filter.py          # SSRF 防护
@@ -2871,7 +2903,7 @@ Status: **landed** — 全部实装。
 > 2026-04-30 architecture note: the landed in-session / sub-agent resume behavior
 > remains current, but the older ACP cross-session route described in this appendix
 > is superseded for future work by
-> [`agent-control-plane.md`](../history/plans/agent-control-plane.md). New durable
+> [`agent-control-plane.md`](../architecture/history/agent-control-plane.md). New durable
 > Agent-to-Agent communication must go through Agent Hub.Router; do not extend
 > `SessionManager.deliver_message()` as the primary multi-agent transport.
 
@@ -2973,7 +3005,7 @@ Sub-agent 的 Orchestrator 在每轮 query loop 开头（STEP 0），检查自�
 > Superseded: do not extend this path for future durable Agent-to-Agent
 > messaging. The landed compatibility behavior may remain as a session reminder
 > bridge, but new routing must use Agent Hub.Router from
-> [`agent-control-plane.md`](../history/plans/agent-control-plane.md).
+> [`agent-control-plane.md`](../architecture/history/agent-control-plane.md).
 
 Claude Code 用 UDS 做同机跨 session 通信。DeepCLI 的 kernel 已经管理
 所有 session（SessionManager._sessions），天然支持内部路由：

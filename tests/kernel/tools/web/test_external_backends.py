@@ -185,6 +185,35 @@ async def test_parallel_and_tavily_fetch_empty_and_success(monkeypatch: pytest.M
     assert (await TavilyFetchBackend().fetch("https://empty.test")).error == "no results from Tavily"
 
 
+async def test_tavily_fetch_uses_bearer_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+    calls = _patch_client(monkeypatch, lambda *_: _json_response({"results": []}))
+
+    await TavilyFetchBackend().fetch("https://tavily.test")
+
+    assert calls[0][1] == "https://api.tavily.com/extract"
+    assert calls[0][2]["headers"]["Authorization"] == "Bearer tvly-test"
+    assert "api_key" not in calls[0][2]["json"]
+
+
+async def test_tavily_fetch_surfaces_432_response_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_client(
+        monkeypatch,
+        lambda *_: httpx.Response(
+            432,
+            json={"error": "Plan Limit Exceeded"},
+            request=httpx.Request("POST", "https://api.tavily.com/extract"),
+        ),
+    )
+
+    result = await TavilyFetchBackend().fetch("https://page.test")
+
+    assert result.status_code == 432
+    assert result.error is not None
+    assert "Plan Limit Exceeded" in result.error
+    assert "Extract" in result.error
+
+
 @pytest.mark.parametrize(
     ("env_name", "backend"),
     [
@@ -278,6 +307,7 @@ async def test_firecrawl_google_parallel_tavily_and_xai_search(
     monkeypatch.setenv("GOOGLE_CSE_ID", "cse-id")
     monkeypatch.setenv("PARALLEL_API_KEY", "parallel-key")
     monkeypatch.setenv("PARALLEL_SEARCH_MODE", "fast")
+    monkeypatch.setenv("TAVILY_API_KEY", "tavily-key")
     monkeypatch.setenv("XAI_API_KEY", "xai-key")
     responses = [
         _json_response(
@@ -312,6 +342,8 @@ async def test_firecrawl_google_parallel_tavily_and_xai_search(
     assert calls[1][2]["params"]["key"] == "google-key"
     assert calls[2][2]["json"]["mode"] == "fast"
     assert calls[3][1] == "https://api.tavily.com/search"
+    assert calls[3][2]["headers"]["Authorization"] == "Bearer tavily-key"
+    assert "api_key" not in calls[3][2]["json"]
     assert calls[4][1] == "https://api.x.ai/v1/chat/completions"
     assert firecrawl[0].snippet == "fire"
     assert google[0].url == "https://g.test"

@@ -211,16 +211,6 @@ assert(calls.includes("python:print(1):context"), "$ should route through sessio
 await editor.onSubmit?.("$$ x = 1");
 assert(calls.includes("python:x = 1:excluded"), "$$ should exclude python output from context");
 
-let submittedPrompt = "";
-ctx.onInputCallback = (submission: { text: string }) => {
-	submittedPrompt = submission.text;
-	calls.push(`prompt:${submission.text}`);
-};
-await editor.onSubmit?.("/auth");
-assert(calls.some(item => item === "warning:/auth is not wired in the CLI TUI yet."), "/auth should fail locally until wired");
-assert(submittedPrompt === "", "/auth must not fall through to the LLM prompt path");
-ctx.onInputCallback = undefined;
-
 ctx.session.isBashRunning = true;
 editor.onEscape?.();
 assert(calls.includes("abort-bash"), "Escape should cancel running bash command");
@@ -336,6 +326,208 @@ await executeBuiltinSlashCommand("/model list", {
 });
 assert(modelCalls.includes("warning:No models available. Use /model add to add a model."), "/model list should warn directly when no models exist");
 assert(!modelCalls.includes("model-selector"), "/model list should not open an empty selector");
+
+const webfetchCalls: string[] = [];
+await executeBuiltinSlashCommand("/webfetch backend", {
+	ctx: {
+		showWebFetchBackendSelector: () => webfetchCalls.push("webfetch-selector"),
+	},
+});
+assert(webfetchCalls.includes("webfetch-selector"), "/webfetch backend should open the backend selector");
+webfetchCalls.length = 0;
+await executeBuiltinSlashCommand("/webfetch backend httpx", {
+	ctx: {
+		session: {
+			setWebFetchBackend: async (backend: string, runSetup: boolean) => {
+				webfetchCalls.push(`set:${backend}:${runSetup}`);
+				return { backend, changed: true, setupRequired: false, message: `WebFetch backend set to ${backend}.` };
+			},
+		},
+		showStatus: (message: string) => webfetchCalls.push(`status:${message}`),
+	},
+});
+assert(webfetchCalls.includes("set:httpx:false"), "/webfetch backend <name> should call the session backend setter");
+assert(webfetchCalls.includes("status:WebFetch backend set to httpx."), "/webfetch backend <name> should report success");
+webfetchCalls.length = 0;
+await executeBuiltinSlashCommand("/webfetch backend tavily", {
+	ctx: {
+		session: {
+			setWebFetchBackend: async (backend: string, runSetup: boolean, apiKey?: string) => {
+				webfetchCalls.push(`set:${backend}:${runSetup}:${apiKey ?? ""}`);
+				if (!apiKey) {
+					return {
+						backend,
+						changed: false,
+						credentialRequired: true,
+						credentialRequest: { prompt: "Enter Tavily API key", envKey: "TAVILY_API_KEY" },
+					};
+				}
+				return { backend, changed: true, credentialRequired: false, message: `WebFetch backend set to ${backend}.` };
+			},
+		},
+		showHookInput: async (title: string, placeholder?: string) => {
+			webfetchCalls.push(`input:${title}:${placeholder}`);
+			return "tvly-test";
+		},
+		showStatus: (message: string) => webfetchCalls.push(`status:${message}`),
+		showError: (message: string) => webfetchCalls.push(`error:${message}`),
+		showWarning: (message: string) => webfetchCalls.push(`warning:${message}`),
+	},
+});
+assert(webfetchCalls.includes("input:Enter Tavily API key:TAVILY_API_KEY"), "/webfetch backend should prompt for missing API key");
+assert(webfetchCalls.includes("set:tavily:false:tvly-test"), "/webfetch backend should retry with entered API key");
+webfetchCalls.length = 0;
+await executeBuiltinSlashCommand("/webfetch backend tavily", {
+	ctx: {
+		session: {
+			setWebFetchBackend: async (backend: string, runSetup: boolean, apiKey?: string) => {
+				webfetchCalls.push(`set:${backend}:${runSetup}:${apiKey ?? ""}`);
+				if (!apiKey) {
+					return {
+						backend,
+						changed: false,
+						credentialRequired: true,
+						credentialRequest: { prompt: "Enter Tavily API key", envKey: "TAVILY_API_KEY", label: "Tavily API key" },
+						message: "Tavily API key validation failed.",
+					};
+				}
+				return { backend, changed: true, credentialRequired: false, message: `WebFetch backend set to ${backend}.` };
+			},
+		},
+		showHookInput: async (title: string, placeholder?: string) => {
+			webfetchCalls.push(`input:${title}:${placeholder}`);
+			return "tvly-replacement";
+		},
+		showStatus: (message: string) => webfetchCalls.push(`status:${message}`),
+		showError: (message: string) => webfetchCalls.push(`error:${message}`),
+		showWarning: (message: string) => webfetchCalls.push(`warning:${message}`),
+	},
+});
+assert(webfetchCalls.includes("error:Tavily API key validation failed."), "/webfetch backend should explain a configured key validation failure");
+assert(webfetchCalls.includes("input:Enter replacement Tavily API key:TAVILY_API_KEY"), "/webfetch backend should then ask for a replacement key");
+assert(webfetchCalls.includes("set:tavily:false:tvly-replacement"), "/webfetch backend should retry with replacement API key");
+webfetchCalls.length = 0;
+await executeBuiltinSlashCommand("/webfetch backend crawl4ai", {
+	ctx: {
+		session: {
+			setWebFetchBackend: async (backend: string, runSetup: boolean) => {
+				webfetchCalls.push(`set:${backend}:${runSetup}`);
+				if (!runSetup) {
+					return {
+						backend,
+						changed: false,
+						setupRequired: true,
+						setupPlan: { commands: ["uv pip install --python /deepcli/python crawl4ai"] },
+					};
+				}
+				return { backend, changed: true, setupRequired: false, message: `WebFetch backend set to ${backend}.` };
+			},
+		},
+		showHookConfirm: async (title: string) => {
+			webfetchCalls.push(`confirm:${title}`);
+			return true;
+		},
+		showStatus: (message: string) => webfetchCalls.push(`status:${message}`),
+		setWorkingMessage: (message?: string) => webfetchCalls.push(`working:${message ?? ""}`),
+		ensureLoadingAnimation: () => webfetchCalls.push("loader"),
+		loadingAnimation: { stop: () => webfetchCalls.push("loader-stop") },
+		statusContainer: { clear: () => webfetchCalls.push("status-clear") },
+		showError: (message: string) => webfetchCalls.push(`error:${message}`),
+		showWarning: (message: string) => webfetchCalls.push(`warning:${message}`),
+	},
+});
+assert(webfetchCalls.includes("confirm:Install crawl4ai"), "/webfetch backend setup should ask before installing dependencies");
+assert(webfetchCalls.includes("status:Installing WebFetch backend crawl4ai..."), "/webfetch backend setup should show install status");
+assert(webfetchCalls.includes("working:Installing WebFetch backend crawl4ai..."), "/webfetch backend setup should show working loader text");
+assert(webfetchCalls.includes("loader"), "/webfetch backend setup should mount a loader while installing");
+assert(webfetchCalls.includes("set:crawl4ai:true"), "/webfetch backend setup should retry with runSetup");
+assert(webfetchCalls.includes("loader-stop"), "/webfetch backend setup should stop the loader");
+assert(webfetchCalls.includes("status:WebFetch backend set to crawl4ai."), "/webfetch backend setup should report success after install");
+webfetchCalls.length = 0;
+await executeBuiltinSlashCommand("/webfetch install crawl4ai", {
+	ctx: {
+		session: {
+			setWebFetchBackend: async (backend: string, runSetup: boolean) => {
+				webfetchCalls.push(`install-set:${backend}:${runSetup}`);
+				return { backend, changed: false, setupRequired: false, message: `WebFetch backend set to ${backend}.` };
+			},
+		},
+		showHookConfirm: async (title: string) => {
+			webfetchCalls.push(`install-confirm:${title}`);
+			return true;
+		},
+		showStatus: (message: string) => webfetchCalls.push(`status:${message}`),
+		setWorkingMessage: (message?: string) => webfetchCalls.push(`working:${message ?? ""}`),
+		ensureLoadingAnimation: () => webfetchCalls.push("loader"),
+		loadingAnimation: { stop: () => webfetchCalls.push("loader-stop") },
+		statusContainer: { clear: () => webfetchCalls.push("status-clear") },
+		showError: (message: string) => webfetchCalls.push(`error:${message}`),
+		showWarning: (message: string) => webfetchCalls.push(`warning:${message}`),
+	},
+});
+assert(webfetchCalls.includes("install-confirm:Install crawl4ai"), "/webfetch install should ask before repairing dependencies");
+assert(webfetchCalls.includes("install-set:crawl4ai:true"), "/webfetch install should run backend setup");
+assert(webfetchCalls.includes("status:Installing WebFetch backend crawl4ai..."), "/webfetch install should show install status");
+assert(webfetchCalls.includes("loader-stop"), "/webfetch install should stop loader");
+webfetchCalls.length = 0;
+await executeBuiltinSlashCommand("/webfetch install", {
+	ctx: {
+		session: {
+			listWebFetchBackends: async () => ({
+				options: [
+					{ id: "crawl4ai", setupRequired: true },
+					{ id: "httpx", setupRequired: false },
+				],
+			}),
+			setWebFetchBackend: async (backend: string, runSetup: boolean) => {
+				webfetchCalls.push(`install-default-set:${backend}:${runSetup}`);
+				return { backend, changed: false, setupRequired: false, message: `WebFetch backend set to ${backend}.` };
+			},
+		},
+		showHookConfirm: async (title: string) => {
+			webfetchCalls.push(`install-default-confirm:${title}`);
+			return true;
+		},
+		showStatus: (message: string) => webfetchCalls.push(`status:${message}`),
+		setWorkingMessage: (message?: string) => webfetchCalls.push(`working:${message ?? ""}`),
+		ensureLoadingAnimation: () => webfetchCalls.push("loader"),
+		loadingAnimation: { stop: () => webfetchCalls.push("loader-stop") },
+		statusContainer: { clear: () => webfetchCalls.push("status-clear") },
+		showError: (message: string) => webfetchCalls.push(`error:${message}`),
+		showWarning: (message: string) => webfetchCalls.push(`warning:${message}`),
+	},
+});
+assert(webfetchCalls.includes("install-default-confirm:Install crawl4ai"), "/webfetch install should default to the installable backend");
+assert(webfetchCalls.includes("install-default-set:crawl4ai:true"), "/webfetch install should run setup after selecting a backend");
+webfetchCalls.length = 0;
+await executeBuiltinSlashCommand("/webfetch config", {
+	ctx: {
+		showWebFetchConfigSelector: () => webfetchCalls.push("webfetch-config-selector"),
+	},
+});
+assert(webfetchCalls.includes("webfetch-config-selector"), "/webfetch config should open the interactive config selector");
+webfetchCalls.length = 0;
+await executeBuiltinSlashCommand("/webfetch config tavily.api_key", {
+	ctx: {
+		session: {
+			setWebFetchConfig: async (path: string, value: string) => {
+				webfetchCalls.push(`config:${path}:${value}`);
+				return { backend: "tavily", backends: { tavily: { api_key: "configured" } } };
+			},
+		},
+		showHookInput: async (title: string, placeholder?: string) => {
+			webfetchCalls.push(`input:${title}:${placeholder}`);
+			return "tvly-config";
+		},
+		showStatus: (message: string) => webfetchCalls.push(`status:${message}`),
+		showError: (message: string) => webfetchCalls.push(`error:${message}`),
+		showWarning: (message: string) => webfetchCalls.push(`warning:${message}`),
+		chatContainer: { addChild: () => undefined },
+		ui: { requestRender: () => undefined },
+	},
+});
+assert(webfetchCalls.includes("input:Enter tavily API key:TAVILY_API_KEY"), "/webfetch config <backend>.api_key should prompt");
+assert(webfetchCalls.includes("config:tavily.api_key:tvly-config"), "/webfetch config api_key should send entered key through ACP");
 
 const themeCalls: string[] = [];
 const themeCtx = {

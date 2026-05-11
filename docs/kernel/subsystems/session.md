@@ -1,6 +1,12 @@
 # SessionManager
 
-`SessionManager` is the Primary Agent Runtime's durable conversation
+> **Quick header**
+> - **Role**: durable Mustang session lifecycle, turns, replay, permissions, and client stream.
+> - **Current code**: `kernel.agents.mustang.sessions.*`.
+> - **Runtime owner**: Mustang runtime; Access routes proxy through Agent Hub in supervised mode.
+> - **Boundary**: session truth and turn serialization; orchestrator owns model/tool loop internals.
+
+`SessionManager` is the Mustang Agent runtime's durable conversation
 subsystem.  It implements the ACP session contract after the protocol layer
 has already decoded JSON-RPC frames into typed request objects.
 
@@ -12,7 +18,7 @@ logic, or process supervision.
 ```text
 Access Agent
   -> Agent Hub.Router
-  -> Primary Agent Runtime
+  -> Mustang Agent (`primary`)
   -> AgentSessionRuntimeService
   -> SessionManager
   -> Orchestrator
@@ -55,7 +61,7 @@ Current storage is SQLite, not the old JSONL/index design.
         └── <hash>.txt
 ```
 
-For the default Primary Agent, the Supervisor passes:
+For the default Mustang Agent instance, the Supervisor passes:
 
 ```text
 ~/.deepcli/agents/primary/sessions/sessions.db

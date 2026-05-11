@@ -1,6 +1,12 @@
 # GitManager + EnterWorktree / ExitWorktree + Git Context Injection
 
-> **Status**: pending
+> **Quick header**
+> - **Role**: git context injection and worktree tool coordination.
+> - **Current code**: `kernel.agents.mustang.git.*`, `tools/builtin/enter_worktree.py`, `tools/builtin/exit_worktree.py`.
+> - **Runtime owner**: Mustang runtime, loaded after ToolManager.
+> - **Boundary**: local git/worktree state only; session cwd persistence lives in `sessions/`.
+
+> **Status**: landed
 > **Phase**: TBD
 > **Prerequisites**: None (all infrastructure in place)
 > **CC Reference Files**:
@@ -252,7 +258,7 @@ Git 不可用时 → 工具不存在 → LLM 不会尝试调用 → 不浪费 to
 ### 3.2 GitManager 职责
 
 ```
-kernel/git/
+kernel/agents/mustang/git/
 ├── __init__.py          # GitManager Subsystem
 ├── types.py             # GitContext, WorktreeSession dataclasses
 ├── executor.py          # 底层 git 命令执行 (async subprocess + timeout)
@@ -282,7 +288,7 @@ kernel/git/
 | 维度 | Claude Code | DeepCLI |
 |------|-------------|---------|
 | **进程模型** | 单进程 CLI | kernel 服务端 + 多 session |
-| **Git 操作归属** | `utils/git.ts` + `utils/worktree.ts` 散落 | `kernel/git/` 集中 Subsystem |
+| **Git 操作归属** | `utils/git.ts` + `utils/worktree.ts` 散落 | `kernel/agents/mustang/git/` 集中 Subsystem |
 | **CWD 语义** | `process.chdir()` 全局 | per-session `_cwd`，不修改 OS CWD |
 | **Prompt 缓存** | `systemPromptSections` 注册表 | `PromptBuilder` per-turn 重建 |
 | **Worktree 路径** | `.claude/worktrees/<slug>/` | `.mustang/worktrees/<slug>/` |
@@ -301,7 +307,7 @@ kernel/git/
 
 ### Milestone 1: GitManager Subsystem + Git Context
 
-**新包**: `kernel/git/`
+**新包**: `kernel/agents/mustang/git/`
 
 #### 4.1.1 types.py — 数据类型
 
@@ -714,7 +720,7 @@ if final_result.context_modifier is not None:
 
 ### Milestone 3: EnterWorktreeTool（含 sparse checkout）
 
-**新文件**: `kernel/tools/builtin/enter_worktree.py`
+**新文件**: `kernel/agents/mustang/tools/builtin/enter_worktree.py`
 
 **参数**:
 ```python
@@ -892,7 +898,7 @@ async def remove_worktree(git_mgr: GitManager, ws: WorktreeSession) -> None:
 
 ### Milestone 4: ExitWorktreeTool
 
-**新文件**: `kernel/tools/builtin/exit_worktree.py`
+**新文件**: `kernel/agents/mustang/tools/builtin/exit_worktree.py`
 
 **参数** (CC 对齐):
 ```python
@@ -959,7 +965,7 @@ async def call(self, input, ctx) -> AsyncGenerator:
 Session 重连时，从 DB 恢复 worktree 状态，Orchestrator cwd
 自动切回 worktree 目录。
 
-**改动范围**: `kernel/git/__init__.py` + `kernel/session/__init__.py`
+**改动范围**: `kernel/agents/mustang/git/__init__.py` + `kernel/agents/mustang/sessions/__init__.py`
 
 **GitManager 新增方法**:
 
@@ -1028,7 +1034,7 @@ ACP session 创建时可通过 `_meta` 扩展字段指定 worktree 参数，
 session 从一开始就运行在 worktree 中（等价于 CC 的 `--worktree`
 CLI flag）。
 
-**改动范围**: `kernel/protocol/` + `kernel/session/__init__.py`
+**改动范围**: `kernel/core/protocol/` + `kernel/agents/mustang/sessions/__init__.py`
 
 **ACP 扩展**:
 
@@ -1093,12 +1099,12 @@ if worktree_meta and git_mgr is not None and git_mgr.available:
 
 | 文件 | 改动 |
 |------|------|
-| `kernel/git/__init__.py` | **新增** — GitManager Subsystem |
-| `kernel/git/types.py` | **新增** — GitContext, WorktreeSession |
-| `kernel/git/executor.py` | **新增** — run / run_ok (GitManager 方法) |
-| `kernel/git/context.py` | **新增** — build_git_context |
-| `kernel/git/store.py` | **新增** — WorktreeStore (SQLite `kernel.db`) |
-| `kernel/git/worktree.py` | **新增** — validate_slug / find_git_root / create / remove / count |
+| `kernel/agents/mustang/git/__init__.py` | **新增** — GitManager Subsystem |
+| `kernel/agents/mustang/git/types.py` | **新增** — GitContext, WorktreeSession |
+| `kernel/agents/mustang/git/executor.py` | **新增** — run / run_ok (GitManager 方法) |
+| `kernel/agents/mustang/git/context.py` | **新增** — build_git_context |
+| `kernel/agents/mustang/git/store.py` | **新增** — WorktreeStore (SQLite `kernel.db`) |
+| `kernel/agents/mustang/git/worktree.py` | **新增** — validate_slug / find_git_root / create / remove / count |
 | `tools/builtin/enter_worktree.py` | **新增** — EnterWorktreeTool |
 | `tools/builtin/exit_worktree.py` | **新增** — ExitWorktreeTool |
 | `tools/context.py` | **改动** — 加 `git_manager` 字段 |

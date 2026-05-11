@@ -24,6 +24,22 @@ const MODEL_ACTIONS: Item[] = [
 	{ value: "use", label: "use", description: "Set current-used role" },
 ];
 
+const WEBFETCH_ACTIONS: Item[] = [
+	{ value: "backend", label: "backend", description: "Choose WebFetch backend" },
+	{ value: "config", label: "config", description: "Show or set backend config" },
+	{ value: "install", label: "install", description: "Install backend dependencies" },
+];
+
+const WEBFETCH_BACKENDS: Item[] = [
+	{ value: "auto", label: "auto", description: "Use fallback order" },
+	{ value: "httpx", label: "httpx", description: "Direct HTTP fetch" },
+	{ value: "crawl4ai", label: "crawl4ai", description: "Local browser rendering" },
+	{ value: "firecrawl", label: "firecrawl", description: "External service" },
+	{ value: "parallel", label: "parallel", description: "External service" },
+	{ value: "exa", label: "exa", description: "External service" },
+	{ value: "tavily", label: "tavily", description: "External service" },
+];
+
 const THEME_ACTIONS: Item[] = [
 	{ value: "current", label: "current", description: "Show current theme" },
 	{ value: "list", label: "list", description: "List available themes" },
@@ -36,7 +52,6 @@ const KERNEL_ACTIONS: Item[] = [
 ];
 
 export const BUILTIN_SLASH_COMMANDS: SlashCommand[] = [
-	{ name: "auth", description: "Manage secrets and auth values" },
 	{ name: "clear", description: "Clear the current conversation view" },
 	{ name: "compact", description: "Compact conversation context" },
 	{ name: "cost", description: "Show usage and cost" },
@@ -49,6 +64,7 @@ export const BUILTIN_SLASH_COMMANDS: SlashCommand[] = [
 	{ name: "quit", description: "Exit DeepCLI" },
 	{ name: "session", description: "List, resume, or delete sessions", getArgumentCompletions: completeSessionArguments },
 	{ name: "theme", description: "Show or switch theme", getArgumentCompletions: completeThemeArguments },
+	{ name: "webfetch", description: "Manage WebFetch backend", getArgumentCompletions: completeWebFetchArguments },
 ];
 
 export async function loadSlashCommands(): Promise<SlashCommand[]> {
@@ -68,6 +84,15 @@ function completeModelArguments(argumentPrefix: string): Item[] | null {
 	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
 	if (argumentPrefix.includes(" ")) return null;
 	return filterCompletions(subcommand, MODEL_ACTIONS);
+}
+
+function completeWebFetchArguments(argumentPrefix: string): Item[] | null {
+	const [subcommand = "", value = ""] = argumentPrefix.split(/\s+/, 2);
+	if (argumentPrefix.includes(" ") && (subcommand === "backend" || subcommand === "install")) {
+		return filterCompletions(value, WEBFETCH_BACKENDS);
+	}
+	if (argumentPrefix.includes(" ")) return null;
+	return filterCompletions(subcommand, WEBFETCH_ACTIONS);
 }
 
 function completePlanArguments(argumentPrefix: string): Item[] | null {

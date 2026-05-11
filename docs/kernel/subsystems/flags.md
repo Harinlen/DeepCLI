@@ -1,5 +1,11 @@
 # FlagManager
 
+> **Quick header**
+> - **Role**: startup-frozen feature and transport/protocol switches.
+> - **Current code**: `kernel.core.flags.*`, plus flag sections registered by owners.
+> - **Lifecycle**: bootstrap service, fatal on startup failure, not a `Subsystem`.
+> - **Boundary**: flags select boot shape; ConfigManager owns runtime business settings.
+
 ## Purpose
 
 FlagManager 是 kernel 的 **bootstrap 服务**，最优先加载。它管理
@@ -40,7 +46,7 @@ FlagManager 是 kernel 的 **bootstrap 服务**，最优先加载。它管理
 子系统注册的。它专门管"哪些**可选子系统**在这次启动时启用"。
 
 ```python
-# kernel/flags/kernel_flags.py
+# kernel/core/flags/kernel_flags.py
 class KernelFlags(BaseModel):
     """Which optional subsystems are enabled.
 

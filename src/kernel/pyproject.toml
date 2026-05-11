@@ -27,8 +27,8 @@ dependencies = [
 [project.optional-dependencies]
 pdf = ["pymupdf>=1.24"]
 web-readability = ["readability-lxml>=0.8", "lxml>=5.0"]
-web-browser = ["playwright>=1.40"]
-web-all = ["readability-lxml>=0.8", "lxml>=5.0", "playwright>=1.40"]
+web-crawl4ai = ["crawl4ai>=0.6.3"]
+web-all = ["readability-lxml>=0.8", "lxml>=5.0", "crawl4ai>=0.6.3"]
 
 [build-system]
 requires = ["hatchling"]

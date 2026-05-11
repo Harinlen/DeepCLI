@@ -37,22 +37,26 @@ class TestSpawnBackground:
     async def test_returns_task_id(self, tmp_path: Path) -> None:
         ctx = _make_ctx(tmp_path)
         tool = BashTool()
-        results = []
-        async for event in tool.call(
-            {"command": "echo hello", "run_in_background": True},
-            ctx,
-        ):
-            results.append(event)
+        try:
+            results = []
+            async for event in tool.call(
+                {"command": "echo hello", "run_in_background": True},
+                ctx,
+            ):
+                results.append(event)
 
-        assert len(results) == 1
-        result = results[0]
-        assert result.data["task_id"].startswith("b")
-        assert result.data["status"] == "running"
+            assert len(results) == 1
+            result = results[0]
+            assert result.data["task_id"].startswith("b")
+            assert result.data["status"] == "running"
 
-        # Task should be registered
-        task = ctx.tasks.get(result.data["task_id"])
-        assert task is not None
-        assert task.status == TaskStatus.running
+            # Task should be registered
+            task = ctx.tasks.get(result.data["task_id"])
+            assert task is not None
+            assert task.status == TaskStatus.running
+        finally:
+            assert ctx.tasks is not None
+            await ctx.tasks.shutdown()
 
     @pytest.mark.asyncio
     async def test_background_disabled_when_no_registry(self, tmp_path: Path) -> None:

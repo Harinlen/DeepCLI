@@ -310,10 +310,15 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 				if (!argumentSuggestions || argumentSuggestions.length === 0) {
 					return null;
 				}
+				const lastArgumentDelimiter = argumentText.search(/\s+\S*$/);
+				const argumentPrefix =
+					lastArgumentDelimiter === -1
+						? argumentText
+						: argumentText.slice(lastArgumentDelimiter).trimStart();
 
 				return {
 					items: argumentSuggestions,
-					prefix: argumentText,
+					prefix: argumentPrefix,
 				};
 			}
 		}

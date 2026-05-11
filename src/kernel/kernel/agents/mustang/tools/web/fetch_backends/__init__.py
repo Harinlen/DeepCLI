@@ -60,12 +60,11 @@ def _looks_like_anti_bot(result: FetchResult) -> bool:
 
 def get_available_backends() -> list[FetchBackend]:
     """Return currently-available backend instances in priority order."""
+    from kernel.agents.mustang.tools.web.fetch_backends.crawl4ai_be import Crawl4AIFetchBackend
     from kernel.agents.mustang.tools.web.fetch_backends.exa import ExaFetchBackend
     from kernel.agents.mustang.tools.web.fetch_backends.firecrawl import FirecrawlFetchBackend
     from kernel.agents.mustang.tools.web.fetch_backends.httpx_html import HttpxFetchBackend
     from kernel.agents.mustang.tools.web.fetch_backends.parallel import ParallelFetchBackend
-    from kernel.agents.mustang.tools.web.fetch_backends.playwright_be import PlaywrightFetchBackend
-    from kernel.agents.mustang.tools.web.fetch_backends.readability_be import ReadabilityFetchBackend
     from kernel.agents.mustang.tools.web.fetch_backends.tavily import TavilyFetchBackend
 
     priority: list[type[FetchBackend]] = [
@@ -73,11 +72,34 @@ def get_available_backends() -> list[FetchBackend]:
         ParallelFetchBackend,
         ExaFetchBackend,
         TavilyFetchBackend,
-        ReadabilityFetchBackend,
-        PlaywrightFetchBackend,
+        Crawl4AIFetchBackend,
         HttpxFetchBackend,  # always available
     ]
     return [cls() for cls in priority if cls().is_available()]
+
+
+def get_backend_by_name(name: str) -> FetchBackend | None:
+    """Return a backend instance by user-selectable backend id."""
+    from kernel.agents.mustang.tools.web.fetch_backends.crawl4ai_be import Crawl4AIFetchBackend
+    from kernel.agents.mustang.tools.web.fetch_backends.exa import ExaFetchBackend
+    from kernel.agents.mustang.tools.web.fetch_backends.firecrawl import FirecrawlFetchBackend
+    from kernel.agents.mustang.tools.web.fetch_backends.httpx_html import HttpxFetchBackend
+    from kernel.agents.mustang.tools.web.fetch_backends.parallel import ParallelFetchBackend
+    from kernel.agents.mustang.tools.web.fetch_backends.tavily import TavilyFetchBackend
+
+    mapping: dict[str, type[FetchBackend]] = {
+        "httpx": HttpxFetchBackend,
+        "crawl4ai": Crawl4AIFetchBackend,
+        "firecrawl": FirecrawlFetchBackend,
+        "parallel": ParallelFetchBackend,
+        "exa": ExaFetchBackend,
+        "tavily": TavilyFetchBackend,
+    }
+    cls = mapping.get(name)
+    if cls is None:
+        return None
+    backend = cls()
+    return backend if backend.is_available() else None
 
 
 async def fetch_with_fallback(
@@ -101,9 +123,20 @@ async def fetch_with_fallback(
             return replace(result, cached=True), name
 
     if backends is None:
-        backends = get_available_backends()
+        if preferred and preferred != "auto":
+            selected = get_backend_by_name(preferred)
+            if selected is None:
+                return FetchResult(
+                    url=url,
+                    content="",
+                    content_type="",
+                    error=f"WebFetch backend {preferred!r} is not available",
+                ), f"{preferred} (unavailable)"
+            backends = [selected]
+        else:
+            backends = get_available_backends()
 
-    if preferred:
+    if preferred and preferred != "auto":
         backends = sorted(backends, key=lambda b: 0 if b.name == preferred else 1)
 
     errors: list[str] = []
@@ -135,12 +168,13 @@ async def fetch_with_fallback(
     # All failed — return httpx result if we have one, else error
     if httpx_result:
         return httpx_result, f"httpx (fallback, errors: {'; '.join(errors)})"
+    attempted = ", ".join(dict.fromkeys(backend.name for backend in backends))
     return FetchResult(
         url=url,
         content="",
         content_type="",
         error=f"All backends failed: {'; '.join(errors)}",
-    ), "none"
+    ), f"{attempted or 'all'} (failed)"
 
 
 def _read_cache(key: str) -> tuple[FetchResult, str] | None:
@@ -165,4 +199,5 @@ __all__ = [
     "FetchResult",
     "fetch_with_fallback",
     "get_available_backends",
+    "get_backend_by_name",
 ]

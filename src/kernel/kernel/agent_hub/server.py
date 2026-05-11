@@ -15,6 +15,8 @@ from websockets.asyncio.server import Server, ServerConnection
 
 from kernel.agent_hub.hub import AgentHub
 from kernel.agent_hub.contracts import (
+    AGENT_RUNTIME_FORWARDED_CONTRACTS,
+    AGENT_RUNTIME_STREAMING_CONTRACTS,
     AgentRegistrationRequest,
     AgentRuntimeRecord,
     HubFrame,
@@ -108,23 +110,9 @@ class AgentHubWebSocketServer:
                 "ok": True,
                 "targetAgentId": self.hub.router.resolve_target(router_frame),
             }
-        if frame.contract in {"agent.prompt", "agent.activate_skill"}:
+        if frame.contract in AGENT_RUNTIME_STREAMING_CONTRACTS:
             return await self._forward_agent_contract(frame, frame.contract, access_ws=access_ws)
-        if frame.contract in {
-            "agent.commands_list",
-            "agent.session_new",
-            "agent.session_list",
-            "agent.session_load",
-            "agent.resume",
-            "agent.cancel",
-            "agent.execute_shell",
-            "agent.execute_python",
-            "agent.cancel_execution",
-            "agent.set_mode",
-            "agent.get_usage",
-            "agent.close",
-            "agent.model_request",
-        }:
+        if frame.contract in AGENT_RUNTIME_FORWARDED_CONTRACTS:
             return await self._forward_agent_contract(frame, frame.contract)
         raise ValueError(f"unknown hub contract: {frame.contract}")
 
@@ -181,7 +169,7 @@ class AgentHubWebSocketServer:
                     "params": frame.payload.get("params", {}),
                 },
             ),
-            timeout=None if contract in {"agent.prompt", "agent.activate_skill"} else 5,
+            timeout=_runtime_timeout_for_contract(contract, frame),
             client_request_handler=(
                 (lambda request: _proxy_client_request(access_ws, request))
                 if access_ws is not None
@@ -193,6 +181,23 @@ class AgentHubWebSocketServer:
         payload = dict(response.payload)
         payload["targetAgentId"] = routed.target_agent_id
         return payload
+
+
+def _runtime_timeout_for_contract(contract: str, frame: HubFrame) -> float | None:
+    if contract in AGENT_RUNTIME_STREAMING_CONTRACTS:
+        return None
+    if contract != "agent.tools_request":
+        return 5
+
+    params = frame.payload.get("params")
+    if not isinstance(params, dict):
+        return 120
+    method = params.get("method")
+    method_params = params.get("params")
+    if method == "_mustang.agent/web_fetch/set_backend" and isinstance(method_params, dict):
+        if method_params.get("runSetup") is True:
+            return 600
+    return 120
 
 
 async def _proxy_client_request(

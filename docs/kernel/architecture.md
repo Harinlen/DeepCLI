@@ -1,5 +1,11 @@
 # Kernel Architecture
 
+> **Quick header**
+> - **Role**: top-level runtime map for the supervised Kernel.
+> - **Current code**: `kernel.supervisor`, `kernel.agent_hub`, `kernel.agents.access`, `kernel.agents.mustang.runtime`, `kernel.agents.mustang.*`, `kernel.core.*`.
+> - **Owns**: process topology, request path, lifecycle order, storage boundaries.
+> - **Does not own**: subsystem internals, ACP schema definitions, or historical plan details.
+
 This document is the current topology map.  It should stay short:
 subsystem internals belong in [`subsystems/`](subsystems/), protocol details
 belong in [`interfaces/protocol.md`](interfaces/protocol.md), and shipped
@@ -19,11 +25,11 @@ Supervisor
   |-- Agent Hub
   |     |-- Router                 user -> agent / agent -> agent / agent -> user
   |     |-- Manager                runtime records, status, control
-  |     `-- GlobalResourceMonitor  shared resource revision boundary
+  |     `-- ResourceRevisionMonitor shared resource revision boundary
   |
   |-- Access Agent                 FastAPI edge, health/readiness, WS /session
   |
-  `-- Primary Agent Runtime        real SessionManager + Orchestrator path
+  `-- Mustang Agent (`primary`)    real SessionManager + Orchestrator path
 ```
 
 Request path:
@@ -32,17 +38,45 @@ Request path:
 CLI / Probe / future Home Screen / Platform Adapter
   -> Access Agent
   -> Agent Hub.Router
-  -> Primary Agent Runtime
+  -> Mustang Agent (`primary`)
   -> SessionManager
   -> Orchestrator
   -> LLM / tools / memory / hooks / MCP
 ```
 
 The current product path is a single default durable agent: `primary`.
-The Hub/Router layer exists so future peer Session Agents can be added without
+The Hub/Router layer exists so future peer Mustang Agent instances can be added without
 changing the client wire protocol.  Ephemeral child agents created by
 `AgentTool` remain private to their parent runtime and do not become router
 targets.
+
+### Router-Path Invariant
+
+Most interactive CLI traffic uses the supervised router path:
+
+```text
+Access Agent -> Agent Hub -> Mustang Agent (`primary`)
+```
+
+That means adding a new `_mustang.agent/*` ACP method is not complete when the
+Access-side handler works locally.  If the method is handled by the Mustang
+Agent runtime, the change must also declare and verify the corresponding
+`agent.*` Hub runtime contract.
+
+The contract source of truth is:
+
+```text
+kernel.agent_hub.contracts.AgentRuntimeContract
+kernel.agent_hub.contracts.AGENT_RUNTIME_FORWARDED_CONTRACTS
+kernel.agent_hub.contracts.AGENT_RUNTIME_STREAMING_CONTRACTS
+```
+
+Do not add one-off string allowlists in `agent_hub/server.py`.  New runtime
+contracts must be added to the shared contract enum, implemented by the
+runtime dispatcher, and covered by the Agent Hub transport tests.  The
+regression test
+`tests/kernel/agent_hub/test_agent_hub_transport_c.py` scans Access and Runtime
+`agent.*` contract literals and fails if Hub forwarding can drift silently.
 
 ## Process Responsibilities
 
@@ -51,7 +85,7 @@ targets.
 | Supervisor | `kernel.supervisor` | Child process lifecycle, restart budget, control socket, runtime files under `~/.deepcli/state/supervisor/`. | ACP session handling, LLM/tool execution. |
 | Agent Hub | `kernel.agent_hub` | Router, Manager, runtime registration, routing snapshots, shared resource revision boundary. | FastAPI edge, user auth, agent loop. |
 | Access Agent | `kernel.agents.access` + `kernel.agents.access.app` | Loopback FastAPI edge, `/session`, readiness, connection auth, operator ACP methods, platform ingress/reply sinks. | Durable session truth, tool execution. |
-| Primary Agent Runtime | `kernel.agents.mustang.runtime` | `AgentSessionRuntimeService`, `SessionManager`, `SessionStore`, Orchestrator, LLM/tools/memory/hooks/MCP path for `primary`. | User-facing socket, process supervision. |
+| Mustang Agent (`primary`) | `kernel.agents.mustang.runtime` | `AgentSessionRuntimeService`, `SessionManager`, `SessionStore`, Orchestrator, LLM/tools/memory/hooks/MCP path for the default `primary` instance. | User-facing socket, process supervision. |
 | CLI / Probe | `src/cli`, `src/probe` | Thin ACP clients and TUI/probe rendering. | Kernel internals, SQLite/state files, process supervision. |
 
 ## Wire Boundary
@@ -71,20 +105,25 @@ Orchestrator     provider/tool loop, history, compaction, plan mode
 DeepCLI-specific methods use the `_mustang.agent/*` namespace.  Legacy
 unprefixed extension aliases are not part of the active protocol.
 
-## Primary Runtime Bootstrap
+## Mustang Runtime Bootstrap
 
-Inside the Primary Agent Runtime, `kernel.agents.access.app:create_app` still builds a
-`KernelModuleTable` and starts bootstrap services plus subsystems.  The
-important split is:
+Inside the supervised Mustang Agent runtime,
+`kernel.agents.mustang.runtime.session_service.AgentSessionRuntimeService`
+builds a `KernelModuleTable` and starts bootstrap services plus subsystems.
+`kernel.agents.access.app:create_app` owns the Access Agent FastAPI edge and
+keeps a compatibility in-process runtime path for unsupervised/dev mode; the
+supervised product path routes through Agent Hub to the Mustang runtime.
+
+The important split is:
 
 - **Bootstrap services** are fatal on startup failure and are not
   `Subsystem` subclasses.
 - **Regular subsystems** inherit `kernel.core.lifecycle.Subsystem` and degrade on
   startup failure unless explicitly required by a caller.
-- **Transport** is bound to FastAPI and selected by flags; production uses the
-  ACP stack.
+- **Access transport** is bound to FastAPI and selected by flags; production
+  uses the ACP stack at the Access Agent edge.
 
-Startup order in `kernel.agents.access.app`:
+Mustang runtime startup order in `AgentSessionRuntimeService`:
 
 ```text
 0. FlagManager
@@ -92,7 +131,6 @@ Startup order in `kernel.agents.access.app`:
 2. ConfigManager
 3. PromptManager
 4. Core subsystems
-   - ConnectionAuthenticator
    - ToolAuthorizer
    - LLMProviderManager
    - LLMManager
@@ -103,8 +141,9 @@ Startup order in `kernel.agents.access.app`:
    - HookManager
    - MemoryManager
    - GitManager
-6. Trailing subsystems
+6. Session subsystem
    - SessionManager
+7. Trailing subsystems
    - CommandManager
    - GatewayManager
    - ScheduleManager
@@ -144,7 +183,7 @@ Default user state is under `~/.deepcli/`:
 │   ├── flags.yaml              # Kernel boot-time feature flags
 │   └── kernel.yaml             # Kernel business config
 ├── state/                      # launcher/auth/runtime state
-├── agents/primary/             # Primary Agent runtime state
+├── agents/primary/             # default Mustang Agent instance state
 ├── sessions/                   # legacy/global session DB path
 ├── memory/
 └── secrets.db
@@ -165,5 +204,5 @@ Needed capabilities must be exposed through ACP or `_mustang.agent/*` methods.
 | Protocol/edge | [transport](subsystems/transport.md), [protocol interface](interfaces/protocol.md), [gateways legacy note](subsystems/gateways.md) |
 
 Large subsystem documents should describe only behavior that is true in the
-current code.  Historical plans and superseded designs belong under
-`docs/*/history/plans/`.
+current code.  Historical plans and superseded designs belong beside the
+owning area under `*/history/`, with index links from `history/plans/`.

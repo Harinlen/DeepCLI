@@ -393,6 +393,10 @@ class BashTool(Tool[dict[str, Any], str]):
             reason=f"unclassified command: {head!r}",
         )
 
+    def is_read_only_call(self, input: dict[str, Any], ctx: RiskContext) -> bool:
+        suggestion = self.default_risk(input, ctx)
+        return suggestion.risk == "low" and suggestion.default_decision == "allow"
+
     def prepare_permission_matcher(self, input: dict[str, Any]):  # noqa: ANN201
         command = str(input.get("command", ""))
 

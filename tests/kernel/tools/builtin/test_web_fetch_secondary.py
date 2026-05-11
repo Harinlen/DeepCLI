@@ -105,6 +105,29 @@ class TestWebFetchSecondaryModel:
         summarise_mock.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_backend_input_overrides_runtime_config(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path, summarise=None)
+        tool = WebFetchTool()
+        fetch_mock = AsyncMock(return_value=(_FakeResult("https://x", "body"), "httpx"))
+
+        with patch(
+            "kernel.agents.mustang.tools.web.fetch_backends.fetch_with_fallback",
+            new=fetch_mock,
+        ):
+            results = []
+            async for ev in tool.call({"url": "https://x", "backend": "httpx"}, ctx):
+                results.append(ev)
+
+        assert results[0].data["backend"] == "httpx"
+        assert results[0].meta == {
+            "mustang.agent/toolBackend": {
+                "backend": "httpx",
+                "kind": "web_fetch",
+            }
+        }
+        assert fetch_mock.await_args.kwargs["preferred"] == "httpx"
+
+    @pytest.mark.asyncio
     async def test_summarise_exception_falls_back_gracefully(
         self, tmp_path: Path
     ) -> None:

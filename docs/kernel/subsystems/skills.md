@@ -1,5 +1,11 @@
 # SkillManager — Design
 
+> **Quick header**
+> - **Role**: SKILL.md discovery, listing, activation, and compaction preservation.
+> - **Current code**: `kernel.agents.mustang.skills.*`, `tools/builtin/skill_tool.py`.
+> - **Runtime owner**: Mustang runtime after ToolManager.
+> - **Boundary**: skill metadata/body lifecycle only; command projection and tool execution are owned elsewhere.
+
 Status: **landed** — shipped as optional subsystem (Phase 8).
 
 Reference:
@@ -37,7 +43,7 @@ DeepCLI 的用户 slash path 是 Kernel-owned：
   skill body 作为本轮 prompt 的 active instructions
 
 CLI 不扫描 `~/.deepcli/skills` 或 `.mustang/skills`；避免 Access/CLI 与
-Primary Runtime 在 router mode 下看到不同 Skill 状态。
+Mustang Agent runtime 在 router mode 下看到不同 Skill 状态。
 
 ---
 
@@ -157,7 +163,7 @@ Claude Code 四层 + Hermes external dirs + Claude Code 兼容层：
 | 1 | external | config.yaml `skills.external_dirs` | 来自 Hermes：团队共享目录 |
 | 2 | user | `~/.deepcli/skills/` | 用户级 skill |
 | 2 | user-compat | `~/.claude/skills/` | **Claude Code 兼容 (opt-in)**：仅 `skills.claude_compat=true` 时扫 |
-| 3 | bundled | `kernel/skills/bundled/` | 内置 skill |
+| 3 | bundled | `kernel/agents/mustang/skills/bundled/` | 内置 skill |
 | 4 | MCP | MCPManager 提供 | MCP server 暴露的 skill |
 
 ### Claude Code skill 兼容 (opt-in)
@@ -261,7 +267,7 @@ Claude Code 在文件操作（Read/Write/Edit）时沿文件路径向上查找
 ## 模块结构
 
 ```
-kernel/skills/
+kernel/agents/mustang/skills/
 ├── __init__.py          # SkillManager (Subsystem)
 ├── types.py             # SkillManifest, SkillRequires, LoadedSkill, SkillSource,
 │                        #   SkillSetup, SkillFallbackFor, ActivationResult, etc.

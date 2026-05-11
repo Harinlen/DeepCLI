@@ -29,6 +29,7 @@ def test_safe_allowlist_command(tool: BashTool, ctx) -> None:
     s = tool.default_risk({"command": "git status"}, ctx)
     assert s.default_decision == "allow"
     assert s.risk == "low"
+    assert tool.is_read_only_call({"command": "git status"}, ctx) is True
 
 
 def test_dangerous_rm_pattern(tool: BashTool, ctx) -> None:
@@ -58,6 +59,7 @@ def test_compound_unsafe_commands_need_review(tool: BashTool, ctx) -> None:
 def test_unclassified_command_is_ask(tool: BashTool, ctx) -> None:
     s = tool.default_risk({"command": "some-random-binary --flag"}, ctx)
     assert s.default_decision == "ask"
+    assert tool.is_read_only_call({"command": "some-random-binary --flag"}, ctx) is False
 
 
 def test_empty_command_is_ask(tool: BashTool, ctx) -> None:

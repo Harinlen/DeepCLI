@@ -38,6 +38,9 @@ class TodoWriteTool(Tool[dict[str, Any], str]):
     )
     kind = ToolKind.other
 
+    def is_read_only_call(self, input: dict[str, Any], ctx: Any) -> bool:
+        return False
+
     input_schema = {
         "type": "object",
         "properties": {

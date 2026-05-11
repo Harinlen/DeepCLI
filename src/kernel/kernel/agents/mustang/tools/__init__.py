@@ -22,7 +22,10 @@ See ``docs/plans/landed/tool-manager.md`` for the full design.
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, Any, cast
+
+import httpx
 
 from kernel.core.lifecycle import Subsystem
 from kernel.agents.mustang.tools.builtin import BUILTIN_TOOLS
@@ -43,6 +46,18 @@ from kernel.agents.mustang.tools.types import (
     ToolCallResult,
     ToolDisplayPayload,
     ToolInputError,
+)
+from kernel.agents.mustang.tools.web.config import WebFetchConfig
+from kernel.agents.mustang.tools.web.management import (
+    backend_ids,
+    backend_is_available,
+    backend_is_installed,
+    build_backend_options,
+    build_setup_plan,
+    credential_request,
+    get_definition,
+    primary_api_key_env,
+    run_setup,
 )
 
 if TYPE_CHECKING:
@@ -68,6 +83,7 @@ class ToolManager(Subsystem):
     def __init__(self, module_table: KernelModuleTable) -> None:
         super().__init__(module_table)
         self._flags: ToolFlags | None = None
+        self._web_fetch_config: Any = None
         self._registry = ToolRegistry()
         self._file_state = FileStateCache()
 
@@ -87,6 +103,7 @@ class ToolManager(Subsystem):
             flag_manager.register("tools", ToolFlags)
             flags = cast(ToolFlags, flag_manager.get_section("tools"))
         self._flags = flags
+        self._bind_web_fetch_config()
 
         prompts = self._module_table.prompts
         self._registry._prompt_manager = prompts
@@ -144,6 +161,24 @@ class ToolManager(Subsystem):
             sum(1 for _ in self._registry.all_tools()),
         )
 
+    def _bind_web_fetch_config(self) -> None:
+        """Claim the user-managed WebFetch config section."""
+        try:
+            self._web_fetch_config = self._module_table.config.bind_section(
+                file="config",
+                section="web_fetch",
+                schema=WebFetchConfig,
+            )
+        except ValueError:
+            # A test may materialize the same section before ToolManager
+            # startup.  Fall back to read-only access for safety.
+            self._web_fetch_config = self._module_table.config.get_section(
+                file="config",
+                section="web_fetch",
+                schema=WebFetchConfig,
+            )
+        self._hydrate_web_fetch_env_from_secrets()
+
     def _bind_bash_safe_commands(self) -> None:
         """Read ``permissions.bash_safe_commands`` and inject into BashTool.
 
@@ -166,7 +201,9 @@ class ToolManager(Subsystem):
                 file="config", section="permissions", schema=PermissionsSection
             )
         except Exception:
-            logger.debug("ToolManager: could not read permissions section — skipping bash_safe_commands")
+            logger.debug(
+                "ToolManager: could not read permissions section — skipping bash_safe_commands"
+            )
             return
 
         shell_tool.extra_safe_commands = frozenset(section.get().bash_safe_commands)
@@ -227,11 +264,8 @@ class ToolManager(Subsystem):
                 adapter = MCPAdapter(server.name, tool_def, mcp)
                 adapter._prompt_manager = self._module_table.prompts
                 try:
-                    # Register as core (not deferred) — ToolSearchTool
-                    # is not implemented yet, so deferred tools would be
-                    # invisible to the LLM.  Move to "deferred" once
-                    # ToolSearch lands.
-                    self._registry.register(adapter, layer="core")
+                    layer: Layer = "core" if adapter.always_load else "deferred"
+                    self._registry.register(adapter, layer=layer)
                     registered += 1
                 except ValueError as exc:
                     logger.warning("_sync_mcp: %s", exc)
@@ -245,9 +279,7 @@ class ToolManager(Subsystem):
 
             for conn in mcp.get_connections().values():
                 if isinstance(conn, NeedsAuthServer) and conn.server_url:
-                    auth_tool = McpAuthTool(
-                        conn.name, conn.server_url, mcp, secrets
-                    )
+                    auth_tool = McpAuthTool(conn.name, conn.server_url, mcp, secrets)
                     auth_tool._prompt_manager = self._module_table.prompts
                     try:
                         self._registry.register(auth_tool, layer="core")
@@ -257,7 +289,8 @@ class ToolManager(Subsystem):
 
         logger.info(
             "ToolManager: synced %d MCP tools + %d auth tools",
-            registered, auth_registered,
+            registered,
+            auth_registered,
         )
 
     # ------------------------------------------------------------------
@@ -281,6 +314,319 @@ class ToolManager(Subsystem):
     def file_state(self) -> FileStateCache:
         """Return the shared ``FileStateCache`` for use in ``ToolContext``."""
         return self._file_state
+
+    def web_fetch_config_model(self) -> WebFetchConfig:
+        section = self._web_fetch_config
+        if section is None:
+            section = self._module_table.config.get_section(
+                file="config",
+                section="web_fetch",
+                schema=WebFetchConfig,
+            )
+        return cast(WebFetchConfig, section.get())
+
+    def web_fetch_config(self) -> dict[str, Any]:
+        self._hydrate_web_fetch_env_from_secrets()
+        config = self.web_fetch_config_model()
+        public_backends: dict[str, dict[str, Any]] = {}
+        for backend, values in config.backends.items():
+            definition = get_definition(backend)
+            public_values = {
+                key: value
+                for key, value in values.items()
+                if key not in {"api_key_ref"} and not key.endswith("_key_ref")
+            }
+            if definition is not None and definition.requires_api_key:
+                public_values["api_key"] = (
+                    "configured" if self._current_web_fetch_api_key(definition) else "missing"
+                )
+            public_backends[backend] = public_values
+        return {
+            "backend": config.backend,
+            "backends": public_backends,
+        }
+
+    def web_fetch_backend_options(self) -> dict[str, Any]:
+        self._hydrate_web_fetch_env_from_secrets()
+        return build_backend_options(self.web_fetch_config_model())
+
+    async def set_web_fetch_backend(
+        self,
+        backend: str,
+        *,
+        run_setup: bool = False,
+        api_key: str | None = None,
+    ) -> dict[str, Any]:
+        definition = get_definition(backend)
+        if definition is None:
+            valid = ", ".join(sorted(backend_ids()))
+            raise ValueError(f"Unknown WebFetch backend {backend!r}. Valid values: {valid}")
+
+        self._hydrate_web_fetch_env_from_secrets()
+        current = self.web_fetch_config_model()
+        if current.backend == definition.id and not api_key and not run_setup:
+            return {
+                "backend": definition.id,
+                "changed": False,
+                "setupRequired": False,
+                "credentialRequired": False,
+                "setupResult": None,
+                "message": f"WebFetch backend {definition.id} is already selected.",
+            }
+        setup_result: dict[str, Any] | None = None
+        if definition.id != "auto":
+            if definition.requires_api_key:
+                key_to_validate = (api_key or "").strip() or self._current_web_fetch_api_key(
+                    definition
+                )
+                if not key_to_validate:
+                    req = credential_request(definition)
+                    return {
+                        "backend": backend,
+                        "changed": False,
+                        "credentialRequired": True,
+                        "credentialRequest": req,
+                        "message": f"{definition.label} needs an API key before it can be selected.",
+                    }
+                validation = await self._validate_web_fetch_api_key(definition, key_to_validate)
+                if not validation["ok"]:
+                    return {
+                        "backend": backend,
+                        "changed": False,
+                        "credentialRequired": True,
+                        "credentialRequest": credential_request(definition),
+                        "message": validation["message"],
+                    }
+                if api_key:
+                    await self._store_web_fetch_api_key(definition, key_to_validate)
+                    self._hydrate_web_fetch_env_from_secrets()
+
+            if run_setup and build_setup_plan(definition) is not None:
+                setup_result = await self._run_web_fetch_setup(definition)
+                if not setup_result.get("ok"):
+                    return {
+                        "backend": backend,
+                        "changed": False,
+                        "setupRequired": True,
+                        "setupPlan": build_setup_plan(definition),
+                        "setupResult": setup_result,
+                        "message": self._format_web_fetch_setup_failure(definition, setup_result),
+                    }
+
+            if not backend_is_available(definition):
+                if definition.requires_api_key:
+                    req = credential_request(definition)
+                    return {
+                        "backend": backend,
+                        "changed": False,
+                        "credentialRequired": True,
+                        "credentialRequest": req,
+                        "message": f"{definition.label} needs an API key before it can be selected.",
+                    }
+                if build_setup_plan(definition) is not None and not backend_is_installed(
+                    definition
+                ):
+                    if not run_setup:
+                        return {
+                            "backend": backend,
+                            "changed": False,
+                            "setupRequired": True,
+                            "setupPlan": build_setup_plan(definition),
+                            "message": f"{definition.label} dependencies are not installed.",
+                        }
+                if not backend_is_available(definition):
+                    return {
+                        "backend": backend,
+                        "changed": False,
+                        "message": f"{definition.label} is not available. Check dependencies or API credentials.",
+                    }
+
+        latest = self.web_fetch_config_model()
+        changed = latest.backend != definition.id
+        await self._update_web_fetch_config(latest.model_copy(update={"backend": definition.id}))
+        return {
+            "backend": definition.id,
+            "changed": changed,
+            "setupRequired": False,
+            "credentialRequired": False,
+            "setupResult": setup_result,
+            "message": f"WebFetch backend set to {definition.id}.",
+        }
+
+    async def _run_web_fetch_setup(self, definition: Any) -> dict[str, Any]:
+        return await run_setup(definition)
+
+    def _format_web_fetch_setup_failure(self, definition: Any, setup_result: dict[str, Any]) -> str:
+        logs = setup_result.get("logs")
+        if not isinstance(logs, list) or not logs:
+            return f"{definition.label} setup failed with no setup logs."
+        failed = next(
+            (
+                log
+                for log in reversed(logs)
+                if isinstance(log, dict) and log.get("exitCode") not in (0, None)
+            ),
+            logs[-1],
+        )
+        if not isinstance(failed, dict):
+            return f"{definition.label} setup failed: {failed}"
+        command = str(failed.get("command") or "unknown command")
+        exit_code = failed.get("exitCode")
+        stderr = str(failed.get("stderr") or "").strip()
+        stdout = str(failed.get("stdout") or "").strip()
+        details = stderr or stdout or "no command output"
+        if len(details) > 1200:
+            details = f"...{details[-1200:]}"
+        return f"{definition.label} setup failed while running `{command}` (exit {exit_code}): {details}"
+
+    async def set_web_fetch_config_value(self, path: str, value: Any) -> dict[str, Any]:
+        parts = [part for part in path.split(".") if part]
+        if len(parts) != 2:
+            raise ValueError("WebFetch config path must be <backend>.<key>")
+        backend, key = parts
+        if backend not in backend_ids() or backend == "auto":
+            raise ValueError(f"Unknown configurable WebFetch backend: {backend!r}")
+        definition = get_definition(backend)
+        normalized_key = key.strip().lower()
+        if normalized_key in {"api_key", "apikey"}:
+            if definition is None or not definition.requires_api_key:
+                raise ValueError(f"{backend!r} does not use an API key")
+            api_key = str(value or "").strip()
+            if not api_key:
+                raise ValueError("API key must not be empty")
+            validation = await self._validate_web_fetch_api_key(definition, api_key)
+            if not validation["ok"]:
+                raise ValueError(validation["message"])
+            await self._store_web_fetch_api_key(definition, api_key)
+            self._hydrate_web_fetch_env_from_secrets()
+            return self.web_fetch_config()
+        if normalized_key == "api_key_ref" or normalized_key.endswith("_key_ref"):
+            raise ValueError("Secret references are internal; use <backend>.api_key instead")
+        current = self.web_fetch_config_model()
+        backend_config = dict(current.backends.get(backend, {}))
+        backend_config[key] = value
+        backends = dict(current.backends)
+        backends[backend] = backend_config
+        updated = current.model_copy(update={"backends": backends})
+        await self._update_web_fetch_config(updated)
+        return self.web_fetch_config()
+
+    async def _update_web_fetch_config(self, config: WebFetchConfig) -> None:
+        section = self._web_fetch_config
+        if section is None or not hasattr(section, "update"):
+            section = self._module_table.config.bind_section(
+                file="config",
+                section="web_fetch",
+                schema=WebFetchConfig,
+            )
+            self._web_fetch_config = section
+        await section.update(config)
+
+    def _hydrate_web_fetch_env_from_secrets(self) -> None:
+        config = self.web_fetch_config_model()
+        secrets = self._module_table.secrets
+        if secrets is None:
+            return
+        for backend, values in config.backends.items():
+            definition = get_definition(backend)
+            if definition is None:
+                continue
+            env_key = primary_api_key_env(definition)
+            if env_key is None or os.getenv(env_key, "").strip():
+                continue
+            secret_ref = values.get("api_key_ref")
+            if not isinstance(secret_ref, str) or not secret_ref:
+                continue
+            secret_value = secrets.get(secret_ref)
+            if secret_value:
+                os.environ[env_key] = secret_value
+
+    def _current_web_fetch_api_key(self, definition: Any) -> str:
+        env_key = primary_api_key_env(definition)
+        if env_key is None:
+            return ""
+        return os.getenv(env_key, "").strip()
+
+    async def _store_web_fetch_api_key(self, definition: Any, api_key: str) -> None:
+        secrets = self._module_table.secrets
+        if secrets is None:
+            raise ValueError("SecretManager is not available")
+        req = credential_request(definition)
+        if req is None:
+            raise ValueError(f"{definition.label} does not accept API key credentials")
+        secret_name = str(req["secretName"])
+        secrets.set(
+            secret_name,
+            api_key,
+            kind="api_key",
+            metadata={"scope": "web_fetch", "backend": definition.id},
+        )
+        env_key = primary_api_key_env(definition)
+        if env_key is not None:
+            os.environ[env_key] = api_key
+        current = self.web_fetch_config_model()
+        backend_config = dict(current.backends.get(definition.id, {}))
+        backend_config["api_key_ref"] = secret_name
+        backends = dict(current.backends)
+        backends[definition.id] = backend_config
+        await self._update_web_fetch_config(current.model_copy(update={"backends": backends}))
+
+    async def _validate_web_fetch_api_key(self, definition: Any, api_key: str) -> dict[str, Any]:
+        env_key = primary_api_key_env(definition)
+        if env_key is None:
+            return {"ok": True, "message": ""}
+        old_value = os.environ.get(env_key)
+        os.environ[env_key] = api_key
+        try:
+            from kernel.agents.mustang.tools.web.fetch_backends import get_backend_by_name
+
+            backend = get_backend_by_name(definition.id)
+            if backend is None:
+                return {
+                    "ok": False,
+                    "message": f"{definition.label} backend is not available after setting API key.",
+                }
+            result = await backend.fetch("https://example.com", max_chars=4_000)
+            if result.error:
+                return {
+                    "ok": False,
+                    "message": f"{definition.label} API key validation failed: {result.error}",
+                }
+            if not result.content.strip():
+                return {
+                    "ok": False,
+                    "message": f"{definition.label} API key validation returned no content.",
+                }
+            return {"ok": True, "message": ""}
+        except Exception as exc:
+            return {
+                "ok": False,
+                "message": f"{definition.label} API key validation failed: {self._format_web_fetch_validation_exception(exc)}",
+            }
+        finally:
+            if old_value is None:
+                os.environ.pop(env_key, None)
+            else:
+                os.environ[env_key] = old_value
+
+    def _format_web_fetch_validation_exception(self, exc: Exception) -> str:
+        if isinstance(exc, httpx.HTTPStatusError):
+            response = exc.response
+            detail = ""
+            try:
+                payload = response.json()
+                if isinstance(payload, dict):
+                    detail = str(
+                        payload.get("error")
+                        or payload.get("message")
+                        or payload.get("detail")
+                        or payload
+                    )
+            except Exception:
+                detail = response.text.strip()
+            suffix = f": {detail}" if detail else ""
+            return f"HTTP {response.status_code} from {response.request.url}{suffix}"
+        return str(exc)
 
     def snapshot_for_session(
         self,

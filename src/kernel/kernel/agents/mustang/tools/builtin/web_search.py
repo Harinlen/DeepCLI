@@ -92,6 +92,16 @@ class WebSearchTool(Tool[dict[str, Any], dict[str, Any]]):
         short = query[:40] + ("..." if len(query) > 40 else "")
         return f'Searching "{short}"'
 
+    def execution_metadata(self, input: dict[str, Any], ctx: Any) -> dict[str, Any] | None:
+        preferred = os.getenv("MUSTANG_SEARCH_BACKEND") or "auto"
+        return {
+            "mustang.agent/toolBackend": {
+                "backend": preferred,
+                "kind": "web_search",
+                "phase": "pending",
+            }
+        }
+
     # ------------------------------------------------------------------
     # Execution
     # ------------------------------------------------------------------
@@ -141,6 +151,12 @@ class WebSearchTool(Tool[dict[str, Any], dict[str, Any]]):
             },
             llm_content=[TextBlock(text=output_text)],
             display=TextDisplay(text=output_text),
+            meta={
+                "mustang.agent/toolBackend": {
+                    "backend": backend_name,
+                    "kind": "web_search",
+                }
+            },
         )
 
 

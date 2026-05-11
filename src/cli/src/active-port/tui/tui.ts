@@ -978,6 +978,14 @@ export class TUI extends Container {
 		return null;
 	}
 
+	#formatTerminalLine(line: string, width: number): string {
+		if (TERMINAL.isImageLine(line)) {
+			return line;
+		}
+		const output = visibleWidth(line) > width ? truncateToWidth(line, width, Ellipsis.Omit) : line;
+		return output + SEGMENT_RESET;
+	}
+
 	#doRender(): void {
 		if (this.#stopped) return;
 		const width = this.terminal.columns;
@@ -1012,11 +1020,10 @@ export class TUI extends Container {
 			let buffer = "\x1b[?2026h"; // Begin synchronized output
 			// Skip clearing scrollback (3J) in multiplexers — users actively navigate scrollback history
 			if (clear) buffer += isMultiplexer ? "\x1b[2J\x1b[H" : "\x1b[2J\x1b[H\x1b[3J";
-			const reset = SEGMENT_RESET;
 			for (let i = 0; i < newLines.length; i++) {
 				if (i > 0) buffer += "\r\n";
-				const line = newLines[i];
-				buffer += TERMINAL.isImageLine(line) ? line : line + reset;
+				buffer += "\x1b[2K";
+				buffer += this.#formatTerminalLine(newLines[i], width);
 			}
 			buffer += "\x1b[?2026l"; // End synchronized output
 			this.terminal.write(buffer);

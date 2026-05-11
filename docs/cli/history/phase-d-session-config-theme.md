@@ -109,7 +109,7 @@ CLI 设计文档使用 `~/.mustang/client.yaml`，父计划早期草案写的是
 | `src/probe/probe/client.py` | Python ACP client 对 session 请求的参考 |
 | `/home/saki/Documents/alex/oh-my-pi/packages/coding-agent/src/modes/components/session-selector.ts` | TUI session picker 主体 |
 | `/home/saki/Documents/alex/oh-my-pi/packages/coding-agent/src/cli/session-picker.ts` | standalone picker lifecycle |
-| `docs/kernel/history/plans/session-lifecycle-actions.md` | kernel-side plan for user-visible delete / rename / archive |
+| `docs/kernel/subsystems/session/history/session-lifecycle-actions.md` | kernel-side plan for user-visible delete / rename / archive |
 | `src/cli/src/active-port/coding-agent/modes/theme/theme.ts` | 已 port 的主题加载、内置主题、custom theme 目录 |
 | `src/cli/src/main.ts` | 当前 argv / connect / session bootstrap |
 | `src/cli/src/modes/interactive.ts` | 当前 TUI 初始化和 `initTheme(false)` 调用点 |

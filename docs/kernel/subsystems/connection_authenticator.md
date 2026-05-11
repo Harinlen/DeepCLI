@@ -1,5 +1,11 @@
 # ConnectionAuthenticator
 
+> **Quick header**
+> - **Role**: connection-time AuthN for Access Agent WebSocket sessions.
+> - **Current code**: `kernel.agents.access.security.*`.
+> - **Runtime owner**: Access Agent transport edge.
+> - **Boundary**: authenticates connections only; tool authorization lives in `ToolAuthorizer`.
+
 ## Purpose
 
 Kernel 始终监听 `127.0.0.1:<port>`（默认 7777）。任何能连上

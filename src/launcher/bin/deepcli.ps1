@@ -10,6 +10,8 @@ $StateDir = if ($env:DEEPCLI_STATE_DIR) { $env:DEEPCLI_STATE_DIR } else { Join-P
 $ConfigDir = if ($env:DEEPCLI_CONFIG_DIR) { $env:DEEPCLI_CONFIG_DIR } else { Join-Path $DeepCliHome "config" }
 $DefaultInstallDir = Join-Path ([Environment]::GetFolderPath("LocalApplicationData")) "DeepCLI"
 $InstallDir = if ($env:DEEPCLI_INSTALL_DIR) { $env:DEEPCLI_INSTALL_DIR } else { $DefaultInstallDir }
+$UvVersion = if ($env:DEEPCLI_UV_VERSION) { $env:DEEPCLI_UV_VERSION } else { "0.9.28" }
+$PrivateUvBin = Join-Path $InstallDir "tools\uv\$UvVersion\uv.exe"
 $RuntimeDir = Join-Path $StateDir "runtime"
 $StateFile = Join-Path $RuntimeDir "launcher-runtime.json"
 $LockFile = Join-Path $StateDir "launcher.lock"
@@ -221,11 +223,15 @@ function Start-Supervisor([int] $Port, [hashtable] $Layout) {
 
     $oldVirtualEnv = $env:VIRTUAL_ENV
     $oldPath = $env:PATH
+    $oldDeepCliUvBin = $env:DEEPCLI_UV_BIN
     try {
         if ($Layout.Mode -eq "packaged") {
             $venv = Join-Path $ReleaseDir "kernel\.venv"
             $env:VIRTUAL_ENV = $venv
             $env:PATH = (Join-Path $venv "Scripts") + [IO.Path]::PathSeparator + $oldPath
+            if (-not $env:DEEPCLI_UV_BIN -and (Test-Path $PrivateUvBin)) {
+                $env:DEEPCLI_UV_BIN = $PrivateUvBin
+            }
         }
 
         $process = Start-Process `
@@ -240,6 +246,7 @@ function Start-Supervisor([int] $Port, [hashtable] $Layout) {
     finally {
         $env:VIRTUAL_ENV = $oldVirtualEnv
         $env:PATH = $oldPath
+        $env:DEEPCLI_UV_BIN = $oldDeepCliUvBin
     }
 
     Write-State -Port $Port -ProcessId $process.Id -Mode $Layout.Mode

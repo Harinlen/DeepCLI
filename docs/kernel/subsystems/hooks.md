@@ -1,6 +1,12 @@
-＃ HookManager — Design
+# HookManager — Design
 
-Status: **pending — design decided, implementation pending**.  本文先以
+> **Quick header**
+> - **Role**: event-driven hooks for Mustang runtime lifecycle and tool/session events.
+> - **Current code**: `kernel.agents.mustang.hooks.*`, plus fire-sites in sessions, orchestrator, tools, schedule.
+> - **Runtime owner**: Mustang runtime after SkillManager.
+> - **Boundary**: hook discovery/execution/reminders only; caller subsystems own event timing.
+
+Status: **landed**.  本文先以
 [OpenClaw](#3-openclaw-internal-hooks)、[Hermes](#4-hermes-hookregistry)、
 [Claude Code blueprint](#5-claude-code-blueprint) 三家 hook 实现为参照
 回答 [§2 开放问题](#2-开放问题决议) 后，把决议落到 [§7 设计骨架](#7-设计骨架)。
@@ -48,7 +54,7 @@ Status: **pending — design decided, implementation pending**.  本文先以
    |------|---------|
    | `pre_tool_use` / `post_tool_use` / `post_tool_failure` | `Orchestrator.ToolExecutor`（[tool-manager §6.1](tools.md)）|
    | `permission_requested` / `permission_denied` | `ToolAuthorizer`（[tool-authorizer §14.2](tool_authorizer.md)）|
-   | `user_prompt_submit` / `stop` / `pre_compact` / `post_compact` / `subagent_start` | `Orchestrator`（已有 TODO 标位）|
+   | `user_prompt_submit` / `stop` / `pre_compact` / `post_compact` / `subagent_start` | `Orchestrator` 对应调用点 |
    | `session_start` / `session_end` | `SessionManager` |
    | `file_changed` | 写类 Tool 的 `call()` 在返回前 emit，由 `ToolExecutor` 中转 |
 6. **HookManager 不是 fire 主体**，只是 dispatch 引擎。

@@ -26,7 +26,7 @@ Implementation progress:
 - 2026-04-29: Batch F was reframed after architecture review. ACPX is treated
   as ACP-based semantics to absorb into DeepCLI's own Agent Control Plane, not
   as an external CLI/runtime dependency. The broader control-plane work now
-  lives in [`agent-control-plane.md`](agent-control-plane.md).
+  lives in [`agent-control-plane.md`](../../../architecture/history/agent-control-plane.md).
 - 2026-04-29: Batch G landed. Kernel routing no longer registers legacy
   non-standard method aliases, CLI/probe/tests use `_mustang.agent/*`, and old
   `session/update user_execution_*` compatibility parsing was removed from
@@ -108,8 +108,8 @@ Official ACP methods we do not implement yet:
 
 | Method | Notes |
 |---|---|
-| `session/close` | Directly overlaps with ACPX soft-close/resource release behavior. Implementation is tracked in [`agent-control-plane.md`](agent-control-plane.md) Batch B2. |
-| `session/resume` | Useful for ACPX and external session-agent backends because it resumes without replay. Implementation is tracked in [`agent-control-plane.md`](agent-control-plane.md) Batch B2. |
+| `session/close` | Directly overlaps with ACPX soft-close/resource release behavior. Implementation is tracked in [`agent-control-plane.md`](../../../architecture/history/agent-control-plane.md) Batch B2. |
+| `session/resume` | Useful for ACPX and external session-agent backends because it resumes without replay. Implementation is tracked in [`agent-control-plane.md`](../../../architecture/history/agent-control-plane.md) Batch B2. |
 | `fs/*` | Keep disabled for kernel-owned local tools, but implement client-side handling in ACPX/external-agent path. |
 | `terminal/*` | Same as `fs/*`: needed for ACPX/external coding-agent operation, not for kernel local tools. |
 
@@ -200,7 +200,7 @@ Acceptance:
 
 ### Batch B — Official Standard Gaps
 
-Status: superseded by [`agent-control-plane.md`](agent-control-plane.md) Batch B2 for
+Status: superseded by [`agent-control-plane.md`](../../../architecture/history/agent-control-plane.md) Batch B2 for
 `session/close` / `session/resume`; keep this section as protocol rationale.
 
 Deliverables:
@@ -341,7 +341,7 @@ Acceptance:
 Deliverables:
 
 - Add the dedicated Agent Control Plane plan:
-  [`agent-control-plane.md`](agent-control-plane.md).
+  [`agent-control-plane.md`](../../../architecture/history/agent-control-plane.md).
 - Define the northbound/southbound symmetry:
   - northbound: CLI / Probe / future Home Screen control the primary Kernel;
   - southbound: the Kernel controls child Kernels, durable Session Agents, and

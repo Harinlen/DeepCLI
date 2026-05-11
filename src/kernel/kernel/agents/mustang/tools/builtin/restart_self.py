@@ -38,6 +38,9 @@ class RestartSelfTool(Tool[dict[str, Any], dict[str, Any]]):
             reason="agent runtime self-restart",
         )
 
+    def is_read_only_call(self, input: dict[str, Any], ctx: RiskContext) -> bool:
+        return False
+
     async def call(
         self,
         input: dict[str, Any],

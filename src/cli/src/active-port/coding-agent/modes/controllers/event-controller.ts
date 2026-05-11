@@ -363,6 +363,7 @@ export class EventController {
 				this.ctx.ui,
 				this.ctx.sessionManager.getCwd(),
 				event.toolCallId,
+				event.details,
 			);
 			component.setExpanded(this.ctx.toolOutputExpanded);
 			this.ctx.chatContainer.addChild(component);

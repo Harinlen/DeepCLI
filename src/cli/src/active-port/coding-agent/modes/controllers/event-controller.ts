@@ -62,6 +62,7 @@ export class EventController {
 			ttsr_triggered: e => this.#handleTtsrTriggered(e),
 			todo_reminder: e => this.#handleTodoReminder(e),
 			todo_auto_clear: e => this.#handleTodoAutoClear(e),
+			current_mode_update: e => this.#handleCurrentModeUpdate(e),
 		} satisfies AgentSessionEventHandlers;
 	}
 
@@ -162,6 +163,13 @@ export class EventController {
 		}
 		this.#cancelIdleCompaction();
 		this.ctx.ensureLoadingAnimation();
+		this.ctx.ui.requestRender();
+	}
+
+	async #handleCurrentModeUpdate(event: Extract<AgentSessionEvent, { type: "current_mode_update" }>): Promise<void> {
+		await this.ctx.syncPlanModeWithPermissionMode(event.mode as string);
+		this.ctx.statusLine.invalidate();
+		this.ctx.updateEditorTopBorder();
 		this.ctx.ui.requestRender();
 	}
 

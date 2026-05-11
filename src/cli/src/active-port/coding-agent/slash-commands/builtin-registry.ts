@@ -39,8 +39,7 @@ export async function executeBuiltinSlashCommand(
 			case "kernel":
 				return await executeKernelCommand(ctx, parsed.args ?? "");
 			case "plan":
-				await ctx.handlePlanModeCommand?.(parsed.args ?? "");
-				return true;
+				return await executePlanCommand(ctx, parsed.args ?? "");
 			case "session":
 				return await executeSessionCommand(ctx, parsed.args ?? "");
 			case "model":
@@ -67,6 +66,56 @@ export async function executeBuiltinSlashCommand(
 		ctx.showError?.(`/${parsed.name} failed: ${message}`);
 		return true;
 	}
+}
+
+async function executePlanCommand(ctx: any, argsText: string): Promise<boolean | string> {
+	const args = splitArgs(argsText);
+	const subcommand = args[0] ?? "enter";
+	const kernelMode = ctx.session?.currentPermissionMode ?? "default";
+	if (subcommand === "enter") {
+		if (kernelMode === "plan") {
+			await ctx.syncPlanModeWithPermissionMode?.("plan");
+			ctx.statusLine?.invalidate?.();
+			ctx.showStatus?.("Plan mode is already active.");
+			return true;
+		}
+		if (ctx.enterPlanModeCommand) {
+			await ctx.enterPlanModeCommand();
+		} else {
+			await ctx.handlePlanModeCommand?.();
+		}
+		return true;
+	}
+	if (subcommand === "exit") {
+		if (kernelMode !== "plan") {
+			await ctx.syncPlanModeWithPermissionMode?.(kernelMode);
+			ctx.showWarning?.("Plan mode is not active.");
+			return true;
+		}
+		await ctx.syncPlanModeWithPermissionMode?.("plan");
+		if (ctx.exitPlanModeCommand) {
+			await ctx.exitPlanModeCommand();
+		} else {
+			await ctx.session?.setPermissionMode?.("default");
+			await ctx.handlePlanModeCommand?.();
+		}
+		return true;
+	}
+	if (subcommand === "status") {
+		await ctx.syncPlanModeWithPermissionMode?.(kernelMode);
+		ctx.showStatus?.(kernelMode === "plan" ? "Plan mode is active." : "Plan mode is not active.");
+		return true;
+	}
+	if (kernelMode === "plan") {
+		await ctx.syncPlanModeWithPermissionMode?.("plan");
+		return argsText;
+	}
+	if (ctx.enterPlanModeCommand) {
+		await ctx.enterPlanModeCommand(argsText);
+	} else {
+		await ctx.handlePlanModeCommand?.(argsText);
+	}
+	return true;
 }
 
 async function executeKernelCommand(ctx: any, argsText: string): Promise<boolean> {

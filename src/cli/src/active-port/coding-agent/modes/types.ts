@@ -236,6 +236,9 @@ export interface InteractiveModeContext {
 	openExternalEditor(): void;
 	registerExtensionShortcuts(): void;
 	handlePlanModeCommand(initialPrompt?: string): Promise<void>;
+	enterPlanModeCommand(initialPrompt?: string): Promise<void>;
+	exitPlanModeCommand(): Promise<void>;
+	syncPlanModeWithPermissionMode(mode: string): Promise<void>;
 	handleExitPlanModeTool(details: ExitPlanModeDetails): Promise<void>;
 
 	// Hook UI methods

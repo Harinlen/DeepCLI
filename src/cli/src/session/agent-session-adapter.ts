@@ -590,7 +590,10 @@ export class MustangAgentSessionAdapter {
 		if (this.options.session && update.sessionId !== this.options.session.sessionId) return;
 		if (update.sessionUpdate !== "current_mode_update") return;
 		const mode = parsePermissionMode(update.modeId ?? update.mode_id);
-		if (mode) this.currentPermissionMode = mode;
+		if (mode) {
+			this.currentPermissionMode = mode;
+			this.#emit({ type: "current_mode_update", mode });
+		}
 	}
 
 	#beginReplay(): void {
@@ -664,7 +667,10 @@ export class MustangAgentSessionAdapter {
 
 	#handleReplayMode(update: SessionUpdateParams): void {
 		const mode = parsePermissionMode(update.modeId ?? update.mode_id);
-		if (mode) this.currentPermissionMode = mode;
+		if (mode) {
+			this.currentPermissionMode = mode;
+			this.#emit({ type: "current_mode_update", mode });
+		}
 	}
 
 	#handleUpdate(update: SessionUpdateParams): void {

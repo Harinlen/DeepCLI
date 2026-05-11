@@ -23,6 +23,7 @@ const updates = [
 	{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "after" } },
 	{ sessionUpdate: "usage_update", inputTokens: 123, outputTokens: 45, used: 234, size: 64_000, durationMs: 1500 },
 	{ sessionUpdate: "session_info_update", title: "New title" },
+	{ sessionUpdate: "current_mode_update", sessionId: "sess-1", modeId: "plan" },
 ];
 
 const fakeSession = {
@@ -124,6 +125,7 @@ assert(events.includes("tool_execution_end"), "adapter should emit tool completi
 assert(pendingToolBackendDetails?.backend === "shell", "adapter should expose pending tool backend metadata");
 assert(toolBackendDetails?.backend === "shell", "adapter should expose tool backend metadata");
 assert(events.includes("agent_end"), "adapter should emit agent_end");
+assert(events.includes("current_mode_update"), "adapter should emit current_mode_update for UI mode reconciliation");
 assert(adapter.messages.length === 2, "adapter should retain user and assistant messages");
 assert(adapter.sessionManager.getSessionName() === "New title", "session_info_update should refresh local title");
 assert(adapter.isStreaming === false, "adapter should clear streaming flag after prompt");
@@ -145,7 +147,7 @@ assert(adapter.getAsyncJobSnapshot().running.length === 0, "adapter should expos
 assert(adapter.modelRegistry.authStorage.hasOAuth("deepseek") === false, "adapter should expose no-op OAuth auth storage");
 assert(adapter.modelRegistry.authStorage.has("deepseek") === false, "adapter should expose no-op API key auth storage");
 assert(adapter.modelRegistry.authStorage.hasAuth("deepseek") === false, "adapter should expose no-op fallback auth storage");
-assert(adapter.currentPermissionMode === "default", "adapter should default to Ask permission mode");
+assert(adapter.currentPermissionMode === "plan", "adapter should track kernel current mode updates");
 const costReport = await adapter.fetchCostReport();
 assert(costReport.tokens.total === 168, "adapter should fetch /cost usage from the active session");
 assert(
@@ -161,6 +163,7 @@ assert(assistant?.content.some((block: { type: string; id?: string }) => block.t
 assert(assistant?.usage?.input === 123 && assistant?.usage?.output === 45, "usage_update should attach usage to assistant message");
 assert(assistant?.duration === 1500, "usage_update should attach response duration to assistant message");
 
+await adapter.setPermissionMode("default");
 await adapter.createSession();
 assert(adapter.sessionId === "new-session", "createSession should switch to the new kernel session");
 assert(adapter.messages.length === 0, "createSession should clear transcript state from the previous session");

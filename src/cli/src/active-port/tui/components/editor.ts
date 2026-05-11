@@ -1070,8 +1070,7 @@ export class Editor implements Component, Focusable {
 			data === "\x1b\r" || // Option+Enter in some terminals (legacy)
 			data === "\x1b[13;2~" || // Shift+Enter in some terminals (legacy format)
 			kb.matches(data, "tui.input.newLine") || // Shift+Enter (Kitty protocol, handles lock bits)
-			(data.length > 1 && data.includes("\x1b") && data.includes("\r")) ||
-			(data === "\n" && data.length === 1) // Shift+Enter from iTerm2 mapping
+			(data.length > 1 && data.includes("\x1b") && data.includes("\r"))
 		) {
 			if (this.#shouldSubmitOnBackslashEnter(data, kb)) {
 				this.#handleBackspace();
@@ -2358,8 +2357,8 @@ export class Editor implements Component, Focusable {
 		const currentLine = this.#state.lines[this.#state.cursorLine] || "";
 		const beforeCursor = currentLine.slice(0, this.#state.cursorCol);
 
-		// Check if we're in a slash command context
-		if (beforeCursor.trimStart().startsWith("/") && !beforeCursor.trimStart().includes(" ")) {
+		// Slash command names and arguments both use the slash-command provider.
+		if (beforeCursor.trimStart().startsWith("/")) {
 			this.#handleSlashCommandCompletion();
 		} else {
 			this.#forceFileAutocomplete(true);
@@ -2370,11 +2369,6 @@ export class Editor implements Component, Focusable {
 		this.#tryTriggerAutocomplete(true);
 	}
 
-	/*
-https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/559322883
-17 this job fails with https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19
-536643416/job/55932288317 havea  look at .gi
-    */
 	async #forceFileAutocomplete(explicitTab: boolean = false): Promise<void> {
 		if (!this.#autocompleteProvider) return;
 
@@ -2480,7 +2474,9 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 
 		if (
 			this.#autocompleteState === "regular" &&
-			(this.#autocompletePrefix.startsWith("/") || this.#autocompletePrefix.startsWith("#"))
+			(this.#autocompletePrefix.startsWith("/") ||
+				this.#autocompletePrefix.startsWith("#") ||
+				(this.#state.lines[this.#state.cursorLine] || "").slice(0, this.#state.cursorCol).trimStart().startsWith("/"))
 		) {
 			void this.#updateAutocomplete();
 			return;

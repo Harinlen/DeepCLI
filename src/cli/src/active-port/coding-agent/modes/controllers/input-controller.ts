@@ -638,6 +638,7 @@ export class InputController {
 	async cyclePermissionMode(): Promise<void> {
 		try {
 			const mode = await this.ctx.session.cyclePermissionMode();
+			await this.ctx.syncPlanModeWithPermissionMode(mode);
 			this.ctx.statusLine.invalidate();
 			this.ctx.updateEditorBorderColor();
 			const display = permissionModeDisplay(mode);

@@ -760,8 +760,8 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 	}
 
-	async #enterPlanMode(options?: { planFilePath?: string; workflow?: "parallel" | "iterative" }): Promise<void> {
-		if (this.planModeEnabled) {
+	async #enterPlanMode(options?: { planFilePath?: string; workflow?: "parallel" | "iterative"; syncPermissionMode?: boolean }): Promise<void> {
+		if (this.planModeEnabled && this.session.currentPermissionMode === "plan") {
 			return;
 		}
 
@@ -777,6 +777,9 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.planModePlanFilePath = planFilePath;
 		this.planModeEnabled = true;
 
+		if (options?.syncPermissionMode !== false) {
+			await this.session.setPermissionMode?.("plan");
+		}
 		await this.session.setActiveToolsByName(uniquePlanTools);
 		this.session.setPlanModeState({
 			enabled: true,
@@ -794,7 +797,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.showStatus(`Plan mode enabled. Plan file: ${planFilePath}`);
 	}
 
-	async #exitPlanMode(options?: { silent?: boolean; paused?: boolean }): Promise<void> {
+	async #exitPlanMode(options?: { silent?: boolean; paused?: boolean; syncPermissionMode?: boolean; restoreMode?: string }): Promise<void> {
 		if (!this.planModeEnabled) {
 			return;
 		}
@@ -817,6 +820,9 @@ export class InteractiveMode implements InteractiveModeContext {
 			}
 		}
 		this.session.setPlanModeState(undefined);
+		if (options?.syncPermissionMode !== false) {
+			await this.session.setPermissionMode?.((options?.restoreMode as never) ?? "default");
+		}
 		this.planModeEnabled = false;
 		this.planModePaused = options?.paused ?? false;
 		this.planModePlanFilePath = undefined;
@@ -989,6 +995,38 @@ export class InteractiveMode implements InteractiveModeContext {
 		await this.#enterPlanMode();
 		if (initialPrompt && this.onInputCallback) {
 			this.onInputCallback(this.startPendingSubmission({ text: initialPrompt }));
+		}
+	}
+
+	async enterPlanModeCommand(initialPrompt?: string): Promise<void> {
+		if (this.planModeEnabled && this.session.currentPermissionMode !== "plan") {
+			await this.#exitPlanMode({ silent: true, paused: false, syncPermissionMode: false });
+		}
+		await this.#enterPlanMode();
+		if (initialPrompt && this.onInputCallback) {
+			this.onInputCallback(this.startPendingSubmission({ text: initialPrompt }));
+		}
+	}
+
+	async exitPlanModeCommand(): Promise<void> {
+		if (!this.planModeEnabled) {
+			this.showWarning("Plan mode is not active.");
+			return;
+		}
+		await this.#exitPlanMode({ paused: false });
+	}
+
+	async syncPlanModeWithPermissionMode(mode: string): Promise<void> {
+		if (mode === "plan") {
+			await this.#enterPlanMode({ syncPermissionMode: false });
+			return;
+		}
+		if (this.planModeEnabled) {
+			await this.#exitPlanMode({ silent: true, paused: false, syncPermissionMode: false });
+		} else if (this.planModePaused) {
+			this.planModePaused = false;
+			this.planModePlanFilePath = undefined;
+			this.#updatePlanModeStatus();
 		}
 	}
 

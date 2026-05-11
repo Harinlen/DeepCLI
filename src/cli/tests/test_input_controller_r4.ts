@@ -13,20 +13,39 @@ await initTheme(false, "unicode", false, "dark", "dark");
 class FakeEditor {
 	text = "";
 	history: string[] = [];
+	actionKeys = new Map<string, string[]>();
+	customKeyHandlers = new Map<string, () => void>();
 	onSubmit?: (text: string) => Promise<void>;
 	onChange?: (text: string) => void;
 	onEscape?: () => void;
 	shouldBypassAutocompleteOnEscape?: () => boolean;
 	onClear?: () => void;
 	onExit?: () => void;
+	onSuspend?: () => void;
+	onCycleThinkingLevel?: () => void;
+	onCycleModelForward?: () => void;
+	onCycleModelBackward?: () => void;
+	onSelectModel?: () => void;
+	onSelectModelTemporary?: () => void;
+	onToggleThinking?: () => void;
+	onExternalEditor?: () => void;
+	onPasteImage?: () => void;
+	onCopyPrompt?: () => void;
+	onExpandTools?: () => void;
 	onHistorySearch?: () => void;
 	onDequeue?: () => void;
 	onShowHotkeys?: () => void;
 	onCyclePermissionMode?: () => void;
 
-	setActionKeys() {}
-	clearCustomKeyHandlers() {}
-	setCustomKeyHandler() {}
+	setActionKeys(action: string, keys: string[]) {
+		this.actionKeys.set(action, [...keys]);
+	}
+	clearCustomKeyHandlers() {
+		this.customKeyHandlers.clear();
+	}
+	setCustomKeyHandler(key: string, handler: () => void) {
+		this.customKeyHandlers.set(key, handler);
+	}
 	setText(value: string) {
 		this.text = value;
 		this.onChange?.(value);
@@ -46,6 +65,7 @@ function makeContext() {
 		isBashRunning: false,
 		isPythonRunning: false,
 		queuedMessageCount: 0,
+		currentPermissionMode: "default",
 		messages: [],
 		extensionRunner: undefined,
 		clearQueue: () => ({ steering: [], followUp: [] }),
@@ -73,10 +93,19 @@ function makeContext() {
 			calls.push("cycle-permission");
 			return "accept_edits";
 		},
+		setPermissionMode: async (mode: string) => {
+			calls.push(`mode:${mode}`);
+			session.currentPermissionMode = mode;
+		},
 	};
 	const ctx: any = {
 		editor,
 		session,
+		sessionManager: {
+			getSessionName: () => "Test session",
+			getCwd: () => "/tmp",
+			titleSource: "user",
+		},
 		keybindings: KeybindingsManager.inMemory(),
 		loadingAnimation: undefined,
 		autoCompactionLoader: undefined,
@@ -92,6 +121,7 @@ function makeContext() {
 		pendingPythonComponents: [],
 		bashComponent: undefined,
 		pythonComponent: undefined,
+		planModeEnabled: false,
 		ui: {
 			requestRender: (force?: boolean) => calls.push(force ? "render:force" : "render"),
 			onDebug: undefined,
@@ -121,7 +151,24 @@ function makeContext() {
 		showHistorySearch: () => calls.push("history-search"),
 		toggleThinkingBlockVisibility: () => calls.push("thinking-toggle"),
 		handleHotkeysCommand: () => calls.push("hotkeys"),
-		handlePlanModeCommand: () => calls.push("plan"),
+		handlePlanModeCommand: (initialPrompt?: string) => calls.push(`plan:${initialPrompt ?? ""}`),
+		enterPlanModeCommand: async (initialPrompt?: string) => {
+			ctx.planModeEnabled = true;
+			await session.setPermissionMode("plan");
+			calls.push(`plan-enter:${initialPrompt ?? ""}`);
+			if (initialPrompt) {
+				ctx.onInputCallback(ctx.startPendingSubmission({ text: initialPrompt }));
+			}
+		},
+		exitPlanModeCommand: async () => {
+			if (!ctx.planModeEnabled) {
+				ctx.showWarning("Plan mode is not active.");
+				return;
+			}
+			ctx.planModeEnabled = false;
+			await session.setPermissionMode("default");
+			calls.push("plan-exit");
+		},
 		handleCompactCommand: () => calls.push("compact"),
 		handleUsageCommand: () => calls.push("usage"),
 		handleMemoryCommand: (text: string) => calls.push(`memory:${text}`),
@@ -129,6 +176,14 @@ function makeContext() {
 		showSessionSelector: () => calls.push("session-selector"),
 		handleSTTToggle: () => calls.push("stt"),
 		showSessionObserver: () => calls.push("session-observer"),
+		syncPlanModeWithPermissionMode: async (mode: string) => {
+			calls.push(`sync-plan:${mode}`);
+			if (mode === "plan") {
+				ctx.planModeEnabled = true;
+			} else {
+				ctx.planModeEnabled = false;
+			}
+		},
 		clearEditor: () => {
 			editor.setText("");
 			calls.push("clear-editor");
@@ -138,6 +193,8 @@ function makeContext() {
 		showStatus: (message: string) => calls.push(`status:${message}`),
 		showError: (message: string) => calls.push(`error:${message}`),
 		flushPendingBashComponents: () => calls.push("flush-bash"),
+		onInputCallback: (submission: { text: string }) => calls.push(`input:${submission.text}`),
+		startPendingSubmission: ({ text }: { text: string }) => ({ text }),
 		updatePendingMessagesDisplay: () => calls.push("pending-display"),
 		queueCompactionMessage: (text: string) => calls.push(`queue:${text}`),
 		handleBashCommand: async (command: string, excluded: boolean) => {
@@ -147,13 +204,42 @@ function makeContext() {
 			await session.executePython(code, () => {}, { excludeFromContext: excluded });
 		},
 	};
-	return { ctx, editor, calls, inputListeners };
+	return { ctx, editor, session, calls, inputListeners };
 }
 
-const { ctx, editor, calls, inputListeners } = makeContext();
+const { ctx, editor, session, calls, inputListeners } = makeContext();
 const controller = new InputController(ctx);
 controller.setupKeyHandlers();
 controller.setupEditorSubmitHandler();
+
+const expectedActionKeys = [
+	"app.interrupt",
+	"app.clear",
+	"app.exit",
+	"app.suspend",
+	"app.thinking.cycle",
+	"app.permissionMode.cycle",
+	"app.model.cycleForward",
+	"app.model.cycleBackward",
+	"app.model.selectTemporary",
+	"app.model.select",
+	"app.history.search",
+	"app.thinking.toggle",
+	"app.editor.external",
+	"app.clipboard.pasteImage",
+	"app.clipboard.copyPrompt",
+	"app.tools.expand",
+	"app.message.dequeue",
+];
+for (const action of expectedActionKeys) {
+	assert(editor.actionKeys.has(action), `InputController should wire ${action} into the prompt editor`);
+}
+const expectedCustomKeys = ["alt+shift+p", "ctrl+enter", "alt+h", "alt+shift+l", "ctrl+s"];
+for (const key of expectedCustomKeys) {
+	assert(editor.customKeyHandlers.has(key), `InputController should wire custom key ${key}`);
+}
+assert(editor.actionKeys.get("app.permissionMode.cycle")?.includes("shift+tab"), "Shift+Tab should cycle permission mode in DeepCLI");
+assert(editor.actionKeys.get("app.thinking.cycle")?.length === 0, "DeepCLI intentionally leaves OMP thinking-level Shift+Tab unbound");
 
 const expandResult = inputListeners[0]?.("\x0f");
 assert(expandResult?.consume === true, "TUI-level Ctrl+O handler should consume the expand shortcut");
@@ -210,6 +296,48 @@ await editor.onSubmit?.("$ print(1)");
 assert(calls.includes("python:print(1):context"), "$ should route through session.executePython");
 await editor.onSubmit?.("$$ x = 1");
 assert(calls.includes("python:x = 1:excluded"), "$$ should exclude python output from context");
+await editor.onSubmit?.("/plan enter");
+assert(calls.includes("plan-enter:"), "/plan enter should enter plan mode without sending 'enter' as prompt text");
+assert(calls.includes("mode:plan"), "/plan enter should switch the session permission mode to plan");
+assert(!calls.includes("plan:enter"), "/plan enter must not treat enter as an initial prompt");
+ctx.planModeEnabled = false;
+session.currentPermissionMode = "default";
+await editor.onSubmit?.("/plan draft a roadmap");
+assert(calls.includes("input:draft a roadmap"), "/plan <text> should still support an initial prompt");
+ctx.planModeEnabled = true;
+session.currentPermissionMode = "plan";
+await editor.onSubmit?.("/plan enter");
+assert(
+	calls.includes("status:Plan mode is already active."),
+	"/plan enter should not toggle plan mode off when plan mode is already active",
+);
+assert(ctx.planModeEnabled === true, "/plan enter should be idempotent while already in plan mode");
+ctx.planModeEnabled = false;
+session.currentPermissionMode = "plan";
+await editor.onSubmit?.("/plan status");
+assert(calls.includes("status:Plan mode is active."), "/plan status should report kernel plan mode, not stale local state");
+await editor.onSubmit?.("/plan exit");
+assert(calls.includes("mode:default"), "/plan exit should exit when kernel says plan even if local state is stale false");
+ctx.planModeEnabled = true;
+session.currentPermissionMode = "plan";
+ctx.planModeEnabled = true;
+session.currentPermissionMode = "auto";
+await editor.onSubmit?.("/plan enter");
+assert(calls.filter(item => item === "plan-enter:").length >= 2, "/plan enter should re-enter when local plan state is stale but kernel mode is not plan");
+assert(session.currentPermissionMode === "plan", "/plan enter should trust and update kernel permission mode when re-entering");
+await editor.onSubmit?.("/plan refine the edge cases");
+assert(
+	calls.includes("input:refine the edge cases"),
+	"/plan <text> should submit text to the active plan-mode session instead of toggling plan mode",
+);
+await editor.onSubmit?.("/plan exit");
+assert(calls.includes("plan-exit"), "/plan exit should explicitly exit plan mode");
+assert(calls.includes("mode:default"), "/plan exit should restore the default ask permission mode");
+assert(ctx.planModeEnabled === false, "/plan exit should leave plan mode");
+ctx.planModeEnabled = true;
+await controller.cyclePermissionMode();
+assert(calls.includes("sync-plan:accept_edits"), "permission mode cycling should reconcile local plan UI state from kernel mode");
+assert(ctx.planModeEnabled === false, "leaving plan mode through permission cycle should clear local plan state");
 
 ctx.session.isBashRunning = true;
 editor.onEscape?.();

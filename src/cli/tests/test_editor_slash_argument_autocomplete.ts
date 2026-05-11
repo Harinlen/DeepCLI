@@ -19,6 +19,19 @@ const commands: SlashCommand[] = [
 			return filtered.length > 0 ? filtered : null;
 		},
 	},
+	{
+		name: "webfetch",
+		description: "Manage WebFetch backend",
+		getArgumentCompletions: argumentPrefix => {
+			const [subcommand = "", value = ""] = argumentPrefix.split(/\s+/, 2);
+			if (argumentPrefix.includes(" ") && subcommand === "install") {
+				return [{ value: "crawl4ai", label: "crawl4ai", description: "Local browser rendering" }]
+					.filter(item => item.value.startsWith(value));
+			}
+			return [{ value: "install", label: "install", description: "Install backend dependencies" }]
+				.filter(item => item.value.startsWith(subcommand));
+		},
+	},
 ];
 
 const plain = (text: string) => text;
@@ -147,5 +160,42 @@ assert(submitEditor.isShowingAutocomplete(), "argument autocomplete should be vi
 submitEditor.handleInput("\r");
 await tick();
 assert(submitted === "/model a", "Enter should submit the typed text without accepting autocomplete");
+
+submitted = "";
+const linefeedSubmitEditor = new Editor(editorTheme);
+linefeedSubmitEditor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands));
+linefeedSubmitEditor.onSubmit = text => {
+	submitted = text;
+};
+await type(linefeedSubmitEditor, "/model a");
+assert(linefeedSubmitEditor.isShowingAutocomplete(), "argument autocomplete should be visible before linefeed submit");
+linefeedSubmitEditor.handleInput("\n");
+await tick();
+assert(submitted === "/model a", "raw linefeed Enter should submit without accepting autocomplete");
+
+const tabEditor = new Editor(editorTheme);
+tabEditor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands));
+await type(tabEditor, "/webfetch install c");
+assert(tabEditor.isShowingAutocomplete(), "/webfetch install backend autocomplete should be visible before Tab");
+tabEditor.handleInput("\t");
+await tick();
+assert(
+	tabEditor.getText() === "/webfetch install crawl4ai",
+	"Tab should accept only the current slash argument token and preserve the subcommand",
+);
+
+let newlineSubmitted = "";
+const newlineEditor = new Editor(editorTheme);
+newlineEditor.onSubmit = text => {
+	newlineSubmitted = text;
+};
+await type(newlineEditor, "first");
+newlineEditor.handleInput("\x1b[13;2~");
+await tick();
+await type(newlineEditor, "second");
+assert(newlineEditor.getText() === "first\nsecond", "explicit Shift+Enter sequence should insert a newline");
+newlineEditor.handleInput("\n");
+await tick();
+assert(newlineSubmitted === "first\nsecond", "raw linefeed should submit multiline editor contents");
 
 console.log("PASS: editor slash argument autocomplete");

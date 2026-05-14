@@ -24,6 +24,30 @@ CommandManager 是**命令目录提供者**，不是执行者。
 
 这与 Claude Code 一致：命令是客户端解析的 convenience wrapper，执行走现有协议原语。
 
+## Command Ownership Rule
+
+Slash command ownership must stay strict:
+
+1. Default to **Kernel-owned commands**. If a command represents agent
+   capability, session state, model/provider state, tools, memory, skills,
+   runtime management, or anything another client could reasonably need,
+   register it in `CommandManager` and expose it through
+   `_mustang.agent/commands/list`.
+2. Use **CLI-only commands** only for behavior that is genuinely tied to the
+   terminal client process or its local UI state. Current examples are:
+   `/exit`, `/quit`, `/clear`, and `/theme`.
+3. The CLI must merge, not replace, command catalogs: Kernel commands are the
+   runtime catalog; CLI-only commands are appended locally; duplicate names are
+   resolved in favor of Kernel metadata while preserving local argument
+   completers when needed.
+4. Do not add a new local CLI command merely because implementation is easier
+   there. Add the Kernel catalog entry and ACP surface first, then let the CLI
+   call that surface.
+
+This prevents the terminal client from becoming a private command registry and
+keeps future Home Screen, gateway, and non-TUI clients on the same command
+surface.
+
 ---
 
 ## 命令映射表
@@ -44,6 +68,11 @@ CommandManager 是**命令目录提供者**，不是执行者。
 | `/cost` | `_mustang.agent/session/get_usage` | `SessionManager.get_usage()` | 美元价格估算待可信 pricing table |
 | `/help` | 本地渲染（从 catalog 生成） | 本地渲染 | 无 |
 | `/memory` | 本地渲染 + file I/O | 同左 | 无 |
+
+CLI-only commands are intentionally absent from this table unless they have a
+Kernel-facing behavior. `/exit` and `/quit` terminate the CLI process, `/clear`
+clears the local terminal conversation view, and `/theme` changes local TUI
+presentation.
 
 ---
 
@@ -114,7 +143,7 @@ Mustang Agent runtime，避免 CLI 看到 Access-local 的 stale catalog。
 
 ## WS 客户端的职责
 
-1. 获取目录 → 维护本地命令注册表（用于 autocomplete、`/help`）
+1. 获取 Kernel 目录 → 与 CLI-only commands 合并后维护本地命令注册表（用于 autocomplete、`/help`）
 2. 用户输入 `/model use default provider/model`：
    - 查本地目录：`acp_method = "model/set_current"`
    - 直接发 `{ method: "model/set_current", params: { role: "default", provider: "provider", model: "model" } }`

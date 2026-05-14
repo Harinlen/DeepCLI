@@ -1,6 +1,10 @@
 import { CombinedAutocompleteProvider, type SlashCommand } from "../src/active-port/tui/autocomplete.js";
 import { KeybindingsManager } from "../src/active-port/coding-agent/config/keybindings.js";
-import { BUILTIN_SLASH_COMMANDS as ACTIVE_PORT_BUILTIN_COMMANDS } from "../src/active-port/coding-agent/extensibility/slash-commands.js";
+import {
+	BUILTIN_SLASH_COMMANDS as ACTIVE_PORT_BUILTIN_COMMANDS,
+	getLocalArgumentCompleter,
+	mergeKernelAndCliSlashCommands,
+} from "../src/active-port/coding-agent/extensibility/slash-commands.js";
 import { createPromptActionAutocompleteProvider } from "../src/active-port/coding-agent/modes/prompt-action-autocomplete.js";
 import { BUILTIN_COMMANDS, commandsToSlashCommands, sortCommandsByLabel } from "../src/modes/interactive.js";
 import { assert } from "./helpers.js";
@@ -90,6 +94,46 @@ assert(themeArgs !== null, "expected /theme set suggestions");
 assert(themeArgs.items[0]?.value === "light", "/theme set should complete loaded themes");
 
 const activePortProvider = new CombinedAutocompleteProvider(ACTIVE_PORT_BUILTIN_COMMANDS);
+const mergedKernelAndCliCommands = mergeKernelAndCliSlashCommands([
+	{ name: "model", description: "Kernel model command" },
+	{ name: "thinking", description: "Toggle kernel-wide LLM thinking" },
+]);
+assert(
+	["clear", "exit", "quit", "theme"].every(name => mergedKernelAndCliCommands.some(command => command.name === name)),
+	"kernel command catalogs must preserve true CLI-only commands",
+);
+assert(
+	mergedKernelAndCliCommands.find(command => command.name === "model")?.description === "Kernel model command",
+	"kernel command metadata should win for kernel-owned command names",
+);
+assert(
+	!mergedKernelAndCliCommands.some(command => command.name === "cost"),
+	"kernel-backed catalogs should not duplicate non-CLI fallback commands when the kernel omits them",
+);
+assert(
+	mergedKernelAndCliCommands.find(command => command.name === "thinking")?.getArgumentCompletions !== undefined,
+	"kernel-owned commands may still reuse local argument completers",
+);
+const kernelBackedProvider = new CombinedAutocompleteProvider([
+	...ACTIVE_PORT_BUILTIN_COMMANDS,
+	{
+		name: "thinking",
+		description: "Toggle kernel-wide LLM thinking",
+		getArgumentCompletions: getLocalArgumentCompleter("thinking"),
+	},
+]);
+const activePortThinking = await kernelBackedProvider.getSuggestions(["/t"], 0, 2);
+assert(activePortThinking !== null, "expected kernel-backed /t suggestions");
+assert(
+	activePortThinking.items.some(item => item.value === "thinking"),
+	"kernel-backed autocomplete should include /thinking from commands/list",
+);
+const activePortThinkingArgs = await kernelBackedProvider.getSuggestions(["/thinking o"], 0, 11);
+assert(activePortThinkingArgs !== null, "expected active-port /thinking argument suggestions");
+assert(
+	activePortThinkingArgs.items.map(item => item.value).join(",") === "on,off",
+	"/thinking should complete on/off arguments",
+);
 const activePortThemeArgs = await activePortProvider.getSuggestions(["/theme set l"], 0, 12);
 assert(activePortThemeArgs !== null, "expected active-port /theme set suggestions");
 assert(

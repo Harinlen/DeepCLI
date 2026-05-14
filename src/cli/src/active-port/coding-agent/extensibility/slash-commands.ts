@@ -67,6 +67,35 @@ export const BUILTIN_SLASH_COMMANDS: SlashCommand[] = [
 	{ name: "webfetch", description: "Manage WebFetch backend", getArgumentCompletions: completeWebFetchArguments },
 ];
 
+export const CLI_ONLY_SLASH_COMMANDS: SlashCommand[] = BUILTIN_SLASH_COMMANDS.filter(command =>
+	["clear", "exit", "quit", "theme"].includes(command.name),
+);
+
+const LOCAL_ARGUMENT_COMPLETERS = new Map(
+	BUILTIN_SLASH_COMMANDS.map(command => [command.name, command.getArgumentCompletions]),
+);
+LOCAL_ARGUMENT_COMPLETERS.set("thinking", completeThinkingArguments);
+
+export function getLocalArgumentCompleter(name: string): SlashCommand["getArgumentCompletions"] {
+	return LOCAL_ARGUMENT_COMPLETERS.get(name);
+}
+
+export function mergeKernelAndCliSlashCommands(kernelCommands: SlashCommand[]): SlashCommand[] {
+	if (kernelCommands.length === 0) return BUILTIN_SLASH_COMMANDS;
+
+	const merged = new Map<string, SlashCommand>();
+	for (const command of CLI_ONLY_SLASH_COMMANDS) {
+		merged.set(command.name, command);
+	}
+	for (const command of kernelCommands) {
+		merged.set(command.name, {
+			...command,
+			getArgumentCompletions: command.getArgumentCompletions ?? getLocalArgumentCompleter(command.name),
+		});
+	}
+	return [...merged.values()];
+}
+
 export async function loadSlashCommands(): Promise<SlashCommand[]> {
 	return [];
 }
@@ -117,6 +146,14 @@ function completeKernelArguments(argumentPrefix: string): Item[] | null {
 	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
 	if (argumentPrefix.includes(" ")) return null;
 	return filterCompletions(subcommand, KERNEL_ACTIONS);
+}
+
+function completeThinkingArguments(argumentPrefix: string): Item[] | null {
+	if (argumentPrefix.includes(" ")) return null;
+	return filterCompletions(argumentPrefix.trim(), [
+		{ value: "on", label: "on", description: "Request thinking for future LLM calls" },
+		{ value: "off", label: "off", description: "Disable thinking for future LLM calls" },
+	]);
 }
 
 function filterCompletions(prefix: string, items: Item[]): Item[] | null {

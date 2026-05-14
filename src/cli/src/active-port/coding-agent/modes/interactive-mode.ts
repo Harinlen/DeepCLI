@@ -27,7 +27,11 @@ import type {
 	ExtensionWidgetOptions,
 } from "../extensibility/extensions";
 import type { CompactOptions } from "../extensibility/extensions/types";
-import { BUILTIN_SLASH_COMMANDS, loadSlashCommands } from "../extensibility/slash-commands";
+import {
+	getLocalArgumentCompleter,
+	loadSlashCommands,
+	mergeKernelAndCliSlashCommands,
+} from "../extensibility/slash-commands";
 import { resolveLocalUrlToPath } from "../internal-urls";
 import { LSP_STARTUP_EVENT_CHANNEL, type LspStartupEvent } from "../lsp/startup-events";
 import { renameApprovedPlanFile } from "../plan-mode/approved-plan";
@@ -257,19 +261,19 @@ export class InteractiveMode implements InteractiveModeContext {
 
 		this.hideThinkingBlock = settings.get("hideThinkingBlock");
 
-		const builtinCommandNames = new Set(BUILTIN_SLASH_COMMANDS.map(c => c.name));
+		const kernelCommands: SlashCommand[] = this.session.customCommands.map(loaded => ({
+			name: loaded.command.name,
+			description: loaded.command.description,
+			getArgumentCompletions: getLocalArgumentCompleter(loaded.command.name),
+		}));
+		const baseCommands = mergeKernelAndCliSlashCommands(kernelCommands);
+		const builtinCommandNames = new Set(baseCommands.map(c => c.name));
 		const hookCommands: SlashCommand[] = (
 			this.session.extensionRunner?.getRegisteredCommands(builtinCommandNames) ?? []
 		).map(cmd => ({
 			name: cmd.name,
 			description: cmd.description ?? "(hook command)",
 			getArgumentCompletions: cmd.getArgumentCompletions,
-		}));
-
-		// Convert custom commands (TypeScript) to SlashCommand format
-		const customCommands: SlashCommand[] = this.session.customCommands.map(loaded => ({
-			name: loaded.command.name,
-			description: `${loaded.command.description} (${loaded.source})`,
 		}));
 
 		// Build skill commands from session.skills (if enabled)
@@ -283,7 +287,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 
 		// Store pending commands for init() where file commands are loaded async
-		this.#pendingSlashCommands = [...BUILTIN_SLASH_COMMANDS, ...hookCommands, ...customCommands, ...skillCommandList];
+		this.#pendingSlashCommands = [...baseCommands, ...hookCommands, ...skillCommandList];
 
 		this.#uiHelpers = new UiHelpers(this);
 		this.#btwController = new BtwController(this);

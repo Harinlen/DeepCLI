@@ -109,9 +109,18 @@ class Provider(ABC):
     async def context_window(self, model_id: str) -> int | None:
         return None
 
+    def supports_thinking(self, model_id: str) -> bool:
+        return False
+
     async def aclose(self) -> None:
         """关闭底层连接（如 httpx client）。默认空实现。"""
 ```
+
+`supports_thinking()` 是 provider capability gate。`LLMManager` 只表达用户的
+Kernel 级意图；具体 adapter 负责判断某个 API/model 是否能安全接收 thinking
+参数。裸 `OpenAICompatibleProvider` 默认返回 `False`，DeepSeek 子类重写后发
+DeepSeek 的 `thinking`/`reasoning_effort`，Anthropic/Bedrock 只对支持 extended
+thinking 的 Claude 模型发送 Anthropic Messages API 的 `thinking` 参数。
 
 ### Provider 实现列表
 

@@ -46,6 +46,7 @@ Provider.stream(model_id="claude-opus-4-6", ...)
 
 ```yaml
 llm:
+  thinking: false                         # Kernel-wide thinking request
   providers:
     bedrock:
       type: bedrock
@@ -92,7 +93,7 @@ class ModelSpec(BaseModel):
     """单个模型的配置，支持 str 简写。"""
     id: str
     max_tokens: int = 8192
-    thinking: bool = False
+    thinking: bool = False  # deprecated; Kernel-wide llm.thinking is used
     prompt_caching: bool = True
 
 class ProviderConfig(BaseModel):
@@ -120,7 +121,13 @@ class LLMConfig(BaseModel):
     providers: dict[str, ProviderConfig] = {}
     current_used: CurrentUsedConfig = CurrentUsedConfig()
     model_aliases: dict[str, ModelRef] = {}
+    thinking: bool = False
 ```
+
+`llm.thinking` 是用户可见的 Kernel 级开关：关闭时所有后续 LLM 调用都不请求
+reasoning/thinking；打开时 Orchestrator 请求 thinking，但 Provider adapter 仍
+按具体 API/model capability 决定是否发送参数。`ModelSpec.thinking` 只保留为旧
+配置兼容字段，不再作为用户级控制面。
 
 ---
 
@@ -162,6 +169,8 @@ ModelRef("anthropic", "claude-opus-4-6")
 ```python
 class ModelHandler(Protocol):
     async def list_providers(...) -> ListProvidersResult: ...
+    async def get_thinking(...) -> GetThinkingResult: ...
+    async def set_thinking(...) -> SetThinkingResult: ...
     async def add_provider(...) -> AddProviderResult: ...
     async def remove_provider(...) -> RemoveProviderResult: ...
     async def refresh_models(...) -> RefreshModelsResult: ...
@@ -173,6 +182,8 @@ class ModelHandler(Protocol):
 | ACP 方法 | ModelHandler 方法 |
 |---|---|
 | `model/provider_list` | `list_providers` |
+| `llm/thinking_get` | `get_thinking` |
+| `llm/thinking_set` | `set_thinking` |
 | `model/provider_add` | `add_provider` |
 | `model/provider_remove` | `remove_provider` |
 | `model/provider_refresh` | `refresh_models` |
@@ -217,6 +228,7 @@ sessions that already have a different session-specific model.
 /model current                                     显示 current_used 角色表
 /model use [role] <provider> <model_id>            设置 current_used role（默认 default）
 /model list                                        打开模型列表；Enter 进入编辑页
+/thinking [on|off]                                 查看或设置 Kernel 级 thinking
 ```
 
 ---

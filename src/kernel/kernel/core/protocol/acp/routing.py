@@ -44,6 +44,8 @@ from kernel.core.protocol.acp.schemas.model import (
     AddModelRequest,
     AddProviderRequest,
     AddProviderResponse,
+    GetThinkingRequest,
+    GetThinkingResponse,
     ListProfilesRequest,
     ListProfilesResponse,
     ListProvidersRequest,
@@ -54,6 +56,8 @@ from kernel.core.protocol.acp.schemas.model import (
     RemoveProviderResponse,
     SetCurrentModelRequest,
     SetCurrentModelResponse,
+    SetThinkingRequest,
+    SetThinkingResponse,
     UpdateModelRequest,
     UpdateModelResponse,
 )
@@ -125,6 +129,7 @@ from kernel.core.protocol.interfaces.contracts.execute_python_params import (
 )
 from kernel.core.protocol.interfaces.contracts.execute_shell_params import ExecuteShellParams
 from kernel.core.protocol.interfaces.contracts.get_usage_params import GetUsageParams
+from kernel.core.protocol.interfaces.contracts.get_thinking_params import GetThinkingParams
 from kernel.core.protocol.interfaces.contracts.handler_context import HandlerContext
 from kernel.core.protocol.interfaces.errors import InvalidParams
 from kernel.core.protocol.interfaces.contracts.list_profiles_params import (
@@ -172,6 +177,7 @@ from kernel.core.protocol.interfaces.contracts.set_config_option_result import (
 from kernel.core.protocol.interfaces.contracts.set_current_model_params import (
     SetCurrentModelParams,
 )
+from kernel.core.protocol.interfaces.contracts.set_thinking_params import SetThinkingParams
 from kernel.core.protocol.interfaces.contracts.update_model_params import UpdateModelParams
 from kernel.core.protocol.interfaces.contracts.update_model_result import UpdateModelResult
 from kernel.core.protocol.interfaces.contracts.set_mode_params import SetModeParams
@@ -557,6 +563,20 @@ async def _handle_provider_list(
         current_used=result.current_used,
         default_context_window=result.default_context_window,
     )
+
+
+async def _handle_thinking_get(
+    mh: ModelHandler, ctx: HandlerContext, p: GetThinkingRequest
+) -> BaseModel:
+    result = await mh.get_thinking(ctx, GetThinkingParams())
+    return GetThinkingResponse(enabled=result.enabled)
+
+
+async def _handle_thinking_set(
+    mh: ModelHandler, ctx: HandlerContext, p: SetThinkingRequest
+) -> BaseModel:
+    result = await mh.set_thinking(ctx, SetThinkingParams(enabled=p.enabled))
+    return SetThinkingResponse(enabled=result.enabled)
 
 
 async def _handle_provider_add(
@@ -965,6 +985,18 @@ REQUEST_DISPATCH: dict[str, RequestSpec] = {
         handler=_handle_model_update,
         params_type=UpdateModelRequest,
         result_type=UpdateModelResponse,
+        target="model",
+    ),
+    MustangMethod.LLM_THINKING_GET: RequestSpec(
+        handler=_handle_thinking_get,
+        params_type=GetThinkingRequest,
+        result_type=GetThinkingResponse,
+        target="model",
+    ),
+    MustangMethod.LLM_THINKING_SET: RequestSpec(
+        handler=_handle_thinking_set,
+        params_type=SetThinkingRequest,
+        result_type=SetThinkingResponse,
         target="model",
     ),
     # secrets/* -- routed to SecretManager (bootstrap service)

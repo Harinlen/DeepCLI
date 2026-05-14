@@ -22,7 +22,11 @@ from kernel.agents.mustang.llm.types import (
     UsageChunk,
 )
 from kernel.agents.mustang.llm_provider.base import Provider
-from kernel.agents.mustang.llm_provider.errors import MediaSizeError, PromptTooLongError, ProviderError
+from kernel.agents.mustang.llm_provider.errors import (
+    MediaSizeError,
+    PromptTooLongError,
+    ProviderError,
+)
 from kernel.agents.mustang.llm_provider.format.anthropic import (
     messages_to_anthropic,
     schemas_to_anthropic,
@@ -204,3 +208,7 @@ class AnthropicProvider(Provider):
 
     async def context_window(self, model_id: str) -> int | None:
         return _CONTEXT_WINDOWS.get(model_id)
+
+    def supports_thinking(self, model_id: str) -> bool:
+        """Anthropic extended thinking is only accepted by Claude 4 models."""
+        return model_id.startswith(("claude-opus-4", "claude-sonnet-4"))

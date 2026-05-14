@@ -65,6 +65,8 @@ class MustangMethod:
     MODEL_SET_CURRENT = "_mustang.agent/model/set_current"
     MODEL_ADD = "_mustang.agent/model/add"
     MODEL_UPDATE = "_mustang.agent/model/update"
+    LLM_THINKING_GET = "_mustang.agent/llm/thinking_get"
+    LLM_THINKING_SET = "_mustang.agent/llm/thinking_set"
     WEB_FETCH_BACKEND_OPTIONS = "_mustang.agent/web_fetch/backend_options"
     WEB_FETCH_SET_BACKEND = "_mustang.agent/web_fetch/set_backend"
     WEB_FETCH_GET_CONFIG = "_mustang.agent/web_fetch/get_config"
@@ -95,6 +97,8 @@ MUSTANG_EXTENSION_METHODS = frozenset(
         MustangMethod.MODEL_SET_CURRENT,
         MustangMethod.MODEL_ADD,
         MustangMethod.MODEL_UPDATE,
+        MustangMethod.LLM_THINKING_GET,
+        MustangMethod.LLM_THINKING_SET,
         MustangMethod.WEB_FETCH_BACKEND_OPTIONS,
         MustangMethod.WEB_FETCH_SET_BACKEND,
         MustangMethod.WEB_FETCH_GET_CONFIG,

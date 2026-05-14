@@ -67,7 +67,7 @@ class ModelSpec(BaseModel):
     """Maximum tokens to request per completion."""
 
     thinking: bool = False
-    """Enable extended thinking / reasoning where supported."""
+    """Deprecated per-model thinking override kept for config compatibility."""
 
     prompt_caching: bool = True
     """Enable prompt caching where supported (Anthropic only)."""
@@ -219,4 +219,11 @@ class LLMConfig(BaseModel):
 
     Allows short names like ``opus`` to resolve to a full
     ``[anthropic, claude-opus-4-6]`` ref.
+    """
+
+    thinking: bool = False
+    """Kernel-wide request for provider reasoning/thinking output.
+
+    Provider adapters still decide whether a concrete model/API can safely
+    receive a thinking parameter.  Unsupported providers ignore this flag.
     """

@@ -101,3 +101,11 @@ class BedrockProvider(AnthropicProvider):
                 bare = model_id[len(prefix) :]
                 break
         return await super().context_window(bare)
+
+    def supports_thinking(self, model_id: str) -> bool:
+        bare = model_id
+        for prefix in ("us.", "eu.", "ap.", "global."):
+            if model_id.startswith(prefix):
+                bare = model_id[len(prefix) :]
+                break
+        return super().supports_thinking(bare)

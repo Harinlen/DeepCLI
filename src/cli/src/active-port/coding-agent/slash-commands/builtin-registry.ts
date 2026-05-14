@@ -44,6 +44,8 @@ export async function executeBuiltinSlashCommand(
 				return await executeSessionCommand(ctx, parsed.args ?? "");
 			case "model":
 				return await executeModelCommand(ctx, parsed.args ?? "");
+			case "thinking":
+				return await executeThinkingCommand(ctx, parsed.args ?? "");
 			case "webfetch":
 				return await executeWebFetchCommand(ctx, parsed.args ?? "");
 			case "theme":
@@ -289,6 +291,32 @@ async function executeModelCommand(ctx: any, argsText: string): Promise<boolean>
 	}
 	ctx.showWarning?.("Usage: /model [list|add|current|use]");
 	return true;
+}
+
+async function executeThinkingCommand(ctx: any, argsText: string): Promise<boolean> {
+	const args = splitArgs(argsText);
+	const subcommand = args[0];
+	if (!subcommand) {
+		const enabled = await ctx.session?.getThinkingEnabled?.();
+		renderThinkingStatus(ctx, Boolean(enabled));
+		return true;
+	}
+	if (subcommand === "on" || subcommand === "off") {
+		const enabled = await ctx.session?.setThinkingEnabled?.(subcommand === "on");
+		renderThinkingStatus(ctx, Boolean(enabled));
+		return true;
+	}
+	ctx.showWarning?.("Usage: /thinking [on|off]");
+	return true;
+}
+
+function renderThinkingStatus(ctx: any, enabled: boolean): void {
+	ctx.chatContainer?.addChild?.(new Text(theme.fg("accent", "Thinking"), 1, 0));
+	ctx.chatContainer?.addChild?.(new Text(`status: ${enabled ? "on" : "off"}`, 1, 0));
+	ctx.chatContainer?.addChild?.(
+		new Text("scope: future LLM calls across all models", 1, 0),
+	);
+	ctx.ui?.requestRender?.();
 }
 
 async function defaultModelSubcommand(ctx: any): Promise<"list" | "add"> {

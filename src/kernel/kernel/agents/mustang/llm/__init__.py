@@ -41,6 +41,8 @@ from kernel.core.protocol.interfaces.contracts.add_provider_params import AddPro
 from kernel.core.protocol.interfaces.contracts.add_provider_result import AddProviderResult
 from kernel.core.protocol.interfaces.contracts.add_model_params import AddModelParams
 from kernel.core.protocol.interfaces.contracts.handler_context import HandlerContext
+from kernel.core.protocol.interfaces.contracts.get_thinking_params import GetThinkingParams
+from kernel.core.protocol.interfaces.contracts.get_thinking_result import GetThinkingResult
 from kernel.core.protocol.interfaces.contracts.list_profiles_params import ListProfilesParams
 from kernel.core.protocol.interfaces.contracts.list_profiles_result import (
     ListProfilesResult,
@@ -58,6 +60,8 @@ from kernel.core.protocol.interfaces.contracts.remove_provider_params import Rem
 from kernel.core.protocol.interfaces.contracts.remove_provider_result import RemoveProviderResult
 from kernel.core.protocol.interfaces.contracts.set_current_model_params import SetCurrentModelParams
 from kernel.core.protocol.interfaces.contracts.set_current_model_result import SetCurrentModelResult
+from kernel.core.protocol.interfaces.contracts.set_thinking_params import SetThinkingParams
+from kernel.core.protocol.interfaces.contracts.set_thinking_result import SetThinkingResult
 from kernel.core.protocol.interfaces.contracts.update_model_params import UpdateModelParams
 from kernel.core.protocol.interfaces.contracts.update_model_result import UpdateModelResult
 from kernel.core.lifecycle import Subsystem
@@ -145,6 +149,7 @@ class LLMManager(Subsystem):
         self._aliases: dict[str, ModelRef] = dict(config.model_aliases)
         self._providers: dict[str, ProviderConfig] = dict(config.providers)
         self._current_used: CurrentUsedConfig = config.current_used
+        self._thinking_enabled: bool = config.thinking
 
         # Pre-warm provider cache
         from kernel.agents.mustang.llm_provider import LLMProviderManager
@@ -214,7 +219,7 @@ class LLMManager(Subsystem):
             tool_schemas=tool_schemas,
             model_id=spec.id,
             temperature=temperature,
-            thinking=thinking and spec.thinking,
+            thinking=thinking and self._thinking_enabled and provider.supports_thinking(spec.id),
             max_tokens=max_tokens if max_tokens is not None else spec.max_tokens,
             prompt_caching=spec.prompt_caching,
         )
@@ -307,9 +312,7 @@ class LLMManager(Subsystem):
                     )
                 )
         default_label = (
-            f"{default_ref.provider}/{default_ref.model}"
-            if default_ref is not None
-            else ""
+            f"{default_ref.provider}/{default_ref.model}" if default_ref is not None else ""
         )
         return ListProfilesResult(profiles=profiles, default_model=default_label)
 
@@ -367,6 +370,20 @@ class LLMManager(Subsystem):
             current_used=self._current_used_refs(),
             default_context_window=_DEFAULT_CONTEXT_WINDOW,
         )
+
+    async def get_thinking(
+        self, ctx: HandlerContext, params: GetThinkingParams
+    ) -> GetThinkingResult:
+        """Return the kernel-wide LLM thinking setting."""
+        return GetThinkingResult(enabled=self._thinking_enabled)
+
+    async def set_thinking(
+        self, ctx: HandlerContext, params: SetThinkingParams
+    ) -> SetThinkingResult:
+        """Persist the kernel-wide LLM thinking setting."""
+        self._thinking_enabled = params.enabled
+        await self._persist()
+        return SetThinkingResult(enabled=self._thinking_enabled)
 
     async def add_provider(
         self, ctx: HandlerContext, params: AddProviderParams
@@ -499,9 +516,7 @@ class LLMManager(Subsystem):
         )
         return SetCurrentModelResult(role=params.role, model=ref.to_list())
 
-    async def add_model(
-        self, ctx: HandlerContext, params: AddModelParams
-    ) -> UpdateModelResult:
+    async def add_model(self, ctx: HandlerContext, params: AddModelParams) -> UpdateModelResult:
         """Add one model to an existing provider, or create a provider with it."""
         provider_name = params.provider_name.strip()
         model_id = params.model_id.strip()
@@ -541,9 +556,7 @@ class LLMManager(Subsystem):
             )
         else:
             if self._find_model_spec(existing, model_id) is not None:
-                raise ValueError(
-                    f"Model '{model_id}' already exists in provider '{provider_name}'"
-                )
+                raise ValueError(f"Model '{model_id}' already exists in provider '{provider_name}'")
             pcfg = existing.model_copy(update={"models": [*(existing.models or []), spec]})
 
         self._providers[provider_name] = pcfg
@@ -591,9 +604,7 @@ class LLMManager(Subsystem):
         if new_provider != ref.provider and new_provider in self._providers:
             raise ValueError(f"Provider '{new_provider}' already exists")
         if new_model_id != ref.model and self._find_model_spec(old_pcfg, new_model_id) is not None:
-            raise ValueError(
-                f"Model '{new_model_id}' already exists in provider '{ref.provider}'"
-            )
+            raise ValueError(f"Model '{new_model_id}' already exists in provider '{ref.provider}'")
 
         updates: dict[str, object] = {}
         display_name = params.display_name.strip() if params.display_name else None
@@ -746,10 +757,7 @@ class LLMManager(Subsystem):
                 f"{ref.provider}/{ref.model}",
                 known=self._all_model_keys(),
             )
-        models = [
-            updated_spec if spec.id == ref.model else spec
-            for spec in pcfg.models
-        ]
+        models = [updated_spec if spec.id == ref.model else spec for spec in pcfg.models]
         self._providers[ref.provider] = pcfg.model_copy(update={"models": models})
 
     def _retarget_refs(self, old_ref: ModelRef, new_ref: ModelRef) -> None:
@@ -814,5 +822,6 @@ class LLMManager(Subsystem):
             providers=dict(self._providers),
             current_used=self._current_used,
             model_aliases=dict(self._aliases),
+            thinking=self._thinking_enabled,
         )
         await self._cfg_section.update(new_config)

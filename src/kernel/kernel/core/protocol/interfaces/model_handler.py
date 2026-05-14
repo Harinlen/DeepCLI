@@ -28,6 +28,8 @@ from kernel.core.protocol.interfaces.contracts.add_provider_result import (
 )
 from kernel.core.protocol.interfaces.contracts.add_model_params import AddModelParams
 from kernel.core.protocol.interfaces.contracts.handler_context import HandlerContext
+from kernel.core.protocol.interfaces.contracts.get_thinking_params import GetThinkingParams
+from kernel.core.protocol.interfaces.contracts.get_thinking_result import GetThinkingResult
 from kernel.core.protocol.interfaces.contracts.list_profiles_params import (
     ListProfilesParams,
 )
@@ -58,6 +60,8 @@ from kernel.core.protocol.interfaces.contracts.set_current_model_params import (
 from kernel.core.protocol.interfaces.contracts.set_current_model_result import (
     SetCurrentModelResult,
 )
+from kernel.core.protocol.interfaces.contracts.set_thinking_params import SetThinkingParams
+from kernel.core.protocol.interfaces.contracts.set_thinking_result import SetThinkingResult
 from kernel.core.protocol.interfaces.contracts.update_model_params import UpdateModelParams
 from kernel.core.protocol.interfaces.contracts.update_model_result import UpdateModelResult
 
@@ -76,6 +80,18 @@ class ModelHandler(Protocol):
         self, ctx: HandlerContext, params: ListProvidersParams
     ) -> ListProvidersResult:
         """Return all registered providers and their models."""
+        ...
+
+    async def get_thinking(
+        self, ctx: HandlerContext, params: GetThinkingParams
+    ) -> GetThinkingResult:
+        """Return the kernel-wide LLM thinking setting."""
+        ...
+
+    async def set_thinking(
+        self, ctx: HandlerContext, params: SetThinkingParams
+    ) -> SetThinkingResult:
+        """Persist the kernel-wide LLM thinking setting."""
         ...
 
     async def add_provider(
@@ -119,9 +135,7 @@ class ModelHandler(Protocol):
         """
         ...
 
-    async def add_model(
-        self, ctx: HandlerContext, params: AddModelParams
-    ) -> UpdateModelResult:
+    async def add_model(self, ctx: HandlerContext, params: AddModelParams) -> UpdateModelResult:
         """Add a model to an existing provider or create a provider with one model.
 
         Raises ``ValueError`` if the provider is new and ``provider_type`` is

@@ -131,6 +131,8 @@ _ROUTER_MODEL_METHODS = frozenset(
         MustangMethod.MODEL_SET_CURRENT,
         MustangMethod.MODEL_ADD,
         MustangMethod.MODEL_UPDATE,
+        MustangMethod.LLM_THINKING_GET,
+        MustangMethod.LLM_THINKING_SET,
     }
 )
 _ROUTER_TOOLS_METHODS = frozenset(

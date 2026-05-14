@@ -43,6 +43,13 @@ _BUILTIN_COMMANDS: list[CommandDef] = [
         subcommands=["list", "add", "current", "use"],
     ),
     CommandDef(
+        name="thinking",
+        description="Toggle kernel-wide LLM thinking",
+        usage="/thinking [on | off]",
+        acp_method=MustangMethod.LLM_THINKING_GET,
+        subcommands=["on", "off"],
+    ),
+    CommandDef(
         name="plan",
         description="Enter, exit, or query plan mode",
         usage="/plan [enter | exit | status]",

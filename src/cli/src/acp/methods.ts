@@ -24,6 +24,8 @@ export const MustangMethod = {
   modelSetCurrent: "_mustang.agent/model/set_current",
   modelAdd: "_mustang.agent/model/add",
   modelUpdate: "_mustang.agent/model/update",
+  llmThinkingGet: "_mustang.agent/llm/thinking_get",
+  llmThinkingSet: "_mustang.agent/llm/thinking_set",
   webFetchBackendOptions: "_mustang.agent/web_fetch/backend_options",
   webFetchSetBackend: "_mustang.agent/web_fetch/set_backend",
   webFetchGetConfig: "_mustang.agent/web_fetch/get_config",

@@ -35,8 +35,9 @@ from kernel.agents.mustang.llm_provider.base import Provider
 
 
 class FakeProvider(Provider):
-    def __init__(self) -> None:
+    def __init__(self, *, thinking_supported: bool = True) -> None:
         self.calls: list[dict] = []
+        self.thinking_supported = thinking_supported
 
     def stream(
         self,
@@ -71,6 +72,9 @@ class FakeProvider(Provider):
     async def context_window(self, model_id: str) -> int | None:
         return 123_456
 
+    def supports_thinking(self, model_id: str) -> bool:
+        return self.thinking_supported
+
 
 # ---------------------------------------------------------------------------
 # Helper -- build LLMManager with pre-populated internal state
@@ -82,6 +86,7 @@ def _make_manager(
     providers: dict[str, tuple[ProviderConfig, FakeProvider]],
     aliases: dict[str, ModelRef] | None = None,
     default: ModelRef | None = None,
+    thinking_enabled: bool = True,
 ) -> LLMManager:
     """Build LLMManager bypassing startup()."""
 
@@ -116,6 +121,7 @@ def _make_manager(
     mgr._current_used = CurrentUsedConfig(
         default=default or ModelRef(provider="test", model="test"),
     )
+    mgr._thinking_enabled = thinking_enabled
     mgr._provider_manager = FakeProviderManager(provider_map)
     return mgr
 
@@ -275,37 +281,57 @@ class TestStreamRouting:
         assert p.calls[0]["prompt_caching"] is False
 
     @pytest.mark.anyio
-    async def test_thinking_gated_by_model_spec(self):
-        """thinking=True in stream() is AND-ed with spec.thinking."""
-        p_no = FakeProvider()
+    async def test_thinking_gated_by_kernel_setting_and_provider_capability(self):
+        p_no = FakeProvider(thinking_supported=False)
         p_yes = FakeProvider()
         mgr = _make_manager(
             providers={
-                "no": (_pcfg("m", thinking=False, api_key="sk-a"), p_no),
-                "yes": (_pcfg("m", thinking=True, api_key="sk-b"), p_yes),
+                "no": (_pcfg("m", api_key="sk-a"), p_no),
+                "yes": (_pcfg("m", api_key="sk-b"), p_yes),
             },
+            thinking_enabled=True,
         )
         async for _ in await mgr.stream(
-            system=[], messages=[], tool_schemas=[],
+            system=[],
+            messages=[],
+            tool_schemas=[],
             model=ModelRef(provider="no", model="m"),
-            temperature=None, thinking=True,
+            temperature=None,
+            thinking=True,
         ):
             pass
         async for _ in await mgr.stream(
-            system=[], messages=[], tool_schemas=[],
+            system=[],
+            messages=[],
+            tool_schemas=[],
             model=ModelRef(provider="yes", model="m"),
-            temperature=None, thinking=True,
+            temperature=None,
+            thinking=True,
         ):
             pass
         assert p_no.calls[0]["thinking"] is False
         assert p_yes.calls[0]["thinking"] is True
+
+        mgr._thinking_enabled = False
+        async for _ in await mgr.stream(
+            system=[],
+            messages=[],
+            tool_schemas=[],
+            model=ModelRef(provider="yes", model="m"),
+            temperature=None,
+            thinking=True,
+        ):
+            pass
+        assert p_yes.calls[-1]["thinking"] is False
 
     @pytest.mark.anyio
     async def test_unknown_model_raises(self):
         mgr = _make_manager(providers={})
         with pytest.raises(ModelNotFoundError):
             await mgr.stream(
-                system=[], messages=[], tool_schemas=[],
+                system=[],
+                messages=[],
+                tool_schemas=[],
                 model=ModelRef(provider="ghost", model="x"),
                 temperature=None,
             )
@@ -323,13 +349,17 @@ class TestStreamRouting:
             },
         )
         async for _ in await mgr.stream(
-            system=[], messages=[], tool_schemas=[],
+            system=[],
+            messages=[],
+            tool_schemas=[],
             model=ModelRef(provider="anthropic", model="claude-opus-4-6"),
             temperature=None,
         ):
             pass
         async for _ in await mgr.stream(
-            system=[], messages=[], tool_schemas=[],
+            system=[],
+            messages=[],
+            tool_schemas=[],
             model=ModelRef(provider="anthropic", model="claude-sonnet-4-6"),
             temperature=None,
         ):

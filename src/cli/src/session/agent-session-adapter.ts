@@ -368,14 +368,14 @@ export class MustangAgentSessionAdapter {
 		this.customCommands.length = 0;
 		this.#skillCommandNames.clear();
 		for (const command of commands) {
-			if (command.source !== "skill") continue;
-			this.#skillCommandNames.add(command.name);
+			if (command.source === "skill") this.#skillCommandNames.add(command.name);
 			this.customCommands.push({
-				source: "skill",
+				source: command.source,
 				command: {
 					name: command.name,
 					description: command.description,
 					usage: command.usage,
+					subcommands: command.subcommands,
 				},
 			});
 		}
@@ -392,6 +392,14 @@ export class MustangAgentSessionAdapter {
 
 	async listProviderModels(): Promise<ProviderModelState> {
 		return this.modelService.listProviders();
+	}
+
+	async getThinkingEnabled(): Promise<boolean> {
+		return this.modelService.getThinking();
+	}
+
+	async setThinkingEnabled(enabled: boolean): Promise<boolean> {
+		return this.modelService.setThinking(enabled);
 	}
 
 	async runtimeStatus(): Promise<unknown> {

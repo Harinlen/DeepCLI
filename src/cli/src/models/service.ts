@@ -216,6 +216,24 @@ export class ModelService {
     return { providers, providerTypeOptions, models, currentUsed, defaultContextWindow };
   }
 
+  async getThinking(): Promise<boolean> {
+    const response = await this.client.request<{ enabled?: unknown }>(
+      MustangMethod.llmThinkingGet,
+      {},
+      { timeoutMs: 10_000 },
+    );
+    return Boolean(response.enabled);
+  }
+
+  async setThinking(enabled: boolean): Promise<boolean> {
+    const response = await this.client.request<{ enabled?: unknown }>(
+      MustangMethod.llmThinkingSet,
+      { enabled },
+      { timeoutMs: 10_000 },
+    );
+    return Boolean(response.enabled);
+  }
+
   async setCurrent(
     role: string,
     provider: string,

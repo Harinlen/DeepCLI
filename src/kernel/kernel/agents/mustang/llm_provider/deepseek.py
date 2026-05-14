@@ -72,3 +72,6 @@ class DeepSeekProvider(OpenAICompatibleProvider):
 
     async def context_window(self, model_id: str) -> int | None:
         return _CONTEXT_WINDOWS.get(model_id)
+
+    def supports_thinking(self, model_id: str) -> bool:
+        return model_id in _CONTEXT_WINDOWS

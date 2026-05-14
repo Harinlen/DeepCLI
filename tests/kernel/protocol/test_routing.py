@@ -44,17 +44,21 @@ from kernel.core.protocol.acp.routing import (
     _handle_provider_remove,
     _handle_provider_refresh,
     _handle_set_current,
+    _handle_thinking_get,
+    _handle_thinking_set,
     _handle_model_add,
     _handle_model_update,
 )
 from kernel.core.protocol.acp.schemas.model import (
     AddModelRequest,
     AddProviderRequest,
+    GetThinkingRequest,
     ListProfilesRequest,
     ListProvidersRequest,
     RefreshModelsRequest,
     RemoveProviderRequest,
     SetCurrentModelRequest,
+    SetThinkingRequest,
     UpdateModelRequest,
 )
 from kernel.core.protocol.acp.schemas.session import (
@@ -112,6 +116,8 @@ from kernel.core.protocol.interfaces.contracts.refresh_models_result import Refr
 from kernel.core.protocol.interfaces.contracts.set_current_model_result import (
     SetCurrentModelResult,
 )
+from kernel.core.protocol.interfaces.contracts.get_thinking_result import GetThinkingResult
+from kernel.core.protocol.interfaces.contracts.set_thinking_result import SetThinkingResult
 from kernel.core.protocol.interfaces.contracts.update_model_result import UpdateModelResult
 
 
@@ -160,6 +166,8 @@ class TestDispatchTables:
             MustangMethod.MODEL_SET_CURRENT,
             MustangMethod.MODEL_ADD,
             MustangMethod.MODEL_UPDATE,
+            MustangMethod.LLM_THINKING_GET,
+            MustangMethod.LLM_THINKING_SET,
         ]:
             assert method in REQUEST_DISPATCH
 
@@ -172,7 +180,11 @@ class TestDispatchTables:
             assert REQUEST_DISPATCH[method].target == "session"
 
     def test_model_targets(self) -> None:
-        for method in [MustangMethod.MODEL_PROVIDER_LIST, MustangMethod.MODEL_PROVIDER_ADD]:
+        for method in [
+            MustangMethod.MODEL_PROVIDER_LIST,
+            MustangMethod.MODEL_PROVIDER_ADD,
+            MustangMethod.LLM_THINKING_GET,
+        ]:
             assert REQUEST_DISPATCH[method].target == "model"
 
 
@@ -364,9 +376,7 @@ class TestHandlePrompt:
         sh.prompt = AsyncMock(
             return_value=PromptResult(
                 stop_reason="end_turn",
-                meta={
-                    "mustang.agent/clientTurnId": "11111111-1111-4111-8111-111111111111"
-                },
+                meta={"mustang.agent/clientTurnId": "11111111-1111-4111-8111-111111111111"},
             )
         )
         params = PromptRequest(
@@ -608,6 +618,23 @@ class TestHandleProviderAdd:
         result = await _handle_provider_add(mh, _ctx(), params)
         assert result.name == "bedrock"
         assert result.models == ["model-a"]
+
+
+class TestHandleThinking:
+    async def test_get_delegates(self) -> None:
+        mh = MagicMock()
+        mh.get_thinking = AsyncMock(return_value=GetThinkingResult(enabled=True))
+        result = await _handle_thinking_get(mh, _ctx(), GetThinkingRequest())
+        assert result.enabled is True
+        mh.get_thinking.assert_awaited_once()
+
+    async def test_set_delegates(self) -> None:
+        mh = MagicMock()
+        mh.set_thinking = AsyncMock(return_value=SetThinkingResult(enabled=False))
+        result = await _handle_thinking_set(mh, _ctx(), SetThinkingRequest(enabled=False))
+        assert result.enabled is False
+        params = mh.set_thinking.await_args.args[1]
+        assert params.enabled is False
 
 
 class TestHandleProviderRemove:

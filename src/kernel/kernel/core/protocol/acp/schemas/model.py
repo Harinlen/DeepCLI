@@ -88,6 +88,36 @@ class ListProvidersResponse(AcpModel):
 
 
 # ---------------------------------------------------------------------------
+# llm/thinking_get + llm/thinking_set
+# ---------------------------------------------------------------------------
+
+
+class GetThinkingRequest(AcpModel):
+    """``llm/thinking_get`` request params (empty)."""
+
+    meta: dict[str, Any] | None = None
+
+
+class GetThinkingResponse(AcpModel):
+    """``llm/thinking_get`` response."""
+
+    enabled: bool
+
+
+class SetThinkingRequest(AcpModel):
+    """``llm/thinking_set`` request params."""
+
+    enabled: bool
+    meta: dict[str, Any] | None = None
+
+
+class SetThinkingResponse(AcpModel):
+    """``llm/thinking_set`` response."""
+
+    enabled: bool
+
+
+# ---------------------------------------------------------------------------
 # model/provider_add
 # ---------------------------------------------------------------------------
 

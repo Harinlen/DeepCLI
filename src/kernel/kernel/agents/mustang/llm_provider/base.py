@@ -87,6 +87,10 @@ class Provider(ABC):
         """
         return None
 
+    def supports_thinking(self, model_id: str) -> bool:
+        """Return whether this provider can request thinking for ``model_id``."""
+        return False
+
     async def aclose(self) -> None:
         """Close underlying connections (e.g. httpx client).
 

@@ -90,6 +90,13 @@ const service = new ModelService({
 				roles: request.roles ?? [],
 			} as R;
 		}
+		if (method === "_mustang.agent/llm/thinking_get") {
+			return { enabled: false } as R;
+		}
+		if (method === "_mustang.agent/llm/thinking_set") {
+			const request = params as { enabled?: boolean };
+			return { enabled: request.enabled === true } as R;
+		}
 		assert(method === "_mustang.agent/model/profile_list", "model service should call a known model method");
 		return {
 			defaultModel: "deepseek/deepseek-chat",
@@ -195,5 +202,10 @@ assert(
 	}),
 	"addModel should send add params",
 );
+
+assert(await service.getThinking() === false, "getThinking should read kernel LLM thinking");
+assert(await service.setThinking(true) === true, "setThinking should update kernel LLM thinking");
+const thinkingCall = calls.find(call => call.method === "_mustang.agent/llm/thinking_set");
+assert(JSON.stringify(thinkingCall?.params) === JSON.stringify({ enabled: true }), "setThinking should send enabled flag");
 
 console.log("PASS: model service");

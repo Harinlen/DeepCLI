@@ -455,6 +455,33 @@ await executeBuiltinSlashCommand("/model list", {
 assert(modelCalls.includes("warning:No models available. Use /model add to add a model."), "/model list should warn directly when no models exist");
 assert(!modelCalls.includes("model-selector"), "/model list should not open an empty selector");
 
+const thinkingCalls: string[] = [];
+await executeBuiltinSlashCommand("/thinking", {
+	ctx: {
+		session: {
+			getThinkingEnabled: async () => false,
+		},
+		chatContainer: { addChild: (child: unknown) => thinkingCalls.push(String((child as { getText?: () => string }).getText?.() ?? child)) },
+		ui: { requestRender: () => thinkingCalls.push("render") },
+	},
+});
+assert(thinkingCalls.some(line => line.includes("status: off")), "/thinking should display the kernel-wide setting");
+thinkingCalls.length = 0;
+await executeBuiltinSlashCommand("/thinking on", {
+	ctx: {
+		session: {
+			setThinkingEnabled: async (enabled: boolean) => {
+				thinkingCalls.push(`set:${enabled}`);
+				return enabled;
+			},
+		},
+		chatContainer: { addChild: (child: unknown) => thinkingCalls.push(String((child as { getText?: () => string }).getText?.() ?? child)) },
+		ui: { requestRender: () => thinkingCalls.push("render") },
+	},
+});
+assert(thinkingCalls.includes("set:true"), "/thinking on should enable the kernel-wide setting");
+assert(thinkingCalls.some(line => line.includes("scope: future LLM calls across all models")), "/thinking should explain global scope");
+
 const webfetchCalls: string[] = [];
 await executeBuiltinSlashCommand("/webfetch backend", {
 	ctx: {

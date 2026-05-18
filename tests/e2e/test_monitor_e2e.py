@@ -15,9 +15,8 @@ a deferred tool) and use it when instructed.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
-
-import pytest
 
 from probe.client import (
     AgentChunk,
@@ -27,9 +26,10 @@ from probe.client import (
     TurnComplete,
     ProbeClient,
 )
+from tests.e2e.test_probe_phase2_e2e import phase2_kernel
 
 
-_LLM_TIMEOUT: float = 120.0
+_LLM_TIMEOUT: float = 15.0
 
 
 def _run(coro: Any, *, timeout: float = _LLM_TIMEOUT) -> Any:
@@ -41,18 +41,6 @@ def _run(coro: Any, *, timeout: float = _LLM_TIMEOUT) -> Any:
 
 def _client(port: int, token: str) -> ProbeClient:
     return ProbeClient(port=port, token=token, request_timeout=_LLM_TIMEOUT)
-
-
-def _skip_if_no_model(port: int, token: str) -> None:
-    async def _check() -> bool:
-        async with _client(port, token) as client:
-            await client.initialize()
-            result = await client._request("_mustang.agent/model/provider_list", {})
-        return len(result.get("providers", [])) > 0
-
-    has_provider = _run(_check(), timeout=30)
-    if not has_provider:
-        pytest.skip("No LLM providers configured — skipping")
 
 
 async def _collect_turn(
@@ -90,7 +78,7 @@ async def _collect_turn(
 # ---------------------------------------------------------------------------
 
 
-def test_monitor_start_and_stop(kernel: tuple[int, str]) -> None:
+def test_monitor_start_and_stop(phase2_kernel: tuple[int, str, Path, Path]) -> None:
     """Start a monitor on a simple command, then stop it.
 
     Happy path: ToolSearch loads Monitor → Monitor spawns command →
@@ -101,13 +89,12 @@ def test_monitor_start_and_stop(kernel: tuple[int, str]) -> None:
     - Monitor spawns a subprocess and returns a task_id
     - TaskStop can kill a monitor task
     """
-    port, token = kernel
-    _skip_if_no_model(port, token)
+    port, token, workspace, _home = phase2_kernel
 
     async def _run_test() -> None:
         async with _client(port, token) as client:
             await client.initialize()
-            sid = await client.new_session()
+            sid = await client.new_session(cwd=str(workspace))
 
             # Turn 1: ask LLM to start a monitor.
             # The prompt explicitly mentions Monitor tool so the LLM
@@ -115,11 +102,7 @@ def test_monitor_start_and_stop(kernel: tuple[int, str]) -> None:
             text1, stop1, tools1, _ = await _collect_turn(
                 client,
                 sid,
-                (
-                    "Use the Monitor tool to monitor this command: "
-                    "'for i in $(seq 1 100); do echo monitor_test_$i; sleep 1; done'. "
-                    "Set the description to 'e2e monitor test'."
-                ),
+                "PHASE2_MONITOR_START: start a monitor task.",
             )
             assert stop1 == "end_turn", f"Turn 1 failed: {stop1}, text: {text1}"
 
@@ -131,16 +114,15 @@ def test_monitor_start_and_stop(kernel: tuple[int, str]) -> None:
 
             # The response should mention a task ID (starts with 'm').
             text1_lower = text1.lower()
-            assert "monitor" in text1_lower or "task" in text1_lower or "m" in text1_lower, (
+            assert "phase2_monitor_start_ok" in text1_lower or "monitor" in text1_lower, (
                 f"Expected mention of monitor/task in: {text1!r}"
             )
 
             # Turn 2: stop the monitor (task is already registered after Turn 1).
-            await asyncio.sleep(0.3)
             text2, stop2, tools2, _ = await _collect_turn(
                 client,
                 sid,
-                "Stop the monitor task you just started.",
+                "PHASE2_MONITOR_STOP: stop the monitor task you just started.",
             )
             assert stop2 == "end_turn", f"Turn 2 failed: {stop2}"
 
@@ -156,29 +138,24 @@ def test_monitor_start_and_stop(kernel: tuple[int, str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_monitor_invalid_command(kernel: tuple[int, str]) -> None:
+def test_monitor_invalid_command(phase2_kernel: tuple[int, str, Path, Path]) -> None:
     """Monitor a nonexistent command — process exits, task becomes failed.
 
     Error path: command exits with non-zero → MonitorTaskState status=failed →
     task notification delivered.
     """
-    port, token = kernel
-    _skip_if_no_model(port, token)
+    port, token, workspace, _home = phase2_kernel
 
     async def _run_test() -> None:
         async with _client(port, token) as client:
             await client.initialize()
-            sid = await client.new_session()
+            sid = await client.new_session(cwd=str(workspace))
 
             # Start monitor on a command that will fail immediately.
             text1, stop1, tools1, _ = await _collect_turn(
                 client,
                 sid,
-                (
-                    "Use the Monitor tool to monitor this command: "
-                    "'nonexistent_command_xyz_12345'. "
-                    "Description: 'testing invalid command'."
-                ),
+                "PHASE2_MONITOR_INVALID: monitor an invalid command.",
             )
             assert stop1 == "end_turn", f"Turn 1 failed: {stop1}"
 
@@ -208,41 +185,36 @@ def test_monitor_invalid_command(kernel: tuple[int, str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_monitor_with_task_output(kernel: tuple[int, str]) -> None:
+def test_monitor_with_task_output(phase2_kernel: tuple[int, str, Path, Path]) -> None:
     """Monitor a command, then read its output via TaskOutput.
 
     Integration path: Monitor running → TaskOutputTool reads output file →
     both tools can operate on the same task.
     """
-    port, token = kernel
-    _skip_if_no_model(port, token)
+    port, token, workspace, _home = phase2_kernel
 
     async def _run_test() -> None:
         async with _client(port, token) as client:
             await client.initialize()
-            sid = await client.new_session()
+            sid = await client.new_session(cwd=str(workspace))
 
             # Turn 1: start monitor.
             text1, stop1, tools1, _ = await _collect_turn(
                 client,
                 sid,
-                (
-                    "Use the Monitor tool to monitor: "
-                    "'for i in 1 2 3; do echo integration_marker_$i; sleep 0.5; done'. "
-                    "Description: 'integration test'."
-                ),
+                "PHASE2_MONITOR_OUTPUT: monitor a command that writes integration_marker.",
             )
             assert stop1 == "end_turn", f"Turn 1 failed: {stop1}"
 
             # Poll task output files until integration_marker appears (script takes ~1.5s).
             from tests.e2e.conftest import poll_for_session_output
-            await poll_for_session_output(sid, "integration_marker", timeout=10.0, interval=0.3)
+            await poll_for_session_output(sid, "integration_marker", timeout=3.0, interval=0.1)
 
             # Turn 2: ask LLM to read the task output.
             text2, stop2, tools2, _ = await _collect_turn(
                 client,
                 sid,
-                "Read the output of the monitor task you just started using TaskOutput.",
+                "PHASE2_MONITOR_OUTPUT_READ: read the monitor output using TaskOutput.",
             )
             assert stop2 == "end_turn", f"Turn 2 failed: {stop2}"
 

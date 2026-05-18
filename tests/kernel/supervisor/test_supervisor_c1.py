@@ -38,14 +38,12 @@ def test_supervisor_builds_ordered_child_specs(tmp_path: Path) -> None:
 
     specs = runtime.build_specs()
 
-    assert list(specs) == ["hub", "access", "primary"]
+    assert list(specs) == ["hub", "access_router"]
     assert specs["hub"].command[2] == "kernel.agent_hub"
-    assert specs["access"].command[2] == "kernel.agents.access"
-    assert specs["primary"].command[2] == "kernel.agents.mustang.runtime"
-    assert "--prompt-backend" in specs["access"].command
-    assert "router" in specs["access"].command
+    assert specs["access_router"].command[2] == "kernel.access_router"
+    assert "--hub-endpoint" in specs["access_router"].command
     assert f"--primary-token={runtime.primary_token}" in specs["hub"].command
-    assert f"--registration-token={runtime.primary_token}" in specs["primary"].command
+    assert "--access-router-endpoint" in specs["hub"].command
 
 
 def test_supervisor_runtime_file_marks_stopped(tmp_path: Path) -> None:
@@ -74,8 +72,7 @@ def test_supervisor_runtime_file_includes_child_status(tmp_path: Path) -> None:
     )
     runtime.children = {
         "hub": _Proc(pid=1),
-        "access": _Proc(pid=2),
-        "primary": _Proc(pid=3, returncode=7),
+        "access_router": _Proc(pid=2),
     }
 
     runtime._write_runtime_file(
@@ -87,7 +84,7 @@ def test_supervisor_runtime_file_includes_child_status(tmp_path: Path) -> None:
     assert payload["ready"] is True
     assert payload["access"]["pid"] == 2
     assert payload["children"]["hub"]["running"] is True
-    assert payload["children"]["primary"]["running"] is False
+    assert payload["children"]["access_router"]["running"] is True
 
 
 def test_start_child_sets_unbuffered_env_and_tracks_process(
@@ -145,10 +142,10 @@ def test_start_launches_children_in_order_and_writes_runtime_file(
 
     runtime.start()
 
-    assert order == ["hub", "access", "primary"]
+    assert order == ["hub", "access_router"]
     payload = json.loads(runtime.config.runtime_file.read_text(encoding="utf-8"))
     assert payload["hub"] == {"runtimeFile": "agent-hub.json"}
-    assert payload["primary"] == {"runtimeFile": "primary-agent.json"}
+    assert payload["primary"] == {}
 
 
 def test_start_removes_stale_runtime_files_before_waiting(
@@ -182,7 +179,7 @@ def test_start_removes_stale_runtime_files_before_waiting(
 
     runtime.start()
 
-    assert removed_before_start == {"hub": True, "access": True, "primary": True}
+    assert removed_before_start == {"hub": True, "access_router": True}
 
 
 def test_child_exit_restarts_from_failed_child(
@@ -199,8 +196,7 @@ def test_child_exit_restarts_from_failed_child(
     runtime.build_specs()
     runtime.children = {
         "hub": _Proc(pid=1),
-        "access": _Proc(pid=2),
-        "primary": _Proc(pid=3, returncode=9),
+        "access_router": _Proc(pid=2, returncode=9),
     }
     restarted: list[str] = []
 
@@ -212,15 +208,16 @@ def test_child_exit_restarts_from_failed_child(
     monkeypatch.setattr(
         supervisor_runtime, "_wait_runtime_file", lambda path: {"runtimeFile": path.name}
     )
+    monkeypatch.setattr(supervisor_runtime, "_wait_http_readiness", lambda *_args: None)
     monkeypatch.setattr(supervisor_runtime, "_wait_default_route", lambda *_args: None)
 
-    runtime._handle_child_exit("primary", 9)
+    runtime._handle_child_exit("access_router", 9)
 
-    assert restarted == ["primary"]
+    assert restarted == ["access_router"]
     assert runtime.status == "ready"
-    assert runtime.restart_counts["primary"] == 1
+    assert runtime.restart_counts["access_router"] == 1
     assert runtime.last_exit is not None
-    assert runtime.last_exit["child"] == "primary"
+    assert runtime.last_exit["child"] == "access_router"
     assert runtime.last_exit["code"] == 9
 
 
@@ -234,12 +231,11 @@ def test_child_exit_enters_degraded_when_restart_budget_exceeded(tmp_path: Path)
     )
     runtime.children = {
         "hub": _Proc(pid=1),
-        "access": _Proc(pid=2),
-        "primary": _Proc(pid=3, returncode=9),
+        "access_router": _Proc(pid=2, returncode=9),
     }
     runtime._restart_attempts = [time.time()] * supervisor_runtime.RESTART_BUDGET_MAX_ATTEMPTS
 
-    runtime._handle_child_exit("primary", 9)
+    runtime._handle_child_exit("access_router", 9)
 
     payload = json.loads(runtime.config.runtime_file.read_text(encoding="utf-8"))
     assert runtime.status == "degraded"
@@ -257,14 +253,12 @@ def test_stop_terminates_running_children_and_writes_stopped_file(tmp_path: Path
     )
     runtime.children = {
         "hub": _Proc(pid=1),
-        "access": _Proc(pid=2),
-        "primary": _Proc(pid=3),
+        "access_router": _Proc(pid=2),
     }
 
     runtime.stop()
 
-    assert runtime.children["primary"].terminated is True
-    assert runtime.children["access"].terminated is True
+    assert runtime.children["access_router"].terminated is True
     assert runtime.children["hub"].terminated is True
     payload = json.loads(runtime.config.runtime_file.read_text(encoding="utf-8"))
     assert payload["ready"] is False

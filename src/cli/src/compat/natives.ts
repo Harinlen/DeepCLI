@@ -267,6 +267,16 @@ export function parseKey(data: string, ..._rest: unknown[]): string | undefined 
 	};
 	const mapped = map[data];
 	if (mapped) return mapped;
+
+	const kitty = parseCsiUKey(data);
+	if (kitty) return kitty;
+
+	const modifiedCursor = parseModifiedCursorKey(data);
+	if (modifiedCursor) return modifiedCursor;
+
+	const altKey = parseLegacyAltKey(data);
+	if (altKey) return altKey;
+
 	if (data.length === 1) {
 		const code = data.charCodeAt(0);
 		if (code >= 1 && code <= 26) {
@@ -278,7 +288,87 @@ export function parseKey(data: string, ..._rest: unknown[]): string | undefined 
 }
 
 export function matchesKey(data: string, key: string, ..._rest: unknown[]): boolean {
-	return parseKey(data) === key || data === key;
+	const parsed = parseKey(data);
+	return parsed === key || data === key || canonicalKey(parsed) === canonicalKey(key);
+}
+
+function parseCsiUKey(data: string): string | undefined {
+	const match = /^\x1b\[(\d+)(?:;(\d+))?u$/.exec(data);
+	if (!match) return undefined;
+	const codepoint = Number(match[1]);
+	const modifierValue = match[2] ? Number(match[2]) : 1;
+	const key = keyNameFromCodepoint(codepoint);
+	if (!key) return undefined;
+	const modifierMask = Math.max(0, modifierValue - 1);
+	return withModifiers(key, {
+		shift: (modifierMask & 1) !== 0,
+		alt: (modifierMask & 2) !== 0,
+		ctrl: (modifierMask & 4) !== 0,
+	});
+}
+
+function parseModifiedCursorKey(data: string): string | undefined {
+	const match = /^\x1b\[(?:1;)?(\d+)([ABCDHF])$/.exec(data);
+	if (!match) return undefined;
+	const modifierValue = Number(match[1]);
+	const base = { A: "up", B: "down", C: "right", D: "left", H: "home", F: "end" }[match[2]];
+	if (!base) return undefined;
+	const modifierMask = Math.max(0, modifierValue - 1);
+	return withModifiers(base, {
+		shift: (modifierMask & 1) !== 0,
+		alt: (modifierMask & 2) !== 0,
+		ctrl: (modifierMask & 4) !== 0,
+	});
+}
+
+function parseLegacyAltKey(data: string): string | undefined {
+	if (!data.startsWith("\x1b") || data.length !== 2) return undefined;
+	const key = data[1];
+	if (!key) return undefined;
+	const code = key.charCodeAt(0);
+	if (code >= 1 && code <= 26) {
+		return withModifiers(String.fromCharCode(code + 96), { alt: true, ctrl: true });
+	}
+	if (/^[A-Z]$/.test(key)) {
+		return withModifiers(key.toLowerCase(), { alt: true, shift: true });
+	}
+	if (/^[a-z0-9]$/.test(key)) {
+		return withModifiers(key, { alt: true });
+	}
+	return undefined;
+}
+
+function keyNameFromCodepoint(codepoint: number): string | undefined {
+	if (codepoint === 9) return "tab";
+	if (codepoint === 13) return "enter";
+	if (codepoint === 27) return "escape";
+	if (codepoint === 32) return "space";
+	if (codepoint === 127) return "backspace";
+	const char = String.fromCodePoint(codepoint);
+	if (/^[A-Z]$/.test(char)) return char.toLowerCase();
+	if (/^[a-z0-9]$/.test(char)) return char;
+	return char.length === 1 ? char : undefined;
+}
+
+function withModifiers(
+	key: string,
+	modifiers: { ctrl?: boolean; shift?: boolean; alt?: boolean },
+): string {
+	const parts: string[] = [];
+	if (modifiers.ctrl) parts.push("ctrl");
+	if (modifiers.shift) parts.push("shift");
+	if (modifiers.alt) parts.push("alt");
+	return [...parts, key].join("+");
+}
+
+function canonicalKey(key: string | undefined): string | undefined {
+	if (!key) return undefined;
+	const parts = key.toLowerCase().split("+");
+	const base = parts.pop();
+	if (!base) return undefined;
+	const modifiers = new Set(parts);
+	const ordered = ["ctrl", "shift", "alt"].filter(modifier => modifiers.has(modifier));
+	return [...ordered, base].join("+");
 }
 
 export function setKittyProtocolActive(_active: boolean): void {}

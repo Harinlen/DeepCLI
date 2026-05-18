@@ -245,7 +245,7 @@ export class MustangAgentSessionAdapter {
 	}
 
 	async executeBash(command: string, onChunk: (chunk: string) => void, options: { excludeFromContext?: boolean } = {}): Promise<{ exitCode: number; cancelled: boolean; output: string }> {
-		const session = this.#requireSession("Run a chat prompt or /session new before using shell execution.");
+		const session = await this.#ensureSessionForPrompt();
 		this.isBashRunning = true;
 		let output = "";
 		try {
@@ -262,7 +262,7 @@ export class MustangAgentSessionAdapter {
 	}
 
 	async executePython(code: string, onChunk: (chunk: string) => void, options: { excludeFromContext?: boolean } = {}): Promise<{ exitCode: number; cancelled: boolean; output: string }> {
-		const session = this.#requireSession("Run a chat prompt or /session new before using Python execution.");
+		const session = await this.#ensureSessionForPrompt();
 		this.isPythonRunning = true;
 		let output = "";
 		try {

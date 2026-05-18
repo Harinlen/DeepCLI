@@ -10,8 +10,6 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from probe.client import (
     AgentChunk,
     PermissionRequest,
@@ -19,12 +17,13 @@ from probe.client import (
     ToolCallEvent,
     TurnComplete,
 )
+from tests.e2e.test_probe_phase2_e2e import phase2_kernel
 
-_LLM_TIMEOUT: float = 120.0
+_TEST_TIMEOUT: float = 15.0
 _ASSETS = Path(__file__).parents[1] / "assert"
 
 
-def _run(coro: Any, *, timeout: float = _LLM_TIMEOUT) -> Any:
+def _run(coro: Any, *, timeout: float = _TEST_TIMEOUT) -> Any:
     async def _guarded() -> Any:
         return await asyncio.wait_for(coro, timeout=timeout)
 
@@ -32,24 +31,12 @@ def _run(coro: Any, *, timeout: float = _LLM_TIMEOUT) -> Any:
 
 
 def _client(port: int, token: str) -> ProbeClient:
-    return ProbeClient(port=port, token=token, request_timeout=_LLM_TIMEOUT)
+    return ProbeClient(port=port, token=token, request_timeout=_TEST_TIMEOUT)
 
 
-def _has_models(port: int, token: str) -> bool:
-    async def _check() -> bool:
-        async with _client(port, token) as c:
-            await c.initialize()
-            result = await c._request("_mustang.agent/model/profile_list", {})
-        return bool(result.get("profiles"))
-
-    return _run(_check(), timeout=30)
-
-
-def test_read_real_png(kernel: tuple[int, str]) -> None:
+def test_read_real_png(phase2_kernel: tuple[int, str, Path, Path]) -> None:
     """Read tests/assert/sample.png through live kernel."""
-    port, token = kernel
-    if not _has_models(port, token):
-        pytest.skip("No LLM configured")
+    port, token, workspace, _home = phase2_kernel
 
     img_path = _ASSETS / "sample.png"
     assert img_path.exists(), f"Missing test asset: {img_path}"
@@ -61,11 +48,11 @@ def test_read_real_png(kernel: tuple[int, str]) -> None:
 
         async with _client(port, token) as c:
             await c.initialize()
-            sid = await c.new_session()
+            sid = await c.new_session(cwd=str(workspace))
             async for event in c.prompt(
                 sid,
-                f"Use the Read tool to read this image: {img_path}\n"
-                "Describe what you see. Be concise (1-2 sentences).",
+                f"PHASE2_REAL_PNG_READ {img_path}",
+                timeout=_TEST_TIMEOUT,
             ):
                 if isinstance(event, AgentChunk):
                     text_parts.append(event.text)
@@ -84,15 +71,12 @@ def test_read_real_png(kernel: tuple[int, str]) -> None:
         f"Expected Read call, got: {[e.title for e in tool_events]}"
     )
     assert stop_reason == "end_turn"
-    assert len(text) > 0
-    print(f"\n  LLM response: {text[:200]}")
+    assert "PHASE2_REAL_PNG_READ_OK" in text
 
 
-def test_read_real_pdf(kernel: tuple[int, str]) -> None:
+def test_read_real_pdf(phase2_kernel: tuple[int, str, Path, Path]) -> None:
     """Read tests/assert/sample.pdf through live kernel."""
-    port, token = kernel
-    if not _has_models(port, token):
-        pytest.skip("No LLM configured")
+    port, token, workspace, _home = phase2_kernel
 
     pdf_path = _ASSETS / "sample.pdf"
     assert pdf_path.exists(), f"Missing test asset: {pdf_path}"
@@ -104,11 +88,11 @@ def test_read_real_pdf(kernel: tuple[int, str]) -> None:
 
         async with _client(port, token) as c:
             await c.initialize()
-            sid = await c.new_session()
+            sid = await c.new_session(cwd=str(workspace))
             async for event in c.prompt(
                 sid,
-                f"Use the Read tool to read this PDF: {pdf_path}\n"
-                "Summarize the content. Be concise (2-3 sentences).",
+                f"PHASE2_REAL_PDF_READ {pdf_path}",
+                timeout=_TEST_TIMEOUT,
             ):
                 if isinstance(event, AgentChunk):
                     text_parts.append(event.text)
@@ -127,5 +111,5 @@ def test_read_real_pdf(kernel: tuple[int, str]) -> None:
         f"Expected Read call, got: {[e.title for e in tool_events]}"
     )
     assert stop_reason == "end_turn"
-    assert len(text) > 0
+    assert "PHASE2_REAL_PDF_READ_OK" in text
     print(f"\n  LLM response: {text[:200]}")

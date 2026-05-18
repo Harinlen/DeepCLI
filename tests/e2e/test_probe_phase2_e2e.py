@@ -96,24 +96,24 @@ def phase2_kernel() -> Generator[tuple[int, str, Path, Path], None, None]:
     stderr_file = stderr_path.open("w")
     env = os.environ.copy()
     env["HOME"] = str(sandbox_home)
+    env["DEEPCLI_HOME"] = str(sandbox_home)
+    env["DEEPCLI_STATE_DIR"] = str(token_path.parent)
+    env["DEEPCLI_CONFIG_DIR"] = str(sandbox_home / ".deepcli" / "config")
     proc = subprocess.Popen(
         [
-            "uv",
-            "run",
-            "python",
-            "-m",
-            "kernel.supervisor",
+            "bash",
+            "scripts/run-kernel.sh",
             "--access-port",
             str(_PORT),
             "--state-dir",
-            str(sandbox_home / ".mustang" / "state"),
+            str(token_path.parent),
             "--workspace",
             str(_WORKSPACE),
             "--dev",
             "--prompt-backend",
             "router",
         ],
-        cwd=str(KERNEL_DIR),
+        cwd=str(KERNEL_DIR.parent.parent),
         stdout=subprocess.DEVNULL,
         stderr=stderr_file,
         env=env,
@@ -615,7 +615,7 @@ def test_probe_hook_user_prompt_submit_fires_in_runtime(
     phase2_kernel: tuple[int, str, Path, Path],
 ) -> None:
     port, token, workspace, home = phase2_kernel
-    sentinel = home / ".mustang" / "phase2-hook-fired.txt"
+    sentinel = home / ".deepcli" / "phase2-hook-fired.txt"
     sentinel.unlink(missing_ok=True)
 
     async def _test() -> None:
@@ -864,14 +864,80 @@ class _FakeOpenAIHandler(BaseHTTPRequestHandler):
 def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
     body_text = json.dumps(body, ensure_ascii=False)
     user_text = _last_user_text(body)
-    if "PHASE2_MODEL_ECHO" in user_text:
+    def has(marker: str) -> bool:
+        return marker in user_text or marker in body_text
+
+    if has("PHASE2_MODEL_ECHO"):
         return _text_chunks(f"MODEL:{body.get('model')}")
+    if has("PHASE2_TODO_UPDATE") and "call_todo_update" not in body_text:
+        return _tool_call(
+            "call_todo_update",
+            "TodoWrite",
+            {
+                "todos": [
+                    {
+                        "content": "Verify Probe todo coverage",
+                        "activeForm": "Verifying Probe todo coverage",
+                        "status": "completed",
+                    }
+                ]
+            },
+        )
+    if "PHASE2_MONITOR_STOP" in user_text and "call_monitor_stop" not in body_text:
+        return _tool_call(
+            "call_monitor_stop",
+            "TaskStop",
+            {"task_id": _extract_task_id(body_text)},
+        )
+    if "PHASE2_MONITOR_OUTPUT_READ" in user_text and "call_monitor_output" not in body_text:
+        return _tool_call(
+            "call_monitor_output",
+            "TaskOutput",
+            {"task_id": _extract_task_id(body_text), "block": False, "timeout": 1000},
+        )
+    if "PHASE2_SENDMESSAGE_EXPLORER" in user_text and "call_sendmessage_explorer" not in body_text:
+        return _tool_call(
+            "call_sendmessage_explorer",
+            "SendMessage",
+            {"to": "explorer", "message": "also check the history"},
+        )
+    if "PHASE2_SENDMESSAGE_RESEARCHER" in user_text and "call_sendmessage_researcher" not in body_text:
+        return _tool_call(
+            "call_sendmessage_researcher",
+            "SendMessage",
+            {"to": "researcher", "message": "What else can you tell me?"},
+        )
+    if "PHASE2_SENDMESSAGE_CROSS_SESSION" in user_text and "call_sendmessage_cross" not in body_text:
+        return _tool_call(
+            "call_sendmessage_cross",
+            "SendMessage",
+            {
+                "to": f"session:{_extract_session_target(user_text)}",
+                "message": "hello from session A",
+            },
+        )
     if _has_tool_result(body):
-        if "PHASE2_BASH" in user_text:
+        if "PHASE2_MONITOR_STOP" in user_text:
+            return _text_chunks("PHASE2_MONITOR_STOP_OK")
+        if "PHASE2_MONITOR_OUTPUT_READ" in user_text:
+            return _text_chunks("PHASE2_MONITOR_OUTPUT_OK integration_marker")
+        if has("PHASE2_MONITOR_START"):
+            return _text_chunks("PHASE2_MONITOR_START_OK")
+        if has("PHASE2_MONITOR_INVALID"):
+            return _text_chunks("PHASE2_MONITOR_INVALID_OK failed exit")
+        if has("PHASE2_BASH_READONLY_PIPE"):
+            return _text_chunks("PHASE2_BASH_READONLY_PIPE_OK")
+        if has("PHASE2_BASH_UNSAFE_PIPE"):
+            return _text_chunks("PHASE2_BASH_UNSAFE_PIPE_DENIED_OK")
+        if has("PHASE2_BASH_DESTRUCTIVE_WARNING"):
+            return _text_chunks("PHASE2_BASH_DESTRUCTIVE_WARNING_DENIED_OK")
+        if has("PHASE2_BASH"):
             return _text_chunks("PHASE2_BASH_OK")
         if "PHASE2_PYTHON" in user_text:
             return _text_chunks("PHASE2_PYTHON_OK")
-        if "PHASE2_TODO" in user_text:
+        if has("PHASE2_TODO_UPDATE"):
+            return _text_chunks("PHASE2_TODO_UPDATE_OK")
+        if has("PHASE2_TODO"):
             return _text_chunks("PHASE2_TODO_OK")
         if "PHASE2_GLOB" in user_text:
             return _text_chunks("PHASE2_GLOB_OK")
@@ -881,6 +947,24 @@ def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
             return _text_chunks("PHASE2_WEBFETCH_BLOCKED_OK")
         if "PHASE2_SENDMESSAGE_MISSING" in user_text:
             return _text_chunks("PHASE2_SENDMESSAGE_ERROR_OK")
+        if "PHASE2_AGENT_SPAWN_EXPLORER" in user_text:
+            return _text_chunks("PHASE2_AGENT_SPAWN_EXPLORER_OK")
+        if "PHASE2_AGENT_SPAWN_RESEARCHER" in user_text:
+            return _text_chunks("PHASE2_AGENT_SPAWN_RESEARCHER_OK")
+        if "PHASE2_SENDMESSAGE_EXPLORER" in user_text:
+            return _text_chunks("PHASE2_SENDMESSAGE_EXPLORER_OK message queued")
+        if "PHASE2_SENDMESSAGE_RESEARCHER" in user_text:
+            return _text_chunks("PHASE2_SENDMESSAGE_RESEARCHER_OK message sent")
+        if "PHASE2_SENDMESSAGE_CROSS_SESSION" in user_text:
+            return _text_chunks("PHASE2_SENDMESSAGE_CROSS_SESSION_OK delivered")
+        if has("PHASE2_TOOLSEARCH_NO_MATCH"):
+            return _text_chunks("PHASE2_TOOLSEARCH_NO_MATCH_OK")
+        if has("PHASE2_TOOLSEARCH_DEFERRED"):
+            return _text_chunks("PHASE2_TOOLSEARCH_DEFERRED_OK EnterPlanMode")
+        if has("PHASE2_WEB_DEFERRED") and "call_webfetch_deferred" in body_text:
+            return _text_chunks("PHASE2_WEB_DEFERRED_OK")
+        if has("PHASE2_WEB_DEFERRED"):
+            return _text_chunks("PHASE2_WEB_DEFERRED_OK WebFetch")
         if "PHASE2_TOOLSEARCH" in user_text:
             return _text_chunks("PHASE2_TOOLSEARCH_OK")
         if "PHASE2_PLAN_SCHEMA_VISIBILITY" in user_text:
@@ -899,6 +983,8 @@ def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
             return _text_chunks("PHASE2_MCP_LIST_OK")
         if "PHASE2_MCP_READ" in user_text:
             return _text_chunks("PHASE2_MCP_READ_OK")
+        if has("PHASE2_MCP_BLOB"):
+            return _text_chunks("PHASE2_MCP_BLOB_OK saved /tmp/phase2-logo.png")
         if "PHASE2_SKILL" in user_text:
             return _text_chunks("PHASE2_SKILL_OK")
         if "PHASE2_MEMORY_WRITE" in user_text:
@@ -907,18 +993,32 @@ def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
             return _text_chunks("PHASE2_MEMORY_APPEND_OK")
         if "PHASE2_MEMORY_LIST" in user_text:
             return _text_chunks("PHASE2_MEMORY_LIST_OK")
+        if has("PHASE2_MEMORY_DELETE"):
+            return _text_chunks("PHASE2_MEMORY_DELETE_OK")
         if "PHASE2_CRON_CREATE" in user_text:
             return _text_chunks("PHASE2_CRON_CREATE_OK")
         if "PHASE2_CRON_LIST" in user_text:
             return _text_chunks("PHASE2_CRON_LIST_OK")
+        if has("PHASE2_CRON_DELIVERY"):
+            return _text_chunks("PHASE2_CRON_DELIVERY_OK")
+        if has("PHASE2_CRON_REPEAT"):
+            return _text_chunks("PHASE2_CRON_REPEAT_OK")
         if "PHASE2_CRON_DELETE_MISSING" in user_text:
             return _text_chunks("PHASE2_CRON_DELETE_OK")
+        if has("PHASE2_LOOP_SKILL"):
+            return _text_chunks("PHASE2_LOOP_SKILL_OK")
         if "phase2_fixture.txt" in body_text:
             return _text_chunks("PHASE2_FILE_READ_OK")
+        if "sample.png" in body_text:
+            return _text_chunks("PHASE2_REAL_PNG_READ_OK")
+        if "sample.pdf" in body_text:
+            return _text_chunks("PHASE2_REAL_PDF_READ_OK")
         if "phase2_reject.txt" in body_text:
             return _text_chunks("PHASE2_PERMISSION_REJECTED")
         if "phase2_existing.txt" in body_text:
             return _text_chunks("PHASE2_PERMISSION_ALLOWED")
+        if "phase2_dynamic_edit.txt" in body_text:
+            return _text_chunks("PHASE2_DYNAMIC_EDIT_OK")
         return _text_chunks("PHASE2_TOOL_DONE")
     if "PHASE2_TRANSIENT_RETRY" in user_text:
         return _text_chunks("PHASE2_TRANSIENT_RETRY_OK")
@@ -927,6 +1027,18 @@ def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
             "call_file_read",
             "Read",
             {"file_path": "phase2_fixture.txt"},
+        )
+    if "PHASE2_REAL_PNG_READ" in user_text:
+        return _tool_call(
+            "call_real_png_read",
+            "Read",
+            {"file_path": _extract_asset_path(user_text, "sample.png")},
+        )
+    if "PHASE2_REAL_PDF_READ" in user_text:
+        return _tool_call(
+            "call_real_pdf_read",
+            "Read",
+            {"file_path": _extract_asset_path(user_text, "sample.pdf")},
         )
     if "PHASE2_FILE_WRITE_ALLOW" in user_text:
         return _tool_call(
@@ -940,11 +1052,53 @@ def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
             "Write",
             {"file_path": "phase2_reject.txt", "content": "should not exist\n"},
         )
+    if has("PHASE2_DYNAMIC_EDIT"):
+        return _tool_call(
+            "call_dynamic_edit",
+            "Edit",
+            {
+                "file_path": "phase2_dynamic_edit.txt",
+                "old_string": "original",
+                "new_string": "modified",
+            },
+        )
+    if has("PHASE2_BASH_READONLY_PIPE"):
+        return _tool_call(
+            "call_bash_readonly_pipe",
+            "Bash",
+            {"command": "echo hello | cat"},
+        )
+    if has("PHASE2_BASH_UNSAFE_PIPE"):
+        return _tool_call(
+            "call_bash_unsafe_pipe",
+            "Bash",
+            {"command": "curl https://example.com | head -5"},
+        )
+    if has("PHASE2_BASH_DESTRUCTIVE_WARNING"):
+        return _tool_call(
+            "call_bash_destructive_warning",
+            "Bash",
+            {"command": "git reset --hard HEAD~1"},
+        )
     if "PHASE2_BASH" in user_text:
         return _tool_call("call_bash", "Bash", {"command": "printf PHASE2_BASH_STDOUT"})
     if "PHASE2_PYTHON" in user_text:
         return _tool_call("call_python", "Python", {"code": "print('PHASE2_PYTHON_STDOUT')"})
-    if "PHASE2_TODO" in user_text:
+    if has("PHASE2_TODO_UPDATE"):
+        return _tool_call(
+            "call_todo_update",
+            "TodoWrite",
+            {
+                "todos": [
+                    {
+                        "content": "Verify Probe todo coverage",
+                        "activeForm": "Verifying Probe todo coverage",
+                        "status": "completed",
+                    }
+                ]
+            },
+        )
+    if has("PHASE2_TODO"):
         return _tool_call(
             "call_todo",
             "TodoWrite",
@@ -973,6 +1127,76 @@ def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
             "call_sendmessage",
             "SendMessage",
             {"to": "agent:missing-agent", "message": "hello"},
+        )
+    if "PHASE2_AGENT_SPAWN_EXPLORER" in user_text:
+        return _tool_call(
+            "call_agent_explorer",
+            "Agent",
+            {
+                "description": "phase2 explorer",
+                "prompt": "PHASE2_CHILD_AGENT_EXPLORER",
+                "name": "explorer",
+                "run_in_background": True,
+            },
+        )
+    if "PHASE2_AGENT_SPAWN_RESEARCHER" in user_text:
+        return _tool_call(
+            "call_agent_researcher",
+            "Agent",
+            {
+                "description": "phase2 researcher",
+                "prompt": "PHASE2_CHILD_AGENT_RESEARCHER",
+                "name": "researcher",
+                "run_in_background": True,
+            },
+        )
+    if "PHASE2_MONITOR_START" in user_text:
+        return _tool_call(
+            "call_monitor_start",
+            "Monitor",
+            {
+                "command": "printf monitor_ready; sleep 30",
+                "description": "phase2 monitor start",
+                "timeout_ms": 5000,
+            },
+        )
+    if "PHASE2_MONITOR_INVALID" in user_text:
+        return _tool_call(
+            "call_monitor_invalid",
+            "Monitor",
+            {
+                "command": "nonexistent_command_xyz_12345",
+                "description": "phase2 monitor invalid",
+                "timeout_ms": 1000,
+            },
+        )
+    if "PHASE2_MONITOR_OUTPUT" in user_text:
+        return _tool_call(
+            "call_monitor_output_start",
+            "Monitor",
+            {
+                "command": "printf integration_marker",
+                "description": "phase2 monitor output",
+                "timeout_ms": 1000,
+            },
+        )
+    if has("PHASE2_TOOLSEARCH_NO_MATCH"):
+        return _tool_call(
+            "call_toolsearch_no_match",
+            "ToolSearch",
+            {"query": "select:ZzzNonexistentTool999"},
+        )
+    if has("PHASE2_TOOLSEARCH_DEFERRED"):
+        return _tool_call(
+            "call_toolsearch_deferred",
+            "ToolSearch",
+            {"query": "select:EnterPlanMode"},
+        )
+    if has("PHASE2_WEB_DEFERRED"):
+        return _tool_call(
+            "call_toolsearch_web_deferred",
+            "ToolSearch",
+            {"query": "select:WebSearch"},
         )
     if "PHASE2_TOOLSEARCH" in user_text:
         return _tool_call("call_toolsearch", "ToolSearch", {"query": "select:Bash"})
@@ -1018,6 +1242,12 @@ def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
             "ReadMcpResource",
             {"server": "resources", "uri": "config://app/settings"},
         )
+    if has("PHASE2_MCP_BLOB"):
+        return _tool_call(
+            "call_mcp_blob",
+            "ReadMcpResource",
+            {"server": "resources", "uri": "image://logo/png"},
+        )
     if "PHASE2_SKILL" in user_text:
         return _tool_call("call_skill", "Skill", {"skill": "phase2-probe", "args": "probe"})
     if "PHASE2_MEMORY_WRITE" in user_text:
@@ -1039,6 +1269,12 @@ def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
         )
     if "PHASE2_MEMORY_LIST" in user_text:
         return _tool_call("call_memory_list", "memory_list", {"category": "semantic"})
+    if has("PHASE2_MEMORY_DELETE"):
+        return _tool_call(
+            "call_memory_delete",
+            "memory_delete",
+            {"name": "phase2-probe-memory", "confirmation": True},
+        )
     if "PHASE2_CRON_CREATE" in user_text:
         return _tool_call(
             "call_cron_create",
@@ -1051,12 +1287,51 @@ def _script_response(body: dict[str, Any]) -> list[dict[str, Any]]:
                 "delivery": "none",
             },
         )
+    if has("PHASE2_CRON_DELIVERY"):
+        return _tool_call(
+            "call_cron_delivery",
+            "CronCreate",
+            {
+                "schedule": "every 1h",
+                "prompt": "PHASE2_CRON_DELIVERY_PROMPT",
+                "description": "Phase 2 delivery cron job",
+                "durable": False,
+                "delivery": "session,acp",
+            },
+        )
+    if has("PHASE2_CRON_REPEAT"):
+        return _tool_call(
+            "call_cron_repeat",
+            "CronCreate",
+            {
+                "schedule": "every 1h",
+                "prompt": "PHASE2_CRON_REPEAT_PROMPT",
+                "description": "Phase 2 repeat cron job",
+                "durable": False,
+                "delivery": "none",
+                "repeat_count": 5,
+            },
+        )
     if "PHASE2_CRON_LIST" in user_text:
         return _tool_call("call_cron_list", "CronList", {"include_completed": True})
     if "PHASE2_CRON_DELETE_MISSING" in user_text:
         return _tool_call("call_cron_delete", "CronDelete", {"id": "missing-phase2-cron"})
+    if has("PHASE2_LOOP_SKILL"):
+        return _tool_call(
+            "call_loop_cron_create",
+            "CronCreate",
+            {
+                "schedule": "every 5m",
+                "prompt": "check build status PHASE2_LOOP_SKILL",
+                "description": "Phase 2 /loop skill cron job",
+                "durable": False,
+                "delivery": "none",
+            },
+        )
     if "PHASE2_HOOK_MUTATED" in body_text:
         return _text_chunks("PHASE2_HOOK_OK")
+    if "PHASE2_CHILD_AGENT_" in user_text:
+        return _text_chunks("PHASE2_CHILD_AGENT_OK")
     if "PHASE2_GIT_CONTEXT" in user_text and "Current branch:" in body_text:
         return _text_chunks("PHASE2_GIT_CONTEXT_OK")
     if "PHASE2_GIT_CONTEXT" in user_text:
@@ -1069,6 +1344,29 @@ def _has_tool_result(body: dict[str, Any]) -> bool:
         if message.get("role") == "tool":
             return True
     return False
+
+
+def _extract_task_id(text: str) -> str:
+    marker = "Task ID:"
+    if marker not in text:
+        return "missing-task-id"
+    tail = text.split(marker, 1)[1].strip()
+    return tail.split()[0]
+
+
+def _extract_session_target(text: str) -> str:
+    marker = "session:"
+    if marker not in text:
+        return "missing-session-id"
+    tail = text.split(marker, 1)[1].strip()
+    return tail.split()[0].strip("`'\".,)")
+
+
+def _extract_asset_path(text: str, filename: str) -> str:
+    for token in text.split():
+        if token.endswith(filename):
+            return token.strip("`'\"")
+    return filename
 
 
 def _last_user_text(body: dict[str, Any]) -> str:
@@ -1144,7 +1442,7 @@ def _write_probe_skill(home: Path) -> None:
 
 
 def _write_probe_hooks(home: Path) -> None:
-    hook_dir = home / ".mustang" / "hooks" / "phase2-prompt-rewrite"
+    hook_dir = home / "hooks" / "phase2-prompt-rewrite"
     hook_dir.mkdir(parents=True, exist_ok=True)
     (hook_dir / "HOOK.md").write_text(
         "---\n"
@@ -1160,7 +1458,7 @@ def _write_probe_hooks(home: Path) -> None:
         "from pathlib import Path\n\n"
         "def handle(ctx):\n"
         "    if ctx.user_text and 'PHASE2_HOOK_PROMPT' in ctx.user_text:\n"
-        "        path = Path(os.environ['HOME']) / '.mustang' / 'phase2-hook-fired.txt'\n"
+        "        path = Path(os.environ['HOME']) / '.deepcli' / 'phase2-hook-fired.txt'\n"
         "        path.write_text(ctx.user_text, encoding='utf-8')\n"
         "        ctx.user_text = ctx.user_text.replace(\n"
         "            'PHASE2_HOOK_PROMPT', 'PHASE2_HOOK_MUTATED'\n"
@@ -1220,9 +1518,13 @@ def _write_llm_config(home: Path, fake_base_url: str) -> None:
             },
         }
     }
-    path = home / ".mustang" / "config" / "kernel.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    for path in (
+        home / ".deepcli" / "config" / "kernel.yaml",
+        home / ".mustang" / "config" / "kernel.yaml",
+        home / "config" / "kernel.yaml",
+    ):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
 
 
 def _wait_for_readiness(port: int, timeout: float) -> None:

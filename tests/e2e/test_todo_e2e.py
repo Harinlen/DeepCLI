@@ -12,8 +12,6 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-import pytest
-
 from probe.client import (
     AgentChunk,
     PermissionRequest,
@@ -21,31 +19,20 @@ from probe.client import (
     TurnComplete,
     ProbeClient,
 )
+from tests.e2e.test_probe_phase2_e2e import phase2_kernel
 
 
-_LLM_TIMEOUT: float = 120.0
+_TEST_TIMEOUT: float = 15.0
 
 
-def _run(coro: Any, *, timeout: float = _LLM_TIMEOUT) -> Any:
+def _run(coro: Any, *, timeout: float = _TEST_TIMEOUT) -> Any:
     async def _guarded() -> Any:
         return await asyncio.wait_for(coro, timeout=timeout)
     return asyncio.run(_guarded())
 
 
 def _client(port: int, token: str) -> ProbeClient:
-    return ProbeClient(port=port, token=token, request_timeout=_LLM_TIMEOUT)
-
-
-def _skip_if_no_model(port: int, token: str) -> None:
-    async def _check() -> list[dict[str, Any]]:
-        async with _client(port, token) as client:
-            await client.initialize()
-            result = await client._request("_mustang.agent/model/provider_list", {})
-        return result.get("providers", [])
-
-    providers = _run(_check(), timeout=30)
-    if not providers:
-        pytest.skip("No LLM providers configured — skipping")
+    return ProbeClient(port=port, token=token, request_timeout=_TEST_TIMEOUT)
 
 
 async def _collect_turn(
@@ -58,7 +45,7 @@ async def _collect_turn(
     stop_reason = "unknown"
     tool_calls: list[ToolCallEvent] = []
 
-    async for event in client.prompt(sid, prompt):
+    async for event in client.prompt(sid, prompt, timeout=_TEST_TIMEOUT):
         if isinstance(event, AgentChunk):
             text_parts.append(event.text)
         elif isinstance(event, ToolCallEvent):
@@ -76,49 +63,45 @@ async def _collect_turn(
 # ---------------------------------------------------------------------------
 
 
-def test_todo_write_and_update(kernel: tuple[int, str]) -> None:
+def test_todo_write_and_update(phase2_kernel: tuple[int, str, Any, Any]) -> None:
     """TodoWriteTool creates and updates a todo list.
 
     Happy path: LLM calls TodoWrite to create items → turn completes →
     follow-up turn marks items completed.
     """
-    port, token = kernel
-    _skip_if_no_model(port, token)
+    port, token, workspace, _home = phase2_kernel
 
     async def _run_test() -> None:
         async with _client(port, token) as client:
             await client.initialize()
-            sid = await client.new_session()
+            sid = await client.new_session(cwd=str(workspace))
 
             # Turn 1: create a todo list.  Accept either direct TodoWrite
             # calls or REPL-wrapped ones (user config may enable REPL mode,
             # which hides TodoWrite from the LLM and routes it via REPL).
             text1, stop1, tools1 = await _collect_turn(
                 client, sid,
-                "Create a todo list with these two pending items using the "
-                "TodoWrite tool: "
-                "1) content='Write code' activeForm='Writing code', "
-                "2) content='Run tests' activeForm='Running tests'. "
-                "Each todo MUST include content, activeForm (present "
-                "continuous), and status fields.",
+                "PHASE2_TODO: create a todo list.",
             )
             assert stop1 == "end_turn", f"Turn 1 failed: {stop1}, text: {text1}"
 
             todo_titles = {t.title for t in tools1}
-            assert "TodoWrite" in todo_titles or "REPL" in todo_titles, (
-                f"Expected TodoWrite (or REPL-wrapped) call, got: {todo_titles}"
+            assert "TodoWrite" in todo_titles, (
+                f"Expected TodoWrite call, got: {todo_titles}"
             )
+            assert "PHASE2_TODO_OK" in text1
 
             # Turn 2: mark all completed.  Same loose check.
             text2, stop2, tools2 = await _collect_turn(
                 client, sid,
-                "Mark all todos as completed using TodoWrite.",
+                "PHASE2_TODO_UPDATE: mark all todos completed.",
             )
             assert stop2 == "end_turn", f"Turn 2 failed: {stop2}, text: {text2}"
 
             todo_titles2 = {t.title for t in tools2}
-            assert "TodoWrite" in todo_titles2 or "REPL" in todo_titles2, (
-                f"Expected TodoWrite (or REPL-wrapped) call in turn 2, got: {todo_titles2}"
+            assert "TodoWrite" in todo_titles2, (
+                f"Expected TodoWrite call in turn 2, got: {todo_titles2}"
             )
+            assert "PHASE2_TODO_UPDATE_OK" in text2
 
     _run(_run_test())

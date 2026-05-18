@@ -14,9 +14,8 @@ calls to the SendMessage tool.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
-
-import pytest
 
 from probe.client import (
     AgentChunk,
@@ -26,9 +25,10 @@ from probe.client import (
     TurnComplete,
     ProbeClient,
 )
+from tests.e2e.test_probe_phase2_e2e import phase2_kernel
 
 
-_LLM_TIMEOUT: float = 120.0
+_LLM_TIMEOUT: float = 15.0
 
 
 def _run(coro: Any, *, timeout: float = _LLM_TIMEOUT) -> Any:
@@ -39,18 +39,6 @@ def _run(coro: Any, *, timeout: float = _LLM_TIMEOUT) -> Any:
 
 def _client(port: int, token: str) -> ProbeClient:
     return ProbeClient(port=port, token=token, request_timeout=_LLM_TIMEOUT)
-
-
-def _skip_if_no_model(port: int, token: str) -> None:
-    async def _check() -> list[dict[str, Any]]:
-        async with _client(port, token) as client:
-            await client.initialize()
-            result = await client._request("_mustang.agent/model/profile_list", {})
-        return result.get("profiles", [])
-
-    profiles = _run(_check(), timeout=30)
-    if not profiles:
-        pytest.skip("No LLM model profiles configured — skipping")
 
 
 async def _collect_turn(
@@ -84,26 +72,24 @@ async def _collect_turn(
 # ---------------------------------------------------------------------------
 
 
-def test_send_message_queue(kernel: tuple[int, str]) -> None:
+def test_send_message_queue(phase2_kernel: tuple[int, str, Path, Path]) -> None:
     """Spawn a named background agent, then SendMessage to it while running.
 
     Happy path: Agent(name="explorer", run_in_background=true) →
     SendMessage(to="explorer") → message queued.
     """
-    port, token = kernel
-    _skip_if_no_model(port, token)
+    port, token, workspace, _home = phase2_kernel
 
     async def _run_test() -> None:
         async with _client(port, token) as client:
             await client.initialize()
-            sid = await client.new_session()
+            sid = await client.new_session(cwd=str(workspace))
 
             # Turn 1: spawn a named background agent.
             text1, stop1, tools1, _ = await _collect_turn(
-                client, sid,
-                'Spawn a background agent named "explorer" with '
-                "run_in_background=true. The agent should research "
-                '"What is Python?" Use the Agent tool with name="explorer".',
+                client,
+                sid,
+                "PHASE2_AGENT_SPAWN_EXPLORER: spawn background explorer.",
             )
             assert stop1 == "end_turn", f"Turn 1 failed: {stop1}"
             agent_calls = [t for t in tools1 if t.title == "Agent"]
@@ -113,9 +99,9 @@ def test_send_message_queue(kernel: tuple[int, str]) -> None:
 
             # Turn 2: immediately send a message to the running agent.
             text2, stop2, tools2, _ = await _collect_turn(
-                client, sid,
-                'Use SendMessage to send "also check the history" '
-                'to the agent named "explorer".',
+                client,
+                sid,
+                "PHASE2_SENDMESSAGE_EXPLORER: send a message to explorer.",
             )
             assert stop2 == "end_turn", f"Turn 2 failed: {stop2}"
             sm_calls = [t for t in tools2 if t.title == "SendMessage"]
@@ -136,37 +122,32 @@ def test_send_message_queue(kernel: tuple[int, str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_send_message_resume(kernel: tuple[int, str]) -> None:
+def test_send_message_resume(phase2_kernel: tuple[int, str, Path, Path]) -> None:
     """Spawn a background agent, wait for it to complete, then resume it.
 
     Happy path: Agent(name="researcher") → wait → SendMessage("researcher") →
     agent resumed.
     """
-    port, token = kernel
-    _skip_if_no_model(port, token)
+    port, token, workspace, _home = phase2_kernel
 
     async def _run_test() -> None:
         async with _client(port, token) as client:
             await client.initialize()
-            sid = await client.new_session()
+            sid = await client.new_session(cwd=str(workspace))
 
             # Turn 1: spawn a named background agent.
             text1, stop1, tools1, _ = await _collect_turn(
-                client, sid,
-                'Use the Agent tool with name="researcher" and '
-                "run_in_background=true. The agent's task is very simple: "
-                '"Say hello and nothing else."',
+                client,
+                sid,
+                "PHASE2_AGENT_SPAWN_RESEARCHER: spawn background researcher.",
             )
             assert stop1 == "end_turn", f"Turn 1 failed: {stop1}"
 
-            # Give the agent time to finish ("Say hello and nothing else" is very fast).
-            await asyncio.sleep(5)
-
             # Turn 2: try to resume it with SendMessage.
             text2, stop2, tools2, _ = await _collect_turn(
-                client, sid,
-                'Use SendMessage to send "What else can you tell me?" '
-                'to the agent named "researcher".',
+                client,
+                sid,
+                "PHASE2_SENDMESSAGE_RESEARCHER: send a message to researcher.",
             )
             assert stop2 == "end_turn", f"Turn 2 failed: {stop2}"
             sm_calls = [t for t in tools2 if t.title == "SendMessage"]
@@ -182,23 +163,21 @@ def test_send_message_resume(kernel: tuple[int, str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_send_message_not_found(kernel: tuple[int, str]) -> None:
+def test_send_message_not_found(phase2_kernel: tuple[int, str, Path, Path]) -> None:
     """SendMessage to a nonexistent agent should produce an error response.
 
     Error path: SendMessage(to="nobody") → "not found" error.
     """
-    port, token = kernel
-    _skip_if_no_model(port, token)
+    port, token, workspace, _home = phase2_kernel
 
     async def _run_test() -> None:
         async with _client(port, token) as client:
             await client.initialize()
-            sid = await client.new_session()
+            sid = await client.new_session(cwd=str(workspace))
 
             text, stop, tools, _ = await _collect_turn(
                 client, sid,
-                'Use SendMessage to send "hello" to an agent named '
-                '"nonexistent_agent_xyz". This agent does not exist.',
+                "PHASE2_SENDMESSAGE_MISSING: send to a missing durable agent.",
             )
             assert stop == "end_turn", f"Turn failed: {stop}"
             # The LLM should report the error from SendMessage.
@@ -215,26 +194,24 @@ def test_send_message_not_found(kernel: tuple[int, str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_send_message_cross_session(kernel: tuple[int, str]) -> None:
+def test_send_message_cross_session(phase2_kernel: tuple[int, str, Path, Path]) -> None:
     """SendMessage to session:<id> should deliver cross-session.
 
     Integration path: create two sessions, send from one to the other.
     """
-    port, token = kernel
-    _skip_if_no_model(port, token)
+    port, token, workspace, _home = phase2_kernel
 
     async def _run_test() -> None:
         async with _client(port, token) as client:
             await client.initialize()
             # Create two sessions.
-            sid_a = await client.new_session()
-            sid_b = await client.new_session()
+            sid_a = await client.new_session(cwd=str(workspace))
+            sid_b = await client.new_session(cwd=str(workspace))
 
             # From session A, send to session B.
             text, stop, tools, _ = await _collect_turn(
                 client, sid_a,
-                f'Use SendMessage with to="session:{sid_b}" and '
-                f'message="hello from session A". This is a cross-session message.',
+                f"PHASE2_SENDMESSAGE_CROSS_SESSION: send to session:{sid_b}",
             )
             assert stop == "end_turn", f"Turn failed: {stop}"
             sm_calls = [t for t in tools if t.title == "SendMessage"]

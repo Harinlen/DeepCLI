@@ -30,10 +30,11 @@ def __getattr__(name: str) -> Any:
     if name == "AgentDefinitionsConfig" or name == "AgentHubManager":
         from kernel.agent_hub.manager import AgentDefinitionsConfig, AgentHubManager
 
-        return {
+        manager_exports: dict[str, Any] = {
             "AgentDefinitionsConfig": AgentDefinitionsConfig,
             "AgentHubManager": AgentHubManager,
-        }[name]
+        }
+        return manager_exports[name]
     if name == "AgentHubRouter":
         from kernel.agent_hub.router import AgentHubRouter
 

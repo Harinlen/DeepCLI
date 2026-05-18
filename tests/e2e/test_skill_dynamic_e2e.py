@@ -9,88 +9,86 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-import pytest
+from pathlib import Path
 
-from probe.client import ProbeClient, TurnComplete
+from probe.client import PermissionRequest, ProbeClient, ToolCallEvent, TurnComplete
+from tests.e2e.test_probe_phase2_e2e import phase2_kernel
+
+_TEST_TIMEOUT = 15.0
 
 
 def _run(coro: Any) -> Any:
-    return asyncio.run(coro)
+    async def _guarded() -> Any:
+        return await asyncio.wait_for(coro, timeout=_TEST_TIMEOUT)
+    return asyncio.run(_guarded())
 
 
-def _has_model(kernel: tuple[int, str]) -> bool:
-    port, token = kernel
-
-    async def _check() -> bool:
-        async with ProbeClient(port=port, token=token) as client:
-            await client.initialize()
-            result = await client._request("_mustang.agent/model/profile_list", {})
-        return bool(result.get("profiles"))
-
-    return _run(_check())
-
-
-def test_file_write_does_not_crash_skill_discovery(kernel: tuple[int, str]) -> None:
+def test_file_write_does_not_crash_skill_discovery(
+    phase2_kernel: tuple[int, str, Path, Path],
+) -> None:
     """Write triggering on_file_touched doesn't crash the kernel.
 
     The ToolExecutor calls skills.on_file_touched() after Write.
     If SkillManager is broken, this would crash the tool execution
     pipeline.  This test verifies the integration is safe.
     """
-    if not _has_model(kernel):
-        pytest.skip("No LLM configured")
+    port, token, workspace, _home = phase2_kernel
 
-    port, token = kernel
-
-    async def _run_test() -> str:
+    async def _run_test() -> tuple[str, list[str]]:
         stop_reason = "unknown"
-        async with ProbeClient(port=port, token=token) as client:
+        tools: list[str] = []
+        async with ProbeClient(port=port, token=token, request_timeout=_TEST_TIMEOUT) as client:
             await client.initialize()
-            sid = await client.new_session()
+            sid = await client.new_session(cwd=str(workspace))
             async for event in client.prompt(
                 sid,
-                "Write the text 'hello' to a file called /tmp/mustang_e2e_test_skill_dynamic.txt",
+                "PHASE2_FILE_WRITE_ALLOW: overwrite phase2_existing.txt.",
+                timeout=_TEST_TIMEOUT,
             ):
+                if isinstance(event, ToolCallEvent):
+                    tools.append(event.title)
+                elif isinstance(event, PermissionRequest):
+                    await client.reply_permission(event.req_id, "allow_once")
                 if isinstance(event, TurnComplete):
                     stop_reason = event.stop_reason
-        return stop_reason
+        return stop_reason, tools
 
-    stop_reason = _run(_run_test())
+    stop_reason, tools = _run(_run_test())
     assert stop_reason == "end_turn"
+    assert "Write" in tools
 
 
-def test_file_edit_does_not_crash_skill_discovery(kernel: tuple[int, str]) -> None:
+def test_file_edit_does_not_crash_skill_discovery(
+    phase2_kernel: tuple[int, str, Path, Path],
+) -> None:
     """Edit triggering on_file_touched doesn't crash the kernel.
 
     Same as above but for the Edit tool path.
     """
-    if not _has_model(kernel):
-        pytest.skip("No LLM configured")
-
-    port, token = kernel
-
-    # Ensure the file exists first.
-    import tempfile
-    from pathlib import Path
-
-    test_file = Path(tempfile.gettempdir()) / "mustang_e2e_test_skill_edit.txt"
+    port, token, workspace, _home = phase2_kernel
+    test_file = workspace / "phase2_dynamic_edit.txt"
     test_file.write_text("original content\nline 2\n")
 
-    async def _run_test() -> str:
+    async def _run_test() -> tuple[str, list[str]]:
         stop_reason = "unknown"
-        async with ProbeClient(port=port, token=token) as client:
+        tools: list[str] = []
+        async with ProbeClient(port=port, token=token, request_timeout=_TEST_TIMEOUT) as client:
             await client.initialize()
-            sid = await client.new_session()
+            sid = await client.new_session(cwd=str(workspace))
             async for event in client.prompt(
                 sid,
-                f"Edit the file {test_file} and replace 'original' with 'modified'.",
+                "PHASE2_DYNAMIC_EDIT",
+                timeout=_TEST_TIMEOUT,
             ):
-                if isinstance(event, TurnComplete):
+                if isinstance(event, ToolCallEvent):
+                    tools.append(event.title)
+                elif isinstance(event, PermissionRequest):
+                    await client.reply_permission(event.req_id, "allow_once")
+                elif isinstance(event, TurnComplete):
                     stop_reason = event.stop_reason
-        return stop_reason
+        return stop_reason, tools
 
-    stop_reason = _run(_run_test())
+    stop_reason, tools = _run(_run_test())
     assert stop_reason == "end_turn"
-
-    # Cleanup.
-    test_file.unlink(missing_ok=True)
+    assert "Edit" in tools
+    assert "modified content" in test_file.read_text(encoding="utf-8")

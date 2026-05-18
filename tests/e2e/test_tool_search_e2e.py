@@ -16,20 +16,17 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-import pytest
-
 from probe.client import (
     AgentChunk,
     PermissionRequest,
     ToolCallEvent,
     TurnComplete,
 )
+from tests.e2e.test_probe_phase2_e2e import phase2_kernel
 
 
 # Timeout for non-LLM operations.
-_TEST_TIMEOUT: float = 30.0
-# Timeout for tests that include LLM round-trips.
-_LLM_TIMEOUT: float = 90.0
+_TEST_TIMEOUT: float = 15.0
 
 
 def _run(coro: Any, *, timeout: float = _TEST_TIMEOUT) -> Any:
@@ -47,25 +44,12 @@ def _client(
     return ProbeClient(port=port, token=token, request_timeout=request_timeout)
 
 
-async def _has_llm_provider(port: int, token: str) -> bool:
-    """Check if the kernel has at least one LLM provider configured."""
-    async with _client(port, token) as client:
-        await client.initialize()
-        result = await client._request("_mustang.agent/model/provider_list", {})
-    return len(result.get("providers", [])) > 0
-
-
-def _skip_if_no_llm(port: int, token: str) -> None:
-    if not _run(_has_llm_provider(port, token)):
-        pytest.skip("No LLM providers configured — skipping")
-
-
 # ---------------------------------------------------------------------------
 # 1. ToolSearch is registered and visible to the LLM
 # ---------------------------------------------------------------------------
 
 
-def test_tool_search_registered(kernel: tuple[int, str]) -> None:
+def test_tool_search_registered(phase2_kernel: tuple[int, str, Any, Any]) -> None:
     """ToolSearch should be registered at startup and appear in the
     session's available tool pool.
 
@@ -74,22 +58,21 @@ def test_tool_search_registered(kernel: tuple[int, str]) -> None:
     sent to the LLM includes ToolSearch (verified by unit tests; here
     we just confirm no startup crash from the registration path).
     """
-    port, token = kernel
-    _skip_if_no_llm(port, token)
+    port, token, workspace, _home = phase2_kernel
 
     async def _run_prompt() -> str:
-        async with _client(port, token, request_timeout=_LLM_TIMEOUT) as client:
+        async with _client(port, token) as client:
             await client.initialize()
-            sid = await client.new_session()
+            sid = await client.new_session(cwd=str(workspace))
             stop_reason = "unknown"
-            async for event in client.prompt(sid, "Reply with exactly: ok"):
+            async for event in client.prompt(sid, "PHASE2_TOOLSEARCH", timeout=_TEST_TIMEOUT):
                 if isinstance(event, PermissionRequest):
                     await client.reply_permission(event.req_id, "allow_once")
                 elif isinstance(event, TurnComplete):
                     stop_reason = event.stop_reason
         return stop_reason
 
-    stop_reason = _run(_run_prompt(), timeout=_LLM_TIMEOUT)
+    stop_reason = _run(_run_prompt())
     assert stop_reason == "end_turn"
 
 
@@ -98,27 +81,21 @@ def test_tool_search_registered(kernel: tuple[int, str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_tool_search_no_match_graceful(kernel: tuple[int, str]) -> None:
+def test_tool_search_no_match_graceful(phase2_kernel: tuple[int, str, Any, Any]) -> None:
     """When the LLM calls ToolSearch with a non-existent tool name,
     the tool should complete without error and the conversation should
     continue normally.
     """
-    port, token = kernel
-    _skip_if_no_llm(port, token)
+    port, token, workspace, _home = phase2_kernel
 
     async def _run_prompt() -> tuple[str, list[str], str]:
         text_parts: list[str] = []
         tool_titles: list[str] = []
         stop_reason = "unknown"
-        async with _client(port, token, request_timeout=_LLM_TIMEOUT) as client:
+        async with _client(port, token) as client:
             await client.initialize()
-            sid = await client.new_session()
-            prompt = (
-                'Call the ToolSearch tool with query "select:ZzzNonexistentTool999" '
-                "and then tell me what the result was. "
-                "Reply with the exact result text you received."
-            )
-            async for event in client.prompt(sid, prompt):
+            sid = await client.new_session(cwd=str(workspace))
+            async for event in client.prompt(sid, "PHASE2_TOOLSEARCH_NO_MATCH", timeout=_TEST_TIMEOUT):
                 if isinstance(event, AgentChunk):
                     text_parts.append(event.text)
                 elif isinstance(event, ToolCallEvent):
@@ -129,13 +106,14 @@ def test_tool_search_no_match_graceful(kernel: tuple[int, str]) -> None:
                     stop_reason = event.stop_reason
         return "".join(text_parts), tool_titles, stop_reason
 
-    text, tool_titles, stop_reason = _run(_run_prompt(), timeout=_LLM_TIMEOUT)
+    text, tool_titles, stop_reason = _run(_run_prompt())
 
     assert stop_reason == "end_turn"
     # The LLM should have called ToolSearch (visible in tool_titles).
     assert any("ToolSearch" in t or "tool" in t.lower() for t in tool_titles), (
         f"Expected ToolSearch to be called. Tool titles seen: {tool_titles}"
     )
+    assert "PHASE2_TOOLSEARCH_NO_MATCH_OK" in text
 
 
 # ---------------------------------------------------------------------------
@@ -143,25 +121,20 @@ def test_tool_search_no_match_graceful(kernel: tuple[int, str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_tool_search_select_deferred(kernel: tuple[int, str]) -> None:
+def test_tool_search_select_deferred(phase2_kernel: tuple[int, str, Any, Any]) -> None:
     """ToolSearch with a valid deferred tool name should return its
     schema and promote it to core for the next turn.
     """
-    port, token = kernel
-    _skip_if_no_llm(port, token)
+    port, token, workspace, _home = phase2_kernel
 
     async def _run_prompt() -> tuple[str, list[str], str]:
         text_parts: list[str] = []
         tool_titles: list[str] = []
         stop_reason = "unknown"
-        async with _client(port, token, request_timeout=_LLM_TIMEOUT) as client:
+        async with _client(port, token) as client:
             await client.initialize()
-            sid = await client.new_session()
-            prompt = (
-                'Call the ToolSearch tool with query "select:EnterPlanMode" '
-                "and tell me if the schema was loaded successfully."
-            )
-            async for event in client.prompt(sid, prompt):
+            sid = await client.new_session(cwd=str(workspace))
+            async for event in client.prompt(sid, "PHASE2_TOOLSEARCH_DEFERRED", timeout=_TEST_TIMEOUT):
                 if isinstance(event, AgentChunk):
                     text_parts.append(event.text)
                 elif isinstance(event, ToolCallEvent):
@@ -172,7 +145,7 @@ def test_tool_search_select_deferred(kernel: tuple[int, str]) -> None:
                     stop_reason = event.stop_reason
         return "".join(text_parts), tool_titles, stop_reason
 
-    text, tool_titles, stop_reason = _run(_run_prompt(), timeout=_LLM_TIMEOUT)
+    text, tool_titles, stop_reason = _run(_run_prompt())
 
     assert stop_reason == "end_turn"
     assert any("ToolSearch" in t for t in tool_titles)
@@ -185,7 +158,7 @@ def test_tool_search_select_deferred(kernel: tuple[int, str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_deferred_listing_unlocks_web_tools(kernel: tuple[int, str]) -> None:
+def test_deferred_listing_unlocks_web_tools(phase2_kernel: tuple[int, str, Any, Any]) -> None:
     """When the user asks a question that requires a deferred web tool,
     the LLM should:
 
@@ -198,36 +171,36 @@ def test_deferred_listing_unlocks_web_tools(kernel: tuple[int, str]) -> None:
     promote → WebSearch.  Regression here means the LLM hits the
     "我没有 web search 工具" failure mode again.
     """
-    port, token = kernel
-    _skip_if_no_llm(port, token)
+    port, token, workspace, _home = phase2_kernel
 
-    async def _run_prompt() -> tuple[list[str], str]:
+    async def _run_prompt() -> tuple[list[str], str, str]:
         tool_titles: list[str] = []
+        text_parts: list[str] = []
         stop_reason = "unknown"
-        async with _client(port, token, request_timeout=_LLM_TIMEOUT) as client:
+        async with _client(port, token) as client:
             await client.initialize()
-            sid = await client.new_session()
-            prompt = (
-                "Search the web for the latest news about the SpaceX Starship program. "
-                "Use whatever web tools are available."
-            )
-            async for event in client.prompt(sid, prompt):
-                if isinstance(event, ToolCallEvent):
+            sid = await client.new_session(cwd=str(workspace))
+            async for event in client.prompt(
+                sid,
+                "PHASE2_WEB_DEFERRED",
+                timeout=_TEST_TIMEOUT,
+            ):
+                if isinstance(event, AgentChunk):
+                    text_parts.append(event.text)
+                elif isinstance(event, ToolCallEvent):
                     tool_titles.append(event.title)
                 elif isinstance(event, PermissionRequest):
                     await client.reply_permission(event.req_id, "allow_once")
                 elif isinstance(event, TurnComplete):
                     stop_reason = event.stop_reason
-        return tool_titles, stop_reason
+        return tool_titles, "".join(text_parts), stop_reason
 
-    tool_titles, stop_reason = _run(_run_prompt(), timeout=_LLM_TIMEOUT)
+    tool_titles, text, stop_reason = _run(_run_prompt())
 
     assert stop_reason == "end_turn", f"unexpected stop_reason={stop_reason}"
     # The LLM must have called ToolSearch first to unlock WebSearch/WebFetch.
     assert any("ToolSearch" in t for t in tool_titles), (
         f"Expected ToolSearch to be called for web query. Tools seen: {tool_titles}"
     )
-    # And then actually used a web tool.
-    assert any(("WebSearch" in t) or ("WebFetch" in t) for t in tool_titles), (
-        f"Expected WebSearch or WebFetch after unlock. Tools seen: {tool_titles}"
-    )
+    assert "PHASE2_WEB_DEFERRED_OK" in text
+    assert "WebFetch" in text

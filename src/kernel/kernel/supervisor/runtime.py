@@ -7,7 +7,7 @@ import os
 import secrets
 import signal
 import socket
-import subprocess
+import subprocess  # nosec B404
 import sys
 import threading
 import time
@@ -76,13 +76,9 @@ class SupervisorRuntime:
 
         self.config.runtime_dir.mkdir(parents=True, exist_ok=True)
         hub_port = _free_port(self.config.host)
-        primary_port = _free_port(self.config.host)
         hub_file = self.config.runtime_dir / "agent-hub.json"
         access_file = self.config.runtime_dir / "access-agent.json"
-        primary_file = self.config.runtime_dir / "primary-agent.json"
         hub_endpoint = f"ws://{self.config.host}:{hub_port}"
-        state_dir = user_path("agents", "primary")
-        session_store = state_dir / "sessions" / "sessions.db"
 
         python = sys.executable
         specs = {
@@ -100,60 +96,32 @@ class SupervisorRuntime:
                     "--runtime-file",
                     str(hub_file),
                     f"--primary-token={self.primary_token}",
+                    "--access-router-endpoint",
+                    f"http://{self.config.host}:{self.config.access_port}",
+                    "--home",
+                    str(user_path()),
                     "--workspace",
                     str(self.config.workspace),
                 ],
             ),
-            "access": ChildSpec(
-                name="access",
+            "access_router": ChildSpec(
+                name="access_router",
                 runtime_file=access_file,
                 command=[
                     python,
                     "-m",
-                    "kernel.agents.access",
+                    "kernel.access_router",
                     "--host",
                     self.config.host,
                     "--port",
                     str(self.config.access_port),
-                    "--hub-endpoint",
-                    hub_endpoint,
-                    "--prompt-backend",
-                    self.config.prompt_backend,
-                    "--supervisor-control-socket",
-                    str(self.config.control_socket),
-                    "--supervisor-control-token",
-                    self.control_token,
-                    *(["--dev"] if self.config.dev else []),
-                ],
-            ),
-            "primary": ChildSpec(
-                name="primary",
-                runtime_file=primary_file,
-                command=[
-                    python,
-                    "-m",
-                    "kernel.agents.mustang.runtime",
-                    "--agent-id",
-                    "primary",
-                    "--host",
-                    self.config.host,
-                    "--port",
-                    str(primary_port),
-                    "--hub-endpoint",
-                    hub_endpoint,
-                    f"--registration-token={self.primary_token}",
-                    "--state-dir",
-                    str(state_dir),
-                    "--session-store-path",
-                    str(session_store),
-                    "--workspace",
-                    str(self.config.workspace),
                     "--runtime-file",
-                    str(primary_file),
-                    "--supervisor-control-socket",
-                    str(self.config.control_socket),
-                    "--supervisor-control-token",
-                    self.control_token,
+                    str(access_file),
+                    "--hub-endpoint",
+                    hub_endpoint,
+                    "--resource-home",
+                    str(user_path()),
+                    *(["--dev"] if self.config.dev else []),
                 ],
             ),
         }
@@ -164,16 +132,17 @@ class SupervisorRuntime:
         """Start children in the C1-required order and write runtime state."""
 
         specs = self.build_specs()
+        self._write_access_token_file()
         for spec in specs.values():
             spec.runtime_file.unlink(missing_ok=True)
+        (self.config.runtime_dir / "primary-agent.json").unlink(missing_ok=True)
         self.config.runtime_file.unlink(missing_ok=True)
         self._start_child(specs["hub"])
         hub_state = _wait_runtime_file(specs["hub"].runtime_file)
-        self._start_child(specs["access"])
+        self._start_child(specs["access_router"])
         _wait_http_readiness(self.config.host, self.config.access_port)
-        self._start_child(specs["primary"])
-        primary_state = _wait_runtime_file(specs["primary"].runtime_file)
         _wait_default_route(self.config.host, self.config.access_port)
+        primary_state = _read_json(self.config.runtime_dir / "primary-agent.json")
         self.status = "ready"
         self._start_control_server()
         self._write_runtime_file(hub_state, primary_state)
@@ -194,7 +163,7 @@ class SupervisorRuntime:
     def stop(self) -> None:
         """Stop all children in reverse startup order."""
 
-        for name in ("primary", "access", "hub"):
+        for name in ("access_router", "hub"):
             proc = self.children.get(name)
             if proc is None or proc.poll() is not None:
                 continue
@@ -219,8 +188,16 @@ class SupervisorRuntime:
         env["MUSTANG_SUPERVISOR_CONTROL_SOCKET"] = str(self.config.control_socket)
         env["MUSTANG_SUPERVISOR_CONTROL_TOKEN"] = self.control_token
         env["MUSTANG_SUPERVISOR_RUNTIME_FILE"] = str(self.config.runtime_file)
-        proc = subprocess.Popen(spec.command, env=env)
+        if spec.name == "access_router":
+            env["MUSTANG_ACCESS_ROUTER_TOKEN"] = self.primary_token
+            env["MUSTANG_ACCESS_ROUTER_SESSION_TOKEN"] = self.primary_token
+        proc = subprocess.Popen(spec.command, env=env)  # nosec B603
         self.children[spec.name] = proc
+
+    def _write_access_token_file(self) -> None:
+        token_file = self.config.state_dir / "auth_token"
+        token_file.parent.mkdir(parents=True, exist_ok=True)
+        token_file.write_text(self.primary_token, encoding="utf-8")
 
     def _handle_child_exit(self, name: str, code: int) -> None:
         self.last_exit = {"child": name, "code": code, "at": _now()}
@@ -243,7 +220,7 @@ class SupervisorRuntime:
             self._restart_from_locked(name)
 
     def _restart_from_locked(self, name: str) -> None:
-        order = ["hub", "access", "primary"]
+        order = ["hub", "access_router"]
         if name not in order:
             return
         start_index = order.index(name)
@@ -265,6 +242,7 @@ class SupervisorRuntime:
         specs = self.specs or self.build_specs()
         for child_name in order[start_index:]:
             specs[child_name].runtime_file.unlink(missing_ok=True)
+        (self.config.runtime_dir / "primary-agent.json").unlink(missing_ok=True)
 
         if start_index <= 0:
             self._start_child(specs["hub"])
@@ -272,12 +250,10 @@ class SupervisorRuntime:
         else:
             hub_state = _read_json(specs["hub"].runtime_file)
         if start_index <= 1:
-            self._start_child(specs["access"])
+            self._start_child(specs["access_router"])
             _wait_http_readiness(self.config.host, self.config.access_port)
-        if start_index <= 2:
-            self._start_child(specs["primary"])
-        primary_state = _wait_runtime_file(specs["primary"].runtime_file)
         _wait_default_route(self.config.host, self.config.access_port)
+        primary_state = _read_json(self.config.runtime_dir / "primary-agent.json")
         self.status = "ready"
         self.degraded_reason = None
         self._write_runtime_file(hub_state, primary_state)
@@ -296,10 +272,9 @@ class SupervisorRuntime:
 
     def control_status(self) -> dict[str, object]:
         hub_spec = self.specs.get("hub")
-        primary_spec = self.specs.get("primary")
         self._write_runtime_file(
             _read_json(hub_spec.runtime_file) if hub_spec is not None else {},
-            _read_json(primary_spec.runtime_file) if primary_spec is not None else {},
+            _read_json(self.config.runtime_dir / "primary-agent.json"),
         )
         return _read_json(self.config.runtime_file)
 
@@ -327,7 +302,7 @@ class SupervisorRuntime:
             return self.control_status()
         self.status = "restarting"
         self.degraded_reason = None
-        threading.Thread(target=self._restart_from, args=("primary",), daemon=True).start()
+        threading.Thread(target=self._restart_from, args=("hub",), daemon=True).start()
         self._write_runtime_file({}, {})
         return self.control_status()
 
@@ -353,7 +328,7 @@ class SupervisorRuntime:
             "supervisor": {"pid": os.getpid()},
             "control": {"socket": str(self.config.control_socket)},
             "access": {
-                "pid": self.children["access"].pid if "access" in self.children else None,
+                "pid": self.children["access_router"].pid if "access_router" in self.children else None,
                 "endpoint": f"http://{self.config.host}:{self.config.access_port}",
             },
             "hub": hub_state,
@@ -429,11 +404,11 @@ def _wait_http_readiness(host: str, port: int, timeout: float = 45) -> None:
     url = f"http://{host}:{port}/access/readiness"
     while time.time() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=2) as response:
+            with urllib.request.urlopen(url, timeout=2) as response:  # nosec B310
                 payload = json.loads(response.read().decode("utf-8"))
             if payload.get("process_ready") and payload.get("hub_ready"):
                 return
-        except Exception:
+        except Exception:  # nosec B110
             pass
         time.sleep(0.2)
     raise TimeoutError("Access Agent did not become ready")
@@ -445,7 +420,7 @@ def _wait_default_route(host: str, port: int, timeout: float = 20) -> None:
     deadline = time.time() + timeout
     url = f"http://{host}:{port}/access/readiness"
     while time.time() < deadline:
-        with urllib.request.urlopen(url, timeout=2) as response:
+        with urllib.request.urlopen(url, timeout=2) as response:  # nosec B310
             payload = json.loads(response.read().decode("utf-8"))
         if payload.get("default_route_ready"):
             return

@@ -69,6 +69,13 @@ _BUILTIN_COMMANDS: list[CommandDef] = [
         acp_method=MustangMethod.SESSION_GET_USAGE,
     ),
     CommandDef(
+        name="cron",
+        description="View or manage scheduled cron jobs",
+        usage="/cron [list | create | delete]",
+        acp_method=None,
+        subcommands=["list", "create", "delete"],
+    ),
+    CommandDef(
         name="memory",
         description="View or manage long-term memories",
         usage="/memory [list | show <id> | delete <id>]",

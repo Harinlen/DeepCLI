@@ -262,12 +262,19 @@ assert(
 );
 
 let lazyCreateCalls = 0;
+const lazyExecuteCalls: string[] = [];
 const lazyClient = {
 	request: async (_method: string, _params: unknown) => ({}),
 	notify: () => {},
 	promptRequest: async (_sessionId: string, _text: string) => ({ stopReason: "stop" }),
-	executeShellRequest: async () => ({ exitCode: 0, cancelled: false }),
-	executePythonRequest: async () => ({ exitCode: 0, cancelled: false }),
+	executeShellRequest: async (sessionId: string) => {
+		lazyExecuteCalls.push(`shell:${sessionId}`);
+		return { exitCode: 0, cancelled: false };
+	},
+	executePythonRequest: async (sessionId: string) => {
+		lazyExecuteCalls.push(`python:${sessionId}`);
+		return { exitCode: 0, cancelled: false };
+	},
 	onUpdate: () => () => {},
 };
 const lazyAdapter = new MustangAgentSessionAdapter({
@@ -282,17 +289,17 @@ const lazyAdapter = new MustangAgentSessionAdapter({
 	} as never,
 });
 assert(lazyAdapter.sessionId === "pending", "adapter without startup session should expose pending session id");
-try {
-	await lazyAdapter.executeBash("pwd", () => {});
-	assert(false, "shell execution should not create a lazy chat session");
-} catch (error) {
-	assert((error as Error).message.includes("Run a chat prompt"), "shell execution should fail without creating a session");
-}
-assert(lazyCreateCalls === 0, "commands should not create lazy chat sessions");
+await lazyAdapter.executeBash("pwd", () => {});
+assert(lazyCreateCalls === 1, "first shell execution should create the lazy session");
+assert(lazyAdapter.sessionId === "lazy-session", "lazy session id should update after first shell execution");
+assert(lazyExecuteCalls.includes("shell:lazy-session"), "shell execution should use the newly created ACP session");
+await lazyAdapter.executePython("print(1)", () => {});
+assert(lazyCreateCalls === 1, "python execution should reuse the existing lazy session");
+assert(lazyExecuteCalls.includes("python:lazy-session"), "python execution should use the existing ACP session");
 await lazyAdapter.cyclePermissionMode();
-assert(lazyAdapter.currentPermissionMode === "accept_edits", "Shift+Tab cycle should advance pending mode before session creation");
+assert(lazyAdapter.currentPermissionMode === "accept_edits", "Shift+Tab cycle should advance mode on the lazy session");
 await lazyAdapter.prompt("hello");
-assert(lazyCreateCalls === 1, "first chat prompt should create the lazy session");
+assert(lazyCreateCalls === 1, "first chat prompt should reuse the existing lazy session");
 assert(lazyAdapter.sessionId === "lazy-session", "lazy session id should update after first prompt");
 
 let loadUpdateHandler: ((update: any) => void) | undefined;

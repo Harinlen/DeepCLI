@@ -354,7 +354,7 @@ async def test_runtime_service_prompt_collects_updates_without_runtime_peer(tmp_
 
 
 @pytest.mark.anyio
-async def test_runtime_service_prompt_suppresses_updates_when_runtime_peer_streams(
+async def test_runtime_service_prompt_preserves_updates_when_runtime_peer_streams(
     tmp_path: Path,
 ) -> None:
     service, _manager = _service_with_manager(tmp_path)
@@ -366,7 +366,7 @@ async def test_runtime_service_prompt_suppresses_updates_when_runtime_peer_strea
         client_peer=peer,  # type: ignore[arg-type]
     )
 
-    assert result["updates"] == []
+    assert result["updates"][0]["update"]["content"]["text"] == "reply"
     assert peer.calls[0]["method"] == "session/update"
 
 

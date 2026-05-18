@@ -377,7 +377,10 @@ async function main(): Promise<void> {
 			methods.sessionDelete,
 			"session/prompt",
 		]) {
-			assert(server.calls.includes(method), `fake kernel should receive ${method}`);
+			assert(
+				server.calls.includes(method),
+				`fake kernel should receive ${method}; calls=${server.calls.join(",")}\n${result.output}`,
+			);
 		}
 		assert(server.permissionOutcome === "allow_once", `permission overlay should return allow_once, got ${server.permissionOutcome}`);
 

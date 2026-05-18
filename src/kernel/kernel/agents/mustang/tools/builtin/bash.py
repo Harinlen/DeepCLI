@@ -350,6 +350,14 @@ class BashTool(Tool[dict[str, Any], str]):
                     reason=f"matches dangerous pattern {pattern.pattern!r}",
                 )
 
+        warning = self.destructive_warning(input)
+        if warning:
+            return PermissionSuggestion(
+                risk="high",
+                default_decision="ask",
+                reason=warning,
+            )
+
         # Sub-shell expressions cannot be statically analysed — always ask.
         if "$(" in command or "`" in command:
             return PermissionSuggestion(

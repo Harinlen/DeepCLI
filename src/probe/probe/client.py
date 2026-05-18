@@ -19,7 +19,7 @@ from websockets.asyncio.client import ClientConnection
 # Auth
 # ---------------------------------------------------------------------------
 
-_TOKEN_PATH = Path.home() / ".mustang" / "state" / "auth_token"
+_TOKEN_PATH = Path.home() / ".deepcli" / "state" / "auth_token"
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +156,7 @@ class ProbeClient:
                 if isinstance(event, AgentChunk):
                     print(event.text, end="", flush=True)
 
-    The client reads the auth token from ``~/.mustang/state/auth_token``
+    The client reads the auth token from ``~/.deepcli/state/auth_token``
     by default.  Pass *password* to use password-based auth instead.
     """
 
@@ -360,7 +360,13 @@ class ProbeClient:
     # ------------------------------------------------------------------
 
     async def initialize(self) -> dict[str, Any]:
-        """Send ACP ``initialize`` and return the agent's capabilities dict."""
+        """Send ACP ``initialize`` and return observable capability fields.
+
+        Older kernel paths exposed only ``agentCapabilities`` to callers.  The
+        Access Router runtime path returns ACP's full initialize result with
+        additional top-level capability groups, so keep the legacy fields while
+        preserving those top-level groups for E2E probes.
+        """
         result: dict[str, Any] = await self._request(
             "initialize",
             {
@@ -369,7 +375,15 @@ class ProbeClient:
                 "clientInfo": {"name": "probe", "version": "0.1.0"},
             },
         )
-        caps: dict[str, Any] = result.get("agentCapabilities", {})
+        caps: dict[str, Any] = dict(result.get("agentCapabilities", {}))
+        for key in (
+            "promptCapabilities",
+            "mcpCapabilities",
+            "sessionCapabilities",
+            "_meta",
+        ):
+            if key in result:
+                caps[key] = result[key]
         return caps
 
     async def new_session(
@@ -798,6 +812,6 @@ def _parse_permission(msg: dict[str, Any]) -> PermissionRequest:
         tool_call_id=tool_call["toolCallId"],
         options=params.get("options", []),
         tool_title=tool_call.get("title"),
-        input_summary=tool_call.get("inputSummary"),
+        input_summary=tool_call.get("inputSummary") or tool_call.get("input_summary"),
         tool_input=params.get("toolInput"),
     )

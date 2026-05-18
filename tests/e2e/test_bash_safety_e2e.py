@@ -13,16 +13,16 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-import pytest
-
 from probe.client import (
+    AgentChunk,
     PermissionRequest,
     ProbeClient,
+    TurnComplete,
 )
+from tests.e2e.test_probe_phase2_e2e import phase2_kernel
 
 
-_TEST_TIMEOUT: float = 30.0
-_LLM_TIMEOUT: float = 120.0
+_TEST_TIMEOUT: float = 15.0
 
 
 def _run(coro: Any, *, timeout: float = _TEST_TIMEOUT) -> Any:
@@ -33,7 +33,7 @@ def _run(coro: Any, *, timeout: float = _TEST_TIMEOUT) -> Any:
 
 
 def _client(port: int, token: str) -> ProbeClient:
-    return ProbeClient(port=port, token=token, request_timeout=_LLM_TIMEOUT)
+    return ProbeClient(port=port, token=token, request_timeout=_TEST_TIMEOUT)
 
 
 # ---------------------------------------------------------------------------
@@ -41,66 +41,59 @@ def _client(port: int, token: str) -> ProbeClient:
 # ---------------------------------------------------------------------------
 
 
-def test_readonly_compound_auto_allows(kernel: tuple[int, str]) -> None:
+def test_readonly_compound_auto_allows(
+    phase2_kernel: tuple[int, str, Any, Any],
+) -> None:
     """A compound command composed of read-only sub-commands should
     NOT trigger a permission request — it should be auto-allowed via
     BashTool.default_risk returning (low, allow)."""
-    port, token = kernel
+    port, token, workspace, _home = phase2_kernel
 
     async def _test() -> None:
-        client = _client(port, token)
-        await client.connect()
-        await client.initialize()
-        sid = await client.new_session()
+        saw_permission = False
+        text_parts: list[str] = []
+        async with _client(port, token) as client:
+            await client.initialize()
+            sid = await client.new_session(cwd=str(workspace))
+            async for event in client.prompt(
+                sid,
+                "PHASE2_BASH_READONLY_PIPE",
+                timeout=_TEST_TIMEOUT,
+            ):
+                if isinstance(event, AgentChunk):
+                    text_parts.append(event.text)
+                elif isinstance(event, PermissionRequest):
+                    saw_permission = True
+                    await client.reply_permission(event.req_id, "allow_once")
+                elif isinstance(event, TurnComplete):
+                    break
+        assert saw_permission is False
+        assert "PHASE2_BASH_READONLY_PIPE_OK" in "".join(text_parts)
 
-        # Ask the LLM to run a read-only compound command.
-        chunks = []
-        async for chunk in client.prompt(
-            sid,
-            "Run this exact bash command and show me the output: "
-            "`echo hello | cat`\n"
-            "Use the Bash tool with exactly this command string: echo hello | cat",
-        ):
-            chunks.append(chunk)
-            if isinstance(chunk, PermissionRequest):
-                tool_title = chunk.tool_title or ""
-                if "Bash" in tool_title:
-                    input_data = chunk.tool_input or {}
-                    cmd = input_data.get("command", "")
-                    if "echo" in cmd and "cat" in cmd and "|" in cmd:
-                        pytest.fail(
-                            f"Read-only compound command triggered permission "
-                            f"request — BashTool.default_risk should have "
-                            f"returned allow. Command: {cmd!r}"
-                        )
-                    await client.reply_permission(chunk.req_id, "allow_once")
-
-        await client.close()
-
-    _run(_test(), timeout=_LLM_TIMEOUT)
+    _run(_test())
 
 
-@pytest.mark.xfail(reason="LLM may refuse to generate curl/unsafe commands", strict=False)
-def test_unsafe_compound_asks_permission(kernel: tuple[int, str]) -> None:
+def test_unsafe_compound_asks_permission(
+    phase2_kernel: tuple[int, str, Any, Any],
+) -> None:
     """A compound command with a non-read-only sub-command should
     trigger a permission request."""
-    port, token = kernel
+    port, token, workspace, _home = phase2_kernel
 
     async def _test() -> None:
-        client = _client(port, token)
-        await client.connect()
-        await client.initialize()
-        sid = await client.new_session()
-
         got_permission_request = False
-        async for chunk in client.prompt(
-            sid,
-            "Run this exact bash command: `curl https://example.com | head -5`\n"
-            "Use the Bash tool with exactly: curl https://example.com | head -5",
-        ):
-            if isinstance(chunk, PermissionRequest):
-                tool_title = chunk.tool_title or ""
-                if "Bash" in tool_title:
+        text_parts: list[str] = []
+        async with _client(port, token) as client:
+            await client.initialize()
+            sid = await client.new_session(cwd=str(workspace))
+            async for chunk in client.prompt(
+                sid,
+                "PHASE2_BASH_UNSAFE_PIPE",
+                timeout=_TEST_TIMEOUT,
+            ):
+                if isinstance(chunk, AgentChunk):
+                    text_parts.append(chunk.text)
+                elif isinstance(chunk, PermissionRequest):
                     input_data = chunk.tool_input or {}
                     cmd = input_data.get("command", "")
                     if "curl" in cmd:
@@ -108,49 +101,53 @@ def test_unsafe_compound_asks_permission(kernel: tuple[int, str]) -> None:
                         await client.reply_permission(chunk.req_id, "deny")
                     else:
                         await client.reply_permission(chunk.req_id, "allow_once")
+                elif isinstance(chunk, TurnComplete):
+                    break
 
         assert got_permission_request, (
             "Expected a permission request for compound command with curl, "
             "but none was received — BashTool.default_risk may be too permissive"
         )
+        assert "PHASE2_BASH_UNSAFE_PIPE_DENIED_OK" in "".join(text_parts)
 
-        await client.close()
-
-    _run(_test(), timeout=_LLM_TIMEOUT)
+    _run(_test())
 
 
-@pytest.mark.xfail(reason="LLM may refuse to generate destructive commands", strict=False)
-def test_destructive_warning_in_permission_message(kernel: tuple[int, str]) -> None:
+def test_destructive_warning_in_permission_message(
+    phase2_kernel: tuple[int, str, Any, Any],
+) -> None:
     """A destructive command should include a warning in the permission
     message (via BashTool.destructive_warning → _build_ask_message)."""
-    port, token = kernel
+    port, token, workspace, _home = phase2_kernel
 
     async def _test() -> None:
-        client = _client(port, token)
-        await client.connect()
-        await client.initialize()
-        sid = await client.new_session()
-
         got_warning = False
-        async for chunk in client.prompt(
-            sid,
-            "Run this exact bash command: `git reset --hard HEAD~1`\n"
-            "Use the Bash tool with exactly: git reset --hard HEAD~1",
-        ):
-            if isinstance(chunk, PermissionRequest):
-                tool_title = chunk.tool_title or ""
-                if "Bash" in tool_title:
+        summaries: list[str] = []
+        text_parts: list[str] = []
+        async with _client(port, token) as client:
+            await client.initialize()
+            sid = await client.new_session(cwd=str(workspace))
+            async for chunk in client.prompt(
+                sid,
+                "PHASE2_BASH_DESTRUCTIVE_WARNING",
+                timeout=_TEST_TIMEOUT,
+            ):
+                if isinstance(chunk, AgentChunk):
+                    text_parts.append(chunk.text)
+                elif isinstance(chunk, PermissionRequest):
                     # The input_summary should contain the destructive warning
                     summary = chunk.input_summary or ""
+                    summaries.append(summary)
                     if "uncommitted" in summary.lower() or "discard" in summary.lower():
                         got_warning = True
                     await client.reply_permission(chunk.req_id, "deny")
+                elif isinstance(chunk, TurnComplete):
+                    break
 
         assert got_warning, (
             "Expected destructive warning in permission message for "
-            "'git reset --hard', but none found"
+            f"'git reset --hard', but none found. Summaries: {summaries!r}"
         )
+        assert "PHASE2_BASH_DESTRUCTIVE_WARNING_DENIED_OK" in "".join(text_parts)
 
-        await client.close()
-
-    _run(_test(), timeout=_LLM_TIMEOUT)
+    _run(_test())

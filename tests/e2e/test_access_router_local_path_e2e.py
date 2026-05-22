@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -140,6 +142,94 @@ def test_access_router_forwards_initialize_to_primary_runtime() -> None:
     assert response["result"]["agentInfo"]["name"] == "mustang-agent-runtime"
     assert [request.method for request in acp_log] == ["initialize"]
     assert router.agent_hub_forward_count == 0
+
+
+def test_access_router_handles_agents_management_locally(tmp_path: Path) -> None:
+    router = AccessRouter(auth_token="secret")
+    acp_log: list[RuntimeAcpRequest] = []
+
+    async def primary_runtime(_: DeliverTurnRequest) -> dict[str, object]:
+        return {"text": "unused"}
+
+    async def primary_acp_runtime(request: RuntimeAcpRequest) -> dict[str, object]:
+        acp_log.append(request)
+        if request.method != "initialize":
+            raise AssertionError(f"management request leaked to runtime: {request.method}")
+        return {
+            "protocolVersion": 1,
+            "agentInfo": {"name": "mustang-agent-runtime"},
+            "agentCapabilities": {"loadSession": True},
+        }
+
+    router.register_runtime(
+        RuntimeRegisterRequest(
+            process_id="runtime-primary",
+            pid=123,
+            agent_id="primary",
+            protocol_version=1,
+            capabilities=("session", "acp"),
+            auth_token="secret",
+        ),
+        primary_runtime,
+        primary_acp_runtime,
+    )
+
+    app = create_app(router, resource_home=str(tmp_path))
+    with TestClient(app) as client:
+        with client.websocket_connect("/session") as websocket:
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "init-1",
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": 1,
+                        "clientCapabilities": {},
+                        "clientInfo": {"name": "probe", "version": "1.0.0"},
+                    },
+                }
+            )
+            init_response = websocket.receive_json()
+            assert init_response["id"] == "init-1"
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "agents-1",
+                    "method": "_mustang.agent/agents/list",
+                    "params": {"includeBindings": True},
+                }
+            )
+            agents_response = websocket.receive_json()
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "gateways-1",
+                    "method": "_mustang.agent/gateways/list",
+                    "params": {},
+                }
+            )
+            gateways_response = websocket.receive_json()
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "mcp-1",
+                    "method": "_mustang.agent/mcp/list",
+                    "params": {},
+                }
+            )
+            mcp_response = websocket.receive_json()
+
+    assert agents_response["id"] == "agents-1"
+    assert agents_response["result"]["agents"][0]["agentId"] == "primary"
+    assert agents_response["result"]["bindings"] == []
+    assert gateways_response == {
+        "jsonrpc": "2.0",
+        "id": "gateways-1",
+        "result": {"gateways": []},
+    }
+    assert mcp_response["id"] == "mcp-1"
+    assert mcp_response["result"] == {"servers": [], "revision": 0}
+    assert [request.method for request in acp_log] == ["initialize"]
 
 
 def test_access_router_proxies_runtime_client_permission_request() -> None:

@@ -38,6 +38,7 @@ LEGACY_TOP_LEVEL_PACKAGES = {
 EXPECTED_ROOT_ENTRIES = {
     "__init__.py",
     "__main__.py",
+    "access_router",
     "agent_hub",
     "agents",
     "core",

@@ -74,9 +74,9 @@ class FlagSQLiteBackend:
 
         def _write(conn: Any) -> FlagSectionRecord:
             current = conn.execute(
-                sa.select(tables.flag_sections.c.revision, tables.flag_sections.c.payload_hash).where(
-                    tables.flag_sections.c.section == section
-                )
+                sa.select(
+                    tables.flag_sections.c.revision, tables.flag_sections.c.payload_hash
+                ).where(tables.flag_sections.c.section == section)
             ).fetchone()
             previous_hash: str | None = None
             if current is None:

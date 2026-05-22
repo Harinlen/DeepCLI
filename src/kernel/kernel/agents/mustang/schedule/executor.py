@@ -78,7 +78,11 @@ class CronExecutor:
                 try:
                     from pathlib import Path
 
-                    from kernel.agents.mustang.hooks.types import AmbientContext, HookEvent, HookEventCtx
+                    from kernel.agents.mustang.hooks.types import (
+                        AmbientContext,
+                        HookEvent,
+                        HookEventCtx,
+                    )
 
                     ctx = HookEventCtx(
                         event=HookEvent.PRE_CRON_FIRE,
@@ -174,7 +178,11 @@ class CronExecutor:
             try:
                 from pathlib import Path
 
-                from kernel.agents.mustang.hooks.types import AmbientContext, HookEvent, HookEventCtx
+                from kernel.agents.mustang.hooks.types import (
+                    AmbientContext,
+                    HookEvent,
+                    HookEventCtx,
+                )
 
                 ctx = HookEventCtx(
                     event=HookEvent.POST_CRON_FIRE,

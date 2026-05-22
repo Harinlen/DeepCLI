@@ -20,6 +20,12 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from kernel.agents.mustang.prompts.declarations import (
+    PromptDeclarationImportReport,
+    PromptDeclarationRecord,
+    PromptDeclarationStore,
+)
+
 logger = logging.getLogger(__name__)
 
 # Package-relative location of the shipped prompt files.
@@ -54,10 +60,14 @@ class PromptManager:
         self,
         defaults_dir: Path | None = None,
         user_dirs: list[Path] | None = None,
+        resource_home: Path | None = None,
     ) -> None:
         self._defaults_dir = defaults_dir or _DEFAULT_DIR
         self._user_dirs: list[Path] = user_dirs or []
+        self._resource_home = resource_home
         self._store: dict[str, str] = {}
+        self._declaration_record: PromptDeclarationRecord | None = None
+        self._declaration_import_report: PromptDeclarationImportReport | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -74,6 +84,7 @@ class PromptManager:
             PromptLoadError: If the defaults directory does not exist
                 or any file cannot be read.
         """
+        self._load_resource_store_declarations()
         self._load_dir(self._defaults_dir, required=True)
         for user_dir in self._user_dirs:
             self._load_dir(user_dir, required=False)
@@ -147,3 +158,42 @@ class PromptManager:
     def has(self, key: str) -> bool:
         """Return ``True`` if *key* is loaded."""
         return key in self._store
+
+    @property
+    def declaration_record(self) -> PromptDeclarationRecord | None:
+        """Current ResourceStore-backed global prompt declaration, when enabled."""
+        return self._declaration_record
+
+    @property
+    def declaration_import_report(self) -> PromptDeclarationImportReport | None:
+        """Last legacy prompt declaration import report, if ResourceStore-backed."""
+        return self._declaration_import_report
+
+    def _load_resource_store_declarations(self) -> None:
+        if self._resource_home is None:
+            return
+        declaration_store = PromptDeclarationStore.open(self._resource_home)
+        try:
+            record = declaration_store.read_global()
+            global_dir = self._resource_home / "prompts"
+            if record is None:
+                self._declaration_import_report = declaration_store.import_legacy_user_prompts(
+                    global_dir,
+                    actor="system",
+                )
+                record = declaration_store.read_global()
+                if record is None:
+                    record = declaration_store.write_global(
+                        [],
+                        expected_revision=None,
+                        actor="system",
+                    )
+            else:
+                self._declaration_import_report = declaration_store.import_legacy_user_prompts(
+                    global_dir,
+                    actor="system",
+                    dry_run=True,
+                )
+            self._declaration_record = record
+        finally:
+            declaration_store.close()

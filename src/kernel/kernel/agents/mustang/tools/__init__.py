@@ -555,7 +555,7 @@ class ToolManager(Subsystem):
         if req is None:
             raise ValueError(f"{definition.label} does not accept API key credentials")
         secret_name = str(req["secretName"])
-        secrets.set(
+        secret_ref = secrets.set(
             secret_name,
             api_key,
             kind="api_key",
@@ -566,7 +566,7 @@ class ToolManager(Subsystem):
             os.environ[env_key] = api_key
         current = self.web_fetch_config_model()
         backend_config = dict(current.backends.get(definition.id, {}))
-        backend_config["api_key_ref"] = secret_name
+        backend_config["api_key_ref"] = secret_ref.ref
         backends = dict(current.backends)
         backends[definition.id] = backend_config
         await self._update_web_fetch_config(current.model_copy(update={"backends": backends}))

@@ -25,7 +25,7 @@ from kernel.agents.mustang.llm_provider import LLMProviderManager
 from kernel.agents.mustang.mcp import MCPManager
 from kernel.agents.mustang.memory import MemoryManager
 from kernel.agents.mustang.module_table import KernelModuleTable
-from kernel.core.paths import user_path
+from kernel.core.paths import user_home, user_path
 from kernel.agents.mustang.prompts import PromptManager
 from kernel.core.protocol.acp.schemas.session import (
     ActivateSkillRequest,
@@ -126,16 +126,18 @@ class AgentSessionRuntimeService:
         agent_id: str,
         state_dir: Path,
         workspace: Path,
+        resource_home: Path | None = None,
     ) -> None:
         self.agent_id = agent_id
         self.state_dir = state_dir
         self.workspace = workspace
+        self.resource_home = resource_home if resource_home is not None else user_home()
         self.module_table: KernelModuleTable | None = None
         self._session_manager: SessionManager | None = None
         self._connections: dict[str, tuple[ConnectionContext, CollectingRuntimeSender]] = {}
 
     async def startup(self) -> None:
-        flags = FlagManager()
+        flags = FlagManager(resource_home=self.resource_home)
         await flags.initialize()
         flags.register("transport", TransportFlags)
         flags.register("protocol", ProtocolFlags)
@@ -145,9 +147,12 @@ class AgentSessionRuntimeService:
 
         secrets = SecretManager()
         await secrets.startup()
-        config = ConfigManager(secret_resolver=secrets.get)
+        config = ConfigManager(secret_resolver=secrets.get, resource_home=self.resource_home)
         await config.startup()
-        prompts = PromptManager(user_dirs=_prompt_user_dirs(self.workspace))
+        prompts = PromptManager(
+            user_dirs=_prompt_user_dirs(self.workspace),
+            resource_home=self.resource_home,
+        )
         prompts.load()
 
         self.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -191,6 +196,10 @@ class AgentSessionRuntimeService:
             return
         for subsystem in reversed(self.module_table.subsystems()):
             await subsystem.unload()
+        self.module_table.config.close()
+        self.module_table.flags.close()
+        if self.module_table.secrets is not None:
+            self.module_table.secrets.close()
 
     async def new_session(self, params: NewSessionRequest) -> dict[str, Any]:
         manager = self._manager()
@@ -542,7 +551,9 @@ def _to_contract_execute_python(params: ExecutePythonRequest) -> Any:
 
 
 def _to_contract_cancel_execution(params: CancelExecutionRequest) -> Any:
-    from kernel.core.protocol.interfaces.contracts.cancel_execution_params import CancelExecutionParams
+    from kernel.core.protocol.interfaces.contracts.cancel_execution_params import (
+        CancelExecutionParams,
+    )
 
     return CancelExecutionParams.model_validate(params.model_dump())
 

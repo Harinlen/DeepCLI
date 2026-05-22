@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+import sqlalchemy as sa
 
 from kernel.agents.mustang.schedule.store import CronStore
 from kernel.agents.mustang.schedule.types import (
@@ -19,6 +20,7 @@ from kernel.agents.mustang.schedule.types import (
     Schedule,
     ScheduleKind,
 )
+from kernel.core.storage import ResourceStore, tables
 
 
 @pytest_asyncio.fixture
@@ -36,9 +38,11 @@ def _make_task(
     *,
     durable: bool = True,
     status: CronTaskStatus = CronTaskStatus.active,
+    owner_agent_id: str = "primary",
 ) -> CronTask:
     return CronTask(
         id=task_id,
+        owner_agent_id=owner_agent_id,
         schedule=Schedule(kind=ScheduleKind.every, interval_seconds=60),
         prompt="echo test",
         durable=durable,
@@ -60,6 +64,13 @@ class TestCRUD:
         assert got.id == "t001"
         assert got.prompt == "echo test"
         assert got.schedule.interval_seconds == 60
+
+    @pytest.mark.asyncio
+    async def test_add_writes_resource_store_revision(self, store: CronStore) -> None:
+        await store.add(_make_task(owner_agent_id="worker"))
+        assert store.current_revision("t001") == 1
+        await store.update_status("t001", CronTaskStatus.paused, next_fire_at=None)
+        assert store.current_revision("t001") == 2
 
     @pytest.mark.asyncio
     async def test_get_missing_returns_none(self, store: CronStore) -> None:
@@ -103,9 +114,7 @@ class TestCRUD:
     @pytest.mark.asyncio
     async def test_update_status(self, store: CronStore) -> None:
         await store.add(_make_task())
-        await store.update_status(
-            "t001", CronTaskStatus.paused, next_fire_at=None
-        )
+        await store.update_status("t001", CronTaskStatus.paused, next_fire_at=None)
         got = await store.get("t001")
         assert got is not None
         assert got.status == CronTaskStatus.paused
@@ -143,9 +152,7 @@ class TestExecutionRecords:
     @pytest.mark.asyncio
     async def test_add_and_list(self, store: CronStore) -> None:
         await store.add(_make_task())
-        ex = CronExecution(
-            id="ex01", task_id="t001", session_id="s1", started_at=time.time()
-        )
+        ex = CronExecution(id="ex01", task_id="t001", session_id="s1", started_at=time.time())
         await store.add_execution(ex)
         execs = await store.list_executions("t001")
         assert len(execs) == 1
@@ -172,9 +179,7 @@ class TestExecutionRecords:
         await store.add(_make_task())
         old_time = time.time() - 100 * 86400  # 100 days ago
         await store.add_execution(
-            CronExecution(
-                id="old", task_id="t001", session_id="s", started_at=old_time
-            )
+            CronExecution(id="old", task_id="t001", session_id="s", started_at=old_time)
         )
         await store.add_execution(
             CronExecution(
@@ -200,9 +205,7 @@ class TestRoundTrip:
 
         task = CronTask(
             id="rt001",
-            schedule=Schedule(
-                kind=ScheduleKind.cron, expr="0 9 * * 1-5"
-            ),
+            schedule=Schedule(kind=ScheduleKind.cron, expr="0 9 * * 1-5"),
             prompt="generate report",
             description="Daily 9am report",
             recurring=True,
@@ -263,3 +266,63 @@ class TestRoundTrip:
         assert got.failure_alert.cooldown_seconds == 7200
         assert got.failure_alert.target == "gateway:discord:456"
         assert got.last_failure_alert_at == 1700003000
+
+
+@pytest.mark.asyncio
+async def test_legacy_schedule_yaml_import_once_and_drift_warns(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    legacy_file = config_dir / "schedules.yaml"
+    legacy_file.write_text(
+        """
+tasks:
+  - id: legacy1
+    owner_agent_id: worker
+    schedule:
+      kind: every
+      interval_seconds: 60
+    prompt: legacy prompt
+    description: Legacy
+    next_fire_at: 2000000000
+""",
+        encoding="utf-8",
+    )
+
+    store = CronStore()
+    await store.startup_resource(tmp_path)
+    try:
+        imported = await store.get("legacy1")
+        assert imported is not None
+        assert imported.owner_agent_id == "worker"
+    finally:
+        await store.shutdown()
+
+    legacy_file.write_text(
+        """
+tasks:
+  - id: legacy2
+    schedule:
+      kind: every
+      interval_seconds: 30
+    prompt: drift
+""",
+        encoding="utf-8",
+    )
+    store = CronStore()
+    await store.startup_resource(tmp_path)
+    try:
+        assert await store.get("legacy1") is not None
+        assert await store.get("legacy2") is None
+        assert store.legacy_import_warnings
+        resource_store = ResourceStore.open(tmp_path)
+        try:
+            count = resource_store.read_tx(
+                lambda conn: conn.execute(
+                    sa.select(sa.func.count()).select_from(tables.scheduled_tasks)
+                ).fetchone()[0]
+            )
+        finally:
+            resource_store.close()
+        assert count == 1
+    finally:
+        await store.shutdown()

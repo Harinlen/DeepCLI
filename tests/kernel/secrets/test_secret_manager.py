@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timezone
 
 import pytest
 
 from kernel.core.secrets import SecretManager
 from kernel.core.secrets.types import OAuthToken, SecretNotFoundError
+from kernel.core.config.sqlite_backend import ConfigSQLiteBackend
+from kernel.core.storage import ResourceStore
 
 
 # ---------------------------------------------------------------------------
@@ -271,3 +274,104 @@ async def test_startup_idempotent(tmp_path):
     sm.set("key", "val")
     assert sm.get("key") == "val"
     sm.close()
+
+
+@pytest.mark.anyio
+async def test_uuid_ref_rename_does_not_rewrite_config_or_export_plaintext(tmp_path):
+    sm = SecretManager(db_path=tmp_path / "secrets.db")
+    await sm.startup()
+    try:
+        ref = sm.create("api-key", b"sk-production", actor="primary")
+        store = ResourceStore.open(tmp_path)
+        try:
+            config = ConfigSQLiteBackend(store).write(
+                file="config",
+                section="provider",
+                payload={"api_key": ref.ref},
+                expected_revision=None,
+                actor="primary",
+            )
+            sm.rename(
+                ref.secret_id,
+                "renamed-key",
+                expected_revision=ref.revision,
+                actor="primary",
+            )
+            after = ConfigSQLiteBackend(store).read(file="config", section="provider")
+            export = store.export("json", dry_run=False)
+        finally:
+            store.close()
+
+        assert after is not None
+        assert after.revision == config.revision
+        assert after.payload["api_key"] == ref.ref
+        assert sm.resolve_id(ref.secret_id) == b"sk-production"
+        assert sm.resolve(ref.ref) == "sk-production"
+        assert "sk-production" not in str(export)
+    finally:
+        sm.close()
+
+
+@pytest.mark.anyio
+async def test_legacy_name_based_db_imports_to_uuid_store(tmp_path):
+    db = tmp_path / "secrets.db"
+    conn = sqlite3.connect(db)
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE secrets (
+                name TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                type TEXT NOT NULL DEFAULT 'static',
+                metadata TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE oauth_tokens (
+                name TEXT PRIMARY KEY REFERENCES secrets(name) ON DELETE CASCADE,
+                refresh_token TEXT,
+                expires_at TEXT,
+                client_config TEXT NOT NULL DEFAULT '{}',
+                server_key TEXT NOT NULL UNIQUE
+            );
+            PRAGMA user_version = 2;
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO secrets (name, value, type, metadata, created_at, updated_at)
+            VALUES ('api-key', 'sk-old', 'static', '{}', 'now', 'now')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO secrets (name, value, type, metadata, created_at, updated_at)
+            VALUES ('oauth:srv', 'at-old', 'oauth', '{}', 'now', 'now')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO oauth_tokens
+                (name, refresh_token, expires_at, client_config, server_key)
+            VALUES
+                ('oauth:srv', 'rt-old', NULL, '{"client_id":"cid"}', 'srv')
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    sm = SecretManager(db_path=db)
+    await sm.startup()
+    try:
+        assert sm.get("api-key") == "sk-old"
+        token = sm.get_oauth_token("srv")
+        assert token is not None
+        assert token.access_token == "at-old"
+        assert token.refresh_token == "rt-old"
+        assert token.client_config["client_id"] == "cid"
+        assert sm.list()[0].secret_id
+    finally:
+        sm.close()
+
+    assert list(tmp_path.glob("secrets.db.legacy-*"))

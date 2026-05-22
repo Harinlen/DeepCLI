@@ -38,6 +38,20 @@ def test_access_readiness_reports_primary_not_ready_before_registration() -> Non
     assert payload["route_status"]["status"] == "unavailable"
 
 
+def test_health_reports_version_metadata() -> None:
+    app = create_app(AccessRouter(auth_token="token"))
+
+    with TestClient(app) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["name"] == "deepcli-access-router"
+    assert isinstance(payload["version"], str)
+    assert isinstance(payload["boot_time"], float)
+
+
 def test_access_readiness_reports_primary_ready_after_registration() -> None:
     router = AccessRouter(auth_token="token")
     router.register_runtime(
@@ -65,3 +79,31 @@ def test_access_readiness_reports_primary_ready_after_registration() -> None:
     assert payload["registered_agents"] == 1
     assert payload["route_status"]["agent_id"] == "primary"
     assert payload["route_status"]["status"] == "registered"
+
+
+def test_runtime_websocket_unregisters_route_on_disconnect() -> None:
+    router = AccessRouter(auth_token="token")
+    app = create_app(router)
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/runtime") as websocket:
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "register",
+                    "method": "_mustang.router/register_runtime",
+                    "params": RuntimeRegisterRequest(
+                        process_id="primary-runtime",
+                        agent_id="primary",
+                        auth_token="token",
+                        pid=123,
+                        protocol_version=1,
+                        role="agent_runtime",
+                    ).model_dump(),
+                }
+            )
+            ack = websocket.receive_json()
+            assert ack["ok"] is True
+            assert client.get("/access/readiness").json()["primary_registered"] is True
+
+        assert client.get("/access/readiness").json()["primary_registered"] is False

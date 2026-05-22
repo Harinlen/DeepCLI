@@ -22,6 +22,11 @@ from kernel.core.lifecycle import Subsystem
 
 from . import store
 from .background import BackgroundMemoryAgent
+from .declarations import (
+    MemoryDeclarationImportReport,
+    MemoryDeclarationRecord,
+    MemoryDeclarationStore,
+)
 from .index import MemoryIndex
 from .selector import RelevanceSelector
 from .tools import MEMORY_TOOLS, _configure
@@ -52,6 +57,8 @@ class MemoryManager(Subsystem):
         self._global_root: Path | None = None
         self._project_root: Path | None = None
         self._strategy_text: str = ""
+        self._declaration_record: MemoryDeclarationRecord | None = None
+        self._declaration_import_report: MemoryDeclarationImportReport | None = None
 
     async def startup(self) -> None:
         """Initialize memory subsystem.
@@ -83,8 +90,10 @@ class MemoryManager(Subsystem):
             logger.info("LLMManager not available — memory scoring disabled")
 
         # 2. Directory trees
-        self._global_root = user_path("memory")
+        resource_home = self._resource_home()
+        self._global_root = resource_home / "memory" if resource_home is not None else user_path("memory")
         store.ensure_directory_tree(self._global_root)
+        self._load_resource_store_declaration(resource_home)
 
         # Project scope: look for .mustang/memory/ in cwd or git root
         try:
@@ -228,6 +237,16 @@ class MemoryManager(Subsystem):
         """Return memory usage strategy text for Channel C."""
         return self._strategy_text
 
+    @property
+    def declaration_record(self) -> MemoryDeclarationRecord | None:
+        """Current ResourceStore-backed memory declaration, when enabled."""
+        return self._declaration_record
+
+    @property
+    def declaration_import_report(self) -> MemoryDeclarationImportReport | None:
+        """Last legacy memory declaration import report, if ResourceStore-backed."""
+        return self._declaration_import_report
+
     # -- Background agent proxies -------------------------------------------
 
     def notify_main_agent_write(self) -> None:
@@ -244,3 +263,33 @@ class MemoryManager(Subsystem):
         """Called at end of each turn."""
         if self._background:
             self._background.on_turn_end()
+
+    def _load_resource_store_declaration(self, resource_home: Path | None) -> None:
+        if resource_home is None or self._global_root is None:
+            return
+        declaration_store = MemoryDeclarationStore.open(resource_home)
+        try:
+            record = declaration_store.read_global()
+            if record is None:
+                self._declaration_import_report = declaration_store.import_legacy_config(
+                    self._global_root,
+                    actor="system",
+                )
+                record = declaration_store.read_global()
+                if record is None:
+                    record = declaration_store.ensure_default_global(actor="system")
+            else:
+                self._declaration_import_report = declaration_store.import_legacy_config(
+                    self._global_root,
+                    actor="system",
+                    dry_run=True,
+                )
+            self._declaration_record = record
+        finally:
+            declaration_store.close()
+
+    def _resource_home(self) -> Path | None:
+        state_dir = getattr(self._module_table, "state_dir", None)
+        if isinstance(state_dir, Path):
+            return state_dir.parent if state_dir.name == "state" else state_dir
+        return None

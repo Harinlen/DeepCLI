@@ -51,17 +51,64 @@ const KERNEL_ACTIONS: Item[] = [
 	{ value: "restart", label: "restart", description: "Restart the supervised runtime" },
 ];
 
+const GLOBAL_ACTIONS: Item[] = [
+	{ value: "backup", label: "backup", description: "Create a ResourceStore backup" },
+	{ value: "backups", label: "backups", description: "List ResourceStore backups" },
+	{ value: "export", label: "export", description: "Export ResourceStore resources" },
+	{ value: "import", label: "import", description: "Dry-run a ResourceStore import" },
+];
+
+const FLAGS_ACTIONS: Item[] = [
+	{ value: "list", label: "list", description: "List startup flag sections" },
+	{ value: "read", label: "read", description: "Read one flag section" },
+	{ value: "set", label: "set", description: "Stage a flag value for restart" },
+	{ value: "reset", label: "reset", description: "Reset a staged flag value" },
+];
+
+const SECRETS_ACTIONS: Item[] = [
+	{ value: "list", label: "list", description: "List secret metadata" },
+	{ value: "audit", label: "audit", description: "Show secret audit events" },
+	{ value: "rename", label: "rename", description: "Rename a secret metadata label" },
+	{ value: "delete", label: "delete", description: "Delete a secret with confirmation" },
+];
+
+const AGENTS_ACTIONS: Item[] = [
+	{ value: "list", label: "list", description: "List durable agents" },
+	{ value: "read", label: "read", description: "Read one durable agent" },
+	{ value: "create", label: "create", description: "Create a durable agent" },
+	{ value: "delete", label: "delete", description: "Delete a durable agent" },
+	{ value: "bind", label: "bind", description: "Bind an agent to a gateway channel" },
+];
+
+const AGENT_ACTIONS: Item[] = [
+	{ value: "send", label: "send", description: "Send a message through Access Router" },
+];
+
+const GATEWAYS_ACTIONS: Item[] = [
+	{ value: "list", label: "list", description: "List gateways" },
+	{ value: "read", label: "read", description: "Read gateway status" },
+	{ value: "create", label: "create", description: "Unavailable until Kernel exposes gateway creation" },
+	{ value: "delete", label: "delete", description: "Unavailable until Kernel exposes gateway deletion" },
+	{ value: "bind", label: "bind", description: "Bind a gateway channel to an agent" },
+];
+
 export const BUILTIN_SLASH_COMMANDS: SlashCommand[] = [
 	{ name: "clear", description: "Clear the current conversation view" },
 	{ name: "compact", description: "Compact conversation context" },
 	{ name: "cost", description: "Show usage and cost" },
 	{ name: "exit", description: "Exit DeepCLI" },
+	{ name: "agent", description: "Send a message to a durable agent", getArgumentCompletions: completeAgentArguments },
+	{ name: "agents", description: "Manage durable agents", getArgumentCompletions: completeAgentsArguments },
 	{ name: "help", description: "Show available commands" },
+	{ name: "flags", description: "Read or stage startup flags", getArgumentCompletions: completeFlagsArguments },
+	{ name: "gateways", description: "Manage Access Router gateways", getArgumentCompletions: completeGatewaysArguments },
+	{ name: "global", description: "Backup, export, or dry-run import global ResourceStore data", getArgumentCompletions: completeGlobalArguments },
 	{ name: "memory", description: "List, show, or delete memories" },
 	{ name: "kernel", description: "Inspect or restart the local runtime", getArgumentCompletions: completeKernelArguments },
 	{ name: "model", description: "Manage models", getArgumentCompletions: completeModelArguments },
 	{ name: "plan", description: "Enter, exit, or inspect plan mode", getArgumentCompletions: completePlanArguments },
 	{ name: "quit", description: "Exit DeepCLI" },
+	{ name: "secrets", description: "Manage secret metadata", getArgumentCompletions: completeSecretsArguments },
 	{ name: "session", description: "List, resume, or delete sessions", getArgumentCompletions: completeSessionArguments },
 	{ name: "theme", description: "Show or switch theme", getArgumentCompletions: completeThemeArguments },
 	{ name: "webfetch", description: "Manage WebFetch backend", getArgumentCompletions: completeWebFetchArguments },
@@ -117,6 +164,42 @@ function completeKernelArguments(argumentPrefix: string): Item[] | null {
 	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
 	if (argumentPrefix.includes(" ")) return null;
 	return filterCompletions(subcommand, KERNEL_ACTIONS);
+}
+
+function completeGlobalArguments(argumentPrefix: string): Item[] | null {
+	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
+	if (argumentPrefix.includes(" ")) return null;
+	return filterCompletions(subcommand, GLOBAL_ACTIONS);
+}
+
+function completeFlagsArguments(argumentPrefix: string): Item[] | null {
+	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
+	if (argumentPrefix.includes(" ")) return null;
+	return filterCompletions(subcommand, FLAGS_ACTIONS);
+}
+
+function completeSecretsArguments(argumentPrefix: string): Item[] | null {
+	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
+	if (argumentPrefix.includes(" ")) return null;
+	return filterCompletions(subcommand, SECRETS_ACTIONS);
+}
+
+function completeAgentsArguments(argumentPrefix: string): Item[] | null {
+	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
+	if (argumentPrefix.includes(" ")) return null;
+	return filterCompletions(subcommand, AGENTS_ACTIONS);
+}
+
+function completeAgentArguments(argumentPrefix: string): Item[] | null {
+	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
+	if (argumentPrefix.includes(" ")) return null;
+	return filterCompletions(subcommand, AGENT_ACTIONS);
+}
+
+function completeGatewaysArguments(argumentPrefix: string): Item[] | null {
+	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
+	if (argumentPrefix.includes(" ")) return null;
+	return filterCompletions(subcommand, GATEWAYS_ACTIONS);
 }
 
 function filterCompletions(prefix: string, items: Item[]): Item[] | null {

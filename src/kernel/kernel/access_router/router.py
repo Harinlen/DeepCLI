@@ -105,6 +105,13 @@ class AccessRouter:
             status="registered",
         )
 
+    def unregister_runtime(self, connection_id: str) -> None:
+        """Remove the runtime route owned by a closed WebSocket connection."""
+        for agent_id, route in list(self._routes.items()):
+            if route.connection_id == connection_id:
+                self._routes.pop(agent_id, None)
+                return
+
     def ping(self, ping: RuntimePing) -> RuntimePong:
         """Update a runtime heartbeat by connection id."""
         route = self._route_by_connection_id(ping.connection_id)
@@ -191,7 +198,8 @@ class AccessRouter:
         client_turn_id = f"{message.adapter_id}:{message.external_message_id}"
         request = DeliverTurnRequest(
             agent_id=binding.target_agent_id,
-            session_id=binding.target_session_id or f"adapter:{message.adapter_id}:{message.channel_key}",
+            session_id=binding.target_session_id
+            or f"adapter:{message.adapter_id}:{message.channel_key}",
             client_turn_id=client_turn_id,
             prompt=message.text,
             idempotency_key=f"turn:{message.adapter_id}:{message.external_message_id}",
@@ -253,27 +261,24 @@ class AccessRouter:
                 connection_id=route.connection_id,
                 pid=route.pid,
                 protocol_version=route.protocol_version,
+                heartbeat_fresh=True,
+                heartbeat_age_seconds=now - route.last_seen,
             )
             for route in self._routes.values()
-            if now - route.last_seen <= self._stale_timeout_seconds
+            if self._route_is_fresh(route, now)
         ]
 
     def route_status(self, agent_id: str) -> RouteStatus:
         """Return route status without delivering messages."""
         route = self._routes.get(agent_id)
         if route is None:
-            return RouteStatus(agent_id=agent_id, status="unavailable")
-        if time.monotonic() - route.last_seen > self._stale_timeout_seconds:
             return RouteStatus(
                 agent_id=agent_id,
-                status="stale",
-                connection_id=route.connection_id,
+                status="unavailable",
+                heartbeat_fresh=False,
+                stale_timeout_seconds=self._stale_timeout_seconds,
             )
-        return RouteStatus(
-            agent_id=agent_id,
-            status="registered",
-            connection_id=route.connection_id,
-        )
+        return self._route_status(route, time.monotonic())
 
     def evict_stale(self) -> list[str]:
         """Remove stale routes and return evicted agent ids."""
@@ -342,9 +347,29 @@ class AccessRouter:
         route = self._routes.get(agent_id)
         if route is None:
             raise RouteUnavailable(f"route unavailable: {agent_id}")
-        if time.monotonic() - route.last_seen > self._stale_timeout_seconds:
+        if not self._route_is_fresh(route, time.monotonic()):
             raise RouteUnavailable(f"route stale: {agent_id}")
         return route
+
+    def touch_runtime(self, connection_id: str) -> None:
+        """Refresh observable transport activity for one runtime connection."""
+        self._route_by_connection_id(connection_id).last_seen = time.monotonic()
+
+    def _route_status(self, route: _RuntimeConnection, now: float) -> RouteStatus:
+        age = now - route.last_seen
+        fresh = self._route_is_fresh(route, now)
+        return RouteStatus(
+            agent_id=route.agent_id,
+            status="registered" if fresh else "stale",
+            connection_id=route.connection_id,
+            pid=route.pid,
+            heartbeat_fresh=fresh,
+            heartbeat_age_seconds=age,
+            stale_timeout_seconds=self._stale_timeout_seconds,
+        )
+
+    def _route_is_fresh(self, route: _RuntimeConnection, now: float) -> bool:
+        return now - route.last_seen <= self._stale_timeout_seconds
 
     def _route_by_connection_id(self, connection_id: str) -> _RuntimeConnection:
         for route in self._routes.values():
@@ -352,12 +377,16 @@ class AccessRouter:
                 return route
         raise RouteUnavailable(f"connection unavailable: {connection_id}")
 
-    def _record_adapter_status(self, adapter_id: str, status: str, error: str | None = None) -> None:
+    def _record_adapter_status(
+        self, adapter_id: str, status: str, error: str | None = None
+    ) -> None:
         if self._repository is not None:
             self._repository.record_adapter_status(adapter_id, status, error)
 
     def _resolve_binding(self, adapter_id: str, channel_key: str) -> ChannelBinding | None:
-        return self._repository.resolve_binding(adapter_id, channel_key) if self._repository else None
+        return (
+            self._repository.resolve_binding(adapter_id, channel_key) if self._repository else None
+        )
 
     def _put_idempotency(
         self,

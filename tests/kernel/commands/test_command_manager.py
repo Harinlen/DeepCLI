@@ -91,9 +91,16 @@ async def test_command_manager_startup_registers_builtins(
         "cost",
         "memory",
         "kernel",
+        "global",
+        "flags",
+        "secrets",
+        "agents",
+        "agent",
+        "gateways",
+        "mcp",
     ):
         assert expected in names, f"Expected built-in command {expected!r} missing"
-    assert "cron" not in names
+    assert "cron" in names
     assert "auth" not in names
 
 
@@ -122,6 +129,42 @@ async def test_command_manager_kernel_uses_runtime_status_method(module_table: M
     cmd = mgr.lookup("kernel")
     assert cmd is not None
     assert cmd.acp_method == MustangMethod.RUNTIME_STATUS
+
+
+async def test_command_manager_global_flags_secrets_use_management_methods(
+    module_table: MagicMock,
+) -> None:
+    mgr = CommandManager(module_table)
+    await mgr.startup()
+
+    assert mgr.lookup("global").acp_method == MustangMethod.GLOBAL_BACKUP
+    assert mgr.lookup("flags").acp_method == MustangMethod.FLAGS_LIST
+    assert mgr.lookup("secrets").acp_method == MustangMethod.SECRETS_LIST
+
+
+async def test_command_manager_agents_and_gateways_use_management_methods(
+    module_table: MagicMock,
+) -> None:
+    mgr = CommandManager(module_table)
+    await mgr.startup()
+
+    assert mgr.lookup("agents").acp_method == MustangMethod.AGENTS_LIST
+    assert mgr.lookup("agent").acp_method == MustangMethod.AGENT_SEND
+    gateways = mgr.lookup("gateways")
+    assert gateways.acp_method == MustangMethod.GATEWAYS_LIST
+    assert "create" in gateways.subcommands
+    assert "delete" in gateways.subcommands
+
+
+async def test_command_manager_mcp_uses_management_methods(
+    module_table: MagicMock,
+) -> None:
+    mgr = CommandManager(module_table)
+    await mgr.startup()
+
+    mcp = mgr.lookup("mcp")
+    assert mcp.acp_method == MustangMethod.MCP_LIST
+    assert mcp.subcommands == ["list", "read", "create", "update", "delete"]
 
 
 async def test_command_manager_lookup_miss(module_table: MagicMock) -> None:

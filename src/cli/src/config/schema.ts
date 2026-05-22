@@ -45,7 +45,7 @@ export const DEFAULT_CONFIG: CliConfig = {
     token_file: DEFAULT_TOKEN_FILE,
     autostart: false,
     autostart_command: null,
-    health_url: "http://localhost:8200/",
+    health_url: "http://localhost:8200/health",
   },
   session: {
     startup: "new",

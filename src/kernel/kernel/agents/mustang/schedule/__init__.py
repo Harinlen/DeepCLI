@@ -97,8 +97,8 @@ class ScheduleManager(Subsystem):
 
         # Store
         state_dir = self._module_table.state_dir
-        db_path = state_dir / "kernel.db"
-        await self._store.startup(db_path)
+        resource_home = state_dir.parent if state_dir.name == "state" else state_dir
+        await self._store.startup_resource(resource_home)
 
         # Delivery
         session_mgr = cast(Any, self._module_table.get(SessionManager))  # type: ignore[type-abstract]
@@ -135,7 +135,9 @@ class ScheduleManager(Subsystem):
         # Config
         try:
             cfg_section = self._module_table.config.get_section(
-                file="schedule", section="defaults", schema=ScheduleConfig,
+                file="schedule",
+                section="defaults",
+                schema=ScheduleConfig,
             )
             self._config = cfg_section.get()
         except Exception:
@@ -187,6 +189,7 @@ class ScheduleManager(Subsystem):
         repeat_until: float | None = None,
         session_id: str | None = None,
         project_dir: str | None = None,
+        owner_agent_id: str = "primary",
     ) -> CronTask:
         """Parse a schedule expression and create a new cron task.
 
@@ -219,6 +222,7 @@ class ScheduleManager(Subsystem):
 
         task = CronTask(
             id=uuid.uuid4().hex[:8],
+            owner_agent_id=owner_agent_id,
             schedule=schedule,
             prompt=prompt,
             description=description,

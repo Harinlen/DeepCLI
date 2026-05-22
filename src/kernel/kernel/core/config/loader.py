@@ -142,6 +142,26 @@ def collect(
     return merged
 
 
+def collect_project_and_cli(
+    *,
+    project_dir: Path,
+    cli_overrides: Sequence[str],
+) -> dict[str, dict[str, Any]]:
+    """Merge project-local layers plus CLI overrides without global YAML."""
+    merged: dict[str, dict[str, Any]] = {}
+
+    for directory, want_local in [(project_dir, False), (project_dir, True)]:
+        for file_stem, raw in _scan_layer(directory, local=want_local):
+            current = merged.get(file_stem)
+            merged[file_stem] = deep_merge(current, raw) if current is not None else raw
+
+    for file_stem, patch in parse_cli_overrides(cli_overrides).items():
+        current = merged.get(file_stem)
+        merged[file_stem] = deep_merge(current, patch) if current is not None else patch
+
+    return merged
+
+
 def _scan_layer(directory: Path, *, local: bool) -> list[tuple[str, dict[str, Any]]]:
     """Yield ``(file_stem, raw_dict)`` for every YAML in ``directory``.
 

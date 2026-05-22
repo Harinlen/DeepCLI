@@ -197,7 +197,9 @@ async def test_web_fetch_external_backend_prompts_then_stores_valid_api_key(
         assert secrets.get("web_fetch.tavily.api_key") == "tvly-valid"
         config_model = mgr.web_fetch_config_model()
         assert config_model.backend == "tavily"
-        assert config_model.backends["tavily"]["api_key_ref"] == "web_fetch.tavily.api_key"
+        api_key_ref = config_model.backends["tavily"]["api_key_ref"]
+        assert api_key_ref.startswith("secret:")
+        assert secrets.get(api_key_ref) == "tvly-valid"
         public_config = mgr.web_fetch_config()
         assert public_config["backends"]["tavily"]["api_key"] == "configured"
         assert "api_key_ref" not in public_config["backends"]["tavily"]
@@ -403,10 +405,9 @@ async def test_web_fetch_config_api_key_validates_and_hides_secret_ref(
         public_config = await mgr.set_web_fetch_config_value("tavily.api_key", "tvly-config")
 
         assert secrets.get("web_fetch.tavily.api_key") == "tvly-config"
-        assert (
-            mgr.web_fetch_config_model().backends["tavily"]["api_key_ref"]
-            == "web_fetch.tavily.api_key"
-        )
+        api_key_ref = mgr.web_fetch_config_model().backends["tavily"]["api_key_ref"]
+        assert api_key_ref.startswith("secret:")
+        assert secrets.get(api_key_ref) == "tvly-config"
         assert public_config["backends"]["tavily"]["api_key"] == "configured"
         assert "api_key_ref" not in public_config["backends"]["tavily"]
         assert mgr.web_fetch_config_model().backend == "auto"

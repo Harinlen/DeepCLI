@@ -8,11 +8,19 @@ from kernel.core.storage.import_export import apply_legacy_yaml_import
 
 def test_imports_config_and_flags_yaml_into_sections(tmp_path) -> None:
     _write_yaml(tmp_path / "config" / "kernel.yaml", {"tools": {"enabled": True}})
+    _write_yaml(
+        tmp_path / "config" / "mcp.yaml",
+        {"mcp": {"servers": {"local": {"command": "python"}}}},
+    )
     _write_yaml(tmp_path / "config" / "flags.yaml", {"kernel": {"memory": False}})
 
     report = apply_legacy_yaml_import(tmp_path)
 
-    assert set(report.imported) == {"legacy:kernel.yaml", "legacy:flags.yaml"}
+    assert set(report.imported) == {
+        "legacy:kernel.yaml",
+        "legacy:mcp.yaml",
+        "legacy:flags.yaml",
+    }
     store = ResourceStore.open(tmp_path)
     try:
         config_count = store.read_tx(
@@ -26,9 +34,9 @@ def test_imports_config_and_flags_yaml_into_sections(tmp_path) -> None:
         )
     finally:
         store.close()
-    assert config_count == 1
+    assert config_count == 2
     assert flag_count == 1
-    assert markers == 2
+    assert markers == 3
 
 
 def test_second_run_skips_unchanged_sources(tmp_path) -> None:

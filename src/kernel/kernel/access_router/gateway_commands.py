@@ -24,6 +24,46 @@ class GatewayCommandService:
     def list(self) -> list[dict[str, object]]:
         return self._repo.list_adapters()
 
+    def create(
+        self,
+        *,
+        gateway_id: str,
+        gateway_type: str,
+        config: dict[str, object] | None = None,
+        enabled: bool = True,
+        actor: str = "primary",
+    ) -> dict[str, object]:
+        if self._repo.get_adapter(gateway_id) is not None:
+            raise ValueError(f"gateway already exists: {gateway_id}")
+        revision = self._repo.declare_adapter(
+            adapter_id=gateway_id,
+            adapter_type=gateway_type,
+            config=config or {},
+            enabled=enabled,
+            actor=actor,
+        )
+        row = self._repo.get_adapter(gateway_id)
+        if row is None:
+            raise RuntimeError(f"gateway create did not persist: {gateway_id}")
+        return {**row, "revision": revision}
+
+    def delete(
+        self,
+        gateway_id: str,
+        *,
+        confirm: bool = False,
+        actor: str = "primary",
+    ) -> dict[str, object]:
+        if not confirm:
+            raise PermissionError("delete requires --confirm")
+        result = self._repo.remove_adapter(gateway_id, actor=actor)
+        return {
+            "gateway_id": gateway_id,
+            "deleted": True,
+            "revision": result["revision"],
+            "disabled_bindings": result["disabled_bindings"],
+        }
+
     def status(self, gateway_id: str | None = None) -> builtins.list[dict[str, object]]:
         rows = self._repo.list_adapters()
         if gateway_id is not None:

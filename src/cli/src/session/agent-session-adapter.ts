@@ -403,6 +403,14 @@ export class MustangAgentSessionAdapter {
 		return session.runtimeRestart(reason);
 	}
 
+	async managementRequest<R = unknown>(
+		method: string,
+		params: Record<string, unknown> = {},
+	): Promise<R> {
+		const session = this.options.session ?? new MustangSession(this.options.sessionService.clientForSession(), "management-probe");
+		return session.managementRequest<R>(method, params);
+	}
+
 	async setCurrentModelRole(role: string, provider: string, model: string): Promise<boolean> {
 		const result = await this.modelService.setCurrent(role, provider, model);
 		await this.refreshModelProfiles().catch(() => {});

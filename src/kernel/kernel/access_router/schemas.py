@@ -83,6 +83,10 @@ class RouteStatus(BaseModel):
     agent_id: str
     status: str
     connection_id: str | None = None
+    pid: int | None = None
+    heartbeat_fresh: bool | None = None
+    heartbeat_age_seconds: float | None = None
+    stale_timeout_seconds: float | None = None
 
 
 class RegisteredAgent(BaseModel):
@@ -92,6 +96,8 @@ class RegisteredAgent(BaseModel):
     connection_id: str
     pid: int
     protocol_version: int
+    heartbeat_fresh: bool = True
+    heartbeat_age_seconds: float | None = None
 
 
 class RouterHealth(BaseModel):

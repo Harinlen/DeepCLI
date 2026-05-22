@@ -27,6 +27,7 @@ import asyncio
 import logging
 import os
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any, Generic, TypeVar
 
 import yaml
@@ -56,18 +57,27 @@ class _Section(Generic[T]):
         schema: type[T],
         current: T,
         write_path: Path,
+        revision: int | None = None,
+        persist: Callable[[T, int | None], int | None] | None = None,
     ) -> None:
         self.file = file
         self.section = section
         self.schema = schema
         self._current: T = current
         self._write_path: Path = write_path
+        self._revision = revision
+        self._persist = persist
         self._lock = asyncio.Lock()
         # Signal payload is ``(old, new)`` — matches the design doc.
         self.changed: Signal[[T, T]] = Signal()
 
     def get(self) -> T:
         return self._current
+
+    @property
+    def revision(self) -> int | None:
+        """Durable backend revision for this section, when available."""
+        return self._revision
 
     async def update(self, new_value: T) -> None:
         """Validate, persist, swap, notify.
@@ -95,7 +105,14 @@ class _Section(Generic[T]):
             old = self._current
             # (2) Write-ahead: persist before mutating memory so that
             # a crashed write leaves disk and memory consistent.
-            await asyncio.to_thread(self._write_atomic, validated)
+            if self._persist is not None:
+                self._revision = await asyncio.to_thread(
+                    self._persist,
+                    validated,
+                    self._revision,
+                )
+            else:
+                await asyncio.to_thread(self._write_atomic, validated)
             # (3) Commit in-memory state only after the write landed.
             self._current = validated
 
@@ -141,6 +158,11 @@ class _Section(Generic[T]):
             yaml.safe_dump(existing, fh, sort_keys=True, allow_unicode=True)
         os.replace(tmp_path, self._write_path)
 
+    def refresh(self, value: T, *, revision: int | None = None) -> None:
+        """Replace the cached value from an external durable source."""
+        self._current = value
+        self._revision = revision
+
 
 class MutableSection(Generic[T]):
     """Owner-facing wrapper: read, write, subscribe.
@@ -156,6 +178,10 @@ class MutableSection(Generic[T]):
 
     def get(self) -> T:
         return self._section.get()
+
+    @property
+    def revision(self) -> int | None:
+        return self._section.revision
 
     async def update(self, new_value: T) -> None:
         await self._section.update(new_value)
@@ -179,6 +205,10 @@ class ReadOnlySection(Generic[T]):
 
     def get(self) -> T:
         return self._section.get()
+
+    @property
+    def revision(self) -> int | None:
+        return self._section.revision
 
     @property
     def changed(self) -> Signal[[T, T]]:

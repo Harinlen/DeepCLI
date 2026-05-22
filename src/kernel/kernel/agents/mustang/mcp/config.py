@@ -14,12 +14,19 @@ from __future__ import annotations
 
 import orjson
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from kernel.core.config.sqlite_backend import ConfigSQLiteBackend
+from kernel.core.storage import ResourceStore
 
 logger = logging.getLogger(__name__)
+
+MCP_CONFIG_FILE = "mcp"
+MCP_CONFIG_SECTION = "mcp"
 
 
 # ── Server config types ─────────────────────────────────────────────
@@ -97,6 +104,80 @@ class MCPConfig(BaseModel):
     """
 
     servers: dict[str, ServerConfig] = Field(default_factory=dict)
+
+    @field_validator("servers", mode="before")
+    @classmethod
+    def _default_stdio_type(cls, value: Any) -> Any:
+        """Accept Claude Code-style stdio entries that omit ``type``."""
+        if not isinstance(value, dict):
+            return value
+        normalized: dict[str, Any] = {}
+        for name, entry in value.items():
+            if isinstance(entry, dict) and "type" not in entry and "command" in entry:
+                normalized[name] = {"type": "stdio", **entry}
+            else:
+                normalized[name] = entry
+        return normalized
+
+
+@dataclass(frozen=True, slots=True)
+class MCPDeclarationRecord:
+    """ResourceStore-backed global MCP declaration snapshot."""
+
+    config: MCPConfig
+    revision: int
+    payload_hash: str
+
+
+class MCPDeclarationStore:
+    """MCP-owned facade over ResourceStore global MCP declarations.
+
+    The physical storage is the shared ``config_sections`` table because MCP
+    declarations participate in the same global/project/local/CLI layering as
+    other ConfigManager sections.  This facade keeps MCP code and tests from
+    reaching into generic config internals when mutating global declarations.
+    """
+
+    def __init__(self, store: ResourceStore) -> None:
+        self._store = store
+        self._backend = ConfigSQLiteBackend(store)
+
+    @classmethod
+    def open(cls, home: Path) -> "MCPDeclarationStore":
+        return cls(ResourceStore.open(home))
+
+    def read_global(self) -> MCPDeclarationRecord | None:
+        row = self._backend.read(file=MCP_CONFIG_FILE, section=MCP_CONFIG_SECTION)
+        if row is None:
+            return None
+        return MCPDeclarationRecord(
+            config=MCPConfig.model_validate(row.payload),
+            revision=row.revision,
+            payload_hash=row.payload_hash,
+        )
+
+    def write_global(
+        self,
+        config: MCPConfig,
+        *,
+        expected_revision: int | None,
+        actor: str | None = None,
+    ) -> MCPDeclarationRecord:
+        row = self._backend.write(
+            file=MCP_CONFIG_FILE,
+            section=MCP_CONFIG_SECTION,
+            payload=config.model_dump(mode="json"),
+            expected_revision=expected_revision,
+            actor=actor,
+        )
+        return MCPDeclarationRecord(
+            config=MCPConfig.model_validate(row.payload),
+            revision=row.revision,
+            payload_hash=row.payload_hash,
+        )
+
+    def close(self) -> None:
+        self._store.close()
 
 
 # ── Policy config ───────────────────────────────────────────────────

@@ -108,6 +108,51 @@ class AccessRouterRepository:
 
         return self._store.write_tx(_write)
 
+    def remove_adapter(self, adapter_id: str, *, actor: str | None = None) -> dict[str, int]:
+        """Remove one adapter declaration and disable its active bindings."""
+        now = _now_iso()
+
+        def _write(conn) -> dict[str, int]:  # type: ignore[no-untyped-def]
+            row = conn.execute(
+                sa.select(tables.access_adapters.c.revision).where(
+                    tables.access_adapters.c.adapter_id == adapter_id
+                )
+            ).fetchone()
+            if row is None:
+                raise KeyError(adapter_id)
+            revision = int(row["revision"]) + 1
+            result = conn.execute(
+                tables.access_channel_bindings.update()
+                .where(
+                    tables.access_channel_bindings.c.adapter_id == adapter_id,
+                    tables.access_channel_bindings.c.enabled == 1,
+                )
+                .values(
+                    enabled=0,
+                    revision=tables.access_channel_bindings.c.revision + 1,
+                    updated_at=now,
+                    updated_by_agent_id=actor,
+                )
+            )
+            conn.execute(
+                tables.access_adapters.delete().where(
+                    tables.access_adapters.c.adapter_id == adapter_id
+                )
+            )
+            conn.execute(
+                tables.access_adapter_events.insert().values(
+                    adapter_id=adapter_id,
+                    event_type="adapter.deleted",
+                    revision=revision,
+                    actor_agent_id=actor,
+                    created_at=now,
+                    payload_hash=None,
+                )
+            )
+            return {"revision": revision, "disabled_bindings": int(result.rowcount)}
+
+        return self._store.write_tx(_write)
+
     def list_adapters(self) -> list[dict[str, object]]:
         """Return durable gateway declarations using internal adapter tables."""
         rows = self._store.read_tx(
@@ -141,7 +186,9 @@ class AccessRouterRepository:
         matches = [row for row in self.list_adapters() if row["adapter_id"] == adapter_id]
         return matches[0] if matches else None
 
-    def set_adapter_enabled(self, adapter_id: str, enabled: bool, *, actor: str | None = None) -> int:
+    def set_adapter_enabled(
+        self, adapter_id: str, enabled: bool, *, actor: str | None = None
+    ) -> int:
         current = self.get_adapter(adapter_id)
         if current is None:
             raise KeyError(adapter_id)
@@ -299,9 +346,7 @@ class AccessRouterRepository:
             )
             if conditions:
                 stmt = stmt.where(sa.and_(*conditions))
-            rows = conn.execute(
-                stmt
-            ).fetchall()
+            rows = conn.execute(stmt).fetchall()
             return [
                 {
                     "binding_id": str(row["binding_id"]),
@@ -310,7 +355,9 @@ class AccessRouterRepository:
                     "channel_key": str(row["channel_key"]),
                     "target_agent_id": str(row["target_agent_id"]),
                     "target_session_id": (
-                        str(row["target_session_id"]) if row["target_session_id"] is not None else None
+                        str(row["target_session_id"])
+                        if row["target_session_id"] is not None
+                        else None
                     ),
                     "enabled": bool(row["enabled"]),
                     "revision": int(row["revision"]),

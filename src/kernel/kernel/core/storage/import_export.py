@@ -41,7 +41,7 @@ def apply_legacy_yaml_import(
     dry_run: bool = False,
     actor: str = "system",
 ) -> LegacyMigrationReport:
-    """Import known ``kernel.yaml`` and ``flags.yaml`` once."""
+    """Import known legacy global YAML files once."""
     store = ResourceStore.open(home)
     try:
         imported: list[str] = []
@@ -51,7 +51,22 @@ def apply_legacy_yaml_import(
         targets: list[str] = []
 
         for result in (
-            _import_config(store, home / "config" / "kernel.yaml", dry_run=dry_run, actor=actor),
+            _import_config(
+                store,
+                home / "config" / "kernel.yaml",
+                file="kernel",
+                source_id="legacy:kernel.yaml",
+                dry_run=dry_run,
+                actor=actor,
+            ),
+            _import_config(
+                store,
+                home / "config" / "mcp.yaml",
+                file="mcp",
+                source_id="legacy:mcp.yaml",
+                dry_run=dry_run,
+                actor=actor,
+            ),
             _import_flags(store, home / "config" / "flags.yaml", dry_run=dry_run, actor=actor),
         ):
             _merge_result(result, imported, skipped, drift, manual_actions, targets)
@@ -72,12 +87,13 @@ def _import_config(
     store: ResourceStore,
     path: Path,
     *,
+    file: str,
+    source_id: str,
     dry_run: bool,
     actor: str,
 ) -> LegacyMigrationReport:
     if not path.exists():
         return _single(dry_run=dry_run)
-    source_id = "legacy:kernel.yaml"
     source_hash = _file_hash(path)
     marker = _read_marker(store, source_id)
     if marker is not None:
@@ -87,13 +103,13 @@ def _import_config(
 
     data = _read_yaml_mapping(path)
     manual_actions = tuple(_find_manual_secret_refs(data))
-    targets = tuple(f"config.global._.kernel.{section}" for section in data)
+    targets = tuple(f"config.global._.{file}.{section}" for section in data)
     if not dry_run:
         backend = ConfigSQLiteBackend(store)
         for section, payload in data.items():
             if isinstance(payload, dict):
                 backend.write(
-                    file="kernel",
+                    file=file,
                     section=str(section),
                     payload=payload,
                     expected_revision=None,

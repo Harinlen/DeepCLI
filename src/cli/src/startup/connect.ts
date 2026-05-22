@@ -29,16 +29,18 @@ export async function connectKernel(config: CliConfig, options: {
   env?: NodeJS.ProcessEnv;
   connect?: typeof AcpClient.connect;
 } = {}): Promise<ConnectResult> {
-  const token = resolveToken(config, options.env ?? process.env);
+  const env = options.env ?? process.env;
+  const token = resolveToken(config, env);
+  const tokenProvider = () => resolveToken(config, env);
   const connect = options.connect ?? AcpClient.connect;
 
   try {
-    return { client: await connect(config.kernel.url, token) };
+    return { client: await connect(config.kernel.url, token, { tokenProvider }) };
   } catch (error) {
     if (!(error instanceof KernelNotRunning) || !config.kernel.autostart) throw error;
     const autostarted = await maybeAutostartKernel(config, {
-      connect: () => connect(config.kernel.url, token),
+      connect: () => connect(config.kernel.url, tokenProvider(), { tokenProvider }),
     });
-    return { client: await connect(config.kernel.url, token), autostarted };
+    return { client: await connect(config.kernel.url, tokenProvider(), { tokenProvider }), autostarted };
   }
 }

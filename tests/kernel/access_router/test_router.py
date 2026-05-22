@@ -40,7 +40,52 @@ async def test_stale_connection_eviction() -> None:
     assert router.route_status("primary").status == "unavailable"
 
 
-async def test_runtime_ping_pong_refreshes_connection() -> None:
+async def test_stale_route_rejects_delivery() -> None:
+    router = AccessRouter(auth_token="secret", stale_timeout_seconds=-1)
+
+    async def handler(_: DeliverTurnRequest) -> dict[str, object]:
+        return {"ok": True}
+
+    router.register_runtime(_register(), handler)
+
+    with pytest.raises(RouteUnavailable, match="route stale: primary"):
+        await router.deliver_turn(_turn())
+
+
+async def test_reconnect_restores_fresh_route() -> None:
+    router = AccessRouter(auth_token="secret", stale_timeout_seconds=-1)
+
+    async def handler(_: DeliverTurnRequest) -> dict[str, object]:
+        return {"ok": True}
+
+    first = router.register_runtime(_register(pid=111), handler)
+    assert router.route_status("primary").status == "stale"
+
+    router.unregister_runtime(first.connection_id)
+    router._stale_timeout_seconds = 15.0
+    second = router.register_runtime(_register(pid=222), handler)
+
+    status = router.route_status("primary")
+    assert status.status == "registered"
+    assert status.connection_id == second.connection_id
+    assert await router.deliver_turn(_turn()) == {"ok": True}
+
+
+async def test_unregister_runtime_removes_closed_route() -> None:
+    router = AccessRouter(auth_token="secret")
+
+    async def handler(_: DeliverTurnRequest) -> dict[str, object]:
+        return {"ok": True}
+
+    registered = router.register_runtime(_register(), handler)
+    assert router.route_status("primary").status == "registered"
+
+    router.unregister_runtime(registered.connection_id)
+
+    assert router.route_status("primary").status == "unavailable"
+
+
+async def test_runtime_ping_pong_compatibility_path() -> None:
     router = AccessRouter(auth_token="secret")
 
     async def handler(_: DeliverTurnRequest) -> dict[str, object]:
@@ -52,6 +97,21 @@ async def test_runtime_ping_pong_refreshes_connection() -> None:
     router.pong(pong)
 
     assert pong.ok is True
+    assert router.route_status("primary").status == "registered"
+
+
+async def test_observable_runtime_activity_refreshes_connection() -> None:
+    router = AccessRouter(auth_token="secret", stale_timeout_seconds=-1)
+
+    async def handler(_: DeliverTurnRequest) -> dict[str, object]:
+        return {"ok": True}
+
+    registered = router.register_runtime(_register(), handler)
+    assert router.route_status("primary").status == "stale"
+
+    router._stale_timeout_seconds = 15.0
+    router.touch_runtime(registered.connection_id)
+
     assert router.route_status("primary").status == "registered"
 
 

@@ -220,6 +220,13 @@ export class MustangSession {
     return await this.client.request<RuntimeStatusReport>(MustangMethod.runtimeRestart, { reason });
   }
 
+  async managementRequest<R = unknown>(
+    method: string,
+    params: Record<string, unknown> = {},
+  ): Promise<R> {
+    return await this.client.request<R>(method, params);
+  }
+
   private async resumeWithRetry(): Promise<SessionModeState> {
     let lastError: unknown;
     for (let attempt = 1; attempt <= RESUME_RETRY_ATTEMPTS; attempt++) {

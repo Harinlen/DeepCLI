@@ -4,14 +4,23 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from uuid import uuid4
 from unittest.mock import AsyncMock, patch
 
+import orjson
 import pytest
+import yaml
 
 from kernel.core.config import ConfigManager
 from kernel.core.flags import FlagManager
+from kernel.core.storage import ResourceStore
 from kernel.agents.mustang.mcp import MCPManager
-from kernel.agents.mustang.mcp.config import HTTPServerConfig
+from kernel.agents.mustang.mcp.config import (
+    HTTPServerConfig,
+    MCPConfig,
+    MCPDeclarationStore,
+    StdioServerConfig,
+)
 from kernel.agents.mustang.mcp.types import ConnectedServer, FailedServer, McpError
 from kernel.agents.mustang.module_table import KernelModuleTable
 
@@ -35,6 +44,16 @@ async def module_table(tmp_path: Path) -> KernelModuleTable:
     await config.startup()
 
     state_dir = tmp_path / "state"
+    state_dir.mkdir(mode=0o700)
+    return KernelModuleTable(flags=flags, config=config, state_dir=state_dir)
+
+
+async def _resource_module_table(home: Path) -> KernelModuleTable:
+    flags = FlagManager(resource_home=home)
+    await flags.initialize()
+    config = ConfigManager(resource_home=home)
+    await config.startup()
+    state_dir = home / "state"
     state_dir.mkdir(mode=0o700)
     return KernelModuleTable(flags=flags, config=config, state_dir=state_dir)
 
@@ -91,6 +110,128 @@ async def test_startup_with_failed_server(
     assert mgr.get_connected() == []
 
     await mgr.shutdown()
+
+
+@pytest.mark.anyio
+async def test_startup_reads_resource_store_mcp_declarations(tmp_path: Path) -> None:
+    """Global MCP declarations are loaded from ResourceStore config_sections."""
+    declarations = MCPDeclarationStore.open(tmp_path)
+    try:
+        declarations.write_global(
+            MCPConfig(
+                servers={"sqlite-srv": StdioServerConfig(command="/nonexistent/mcp-server")}
+            ),
+            expected_revision=None,
+            actor="test",
+        )
+    finally:
+        declarations.close()
+
+    mt = await _resource_module_table(tmp_path)
+    mgr = MCPManager(mt)
+    await mgr.startup()
+    try:
+        conn = mgr.get_connections()["sqlite-srv"]
+        assert isinstance(conn, FailedServer)
+        assert mt.config.current_revisions()["config.global._.mcp.mcp"] == 1
+    finally:
+        await mgr.shutdown()
+        mt.config.close()
+
+
+@pytest.mark.anyio
+async def test_legacy_mcp_yaml_import_once_and_drift_ignored(tmp_path: Path) -> None:
+    """Legacy global mcp.yaml imports once; later YAML drift is reported only."""
+    legacy = tmp_path / "config" / "mcp.yaml"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text(
+        yaml.safe_dump({"mcp": {"servers": {"legacy": {"command": "python"}}}}),
+        encoding="utf-8",
+    )
+
+    first = ConfigManager(resource_home=tmp_path)
+    await first.startup()
+    first.close()
+
+    legacy.write_text(
+        yaml.safe_dump({"mcp": {"servers": {"legacy": {"command": "node"}}}}),
+        encoding="utf-8",
+    )
+    second = ConfigManager(resource_home=tmp_path)
+    await second.startup()
+    try:
+        section = second.get_section(file="mcp", section="mcp", schema=MCPConfig)
+        cfg = section.get()
+        assert cfg.servers["legacy"].command == "python"
+        assert second.legacy_migration_report is not None
+        assert second.legacy_migration_report.drift == ("legacy:mcp.yaml",)
+    finally:
+        second.close()
+
+
+def test_mcp_declaration_revision_bumps_on_add_update_delete(tmp_path: Path) -> None:
+    """MCP declaration mutations bump the ResourceStore config revision."""
+    declarations = MCPDeclarationStore.open(tmp_path)
+    try:
+        one = declarations.write_global(
+            MCPConfig(servers={"alpha": StdioServerConfig(command="python")}),
+            expected_revision=None,
+            actor="test",
+        )
+        two = declarations.write_global(
+            MCPConfig(servers={"alpha": StdioServerConfig(command="node")}),
+            expected_revision=one.revision,
+            actor="test",
+        )
+        three = declarations.write_global(
+            MCPConfig(servers={}),
+            expected_revision=two.revision,
+            actor="test",
+        )
+
+        assert (one.revision, two.revision, three.revision) == (1, 2, 3)
+    finally:
+        declarations.close()
+
+
+def test_mcp_oauth_secret_ref_preserved_without_plaintext_export(tmp_path: Path) -> None:
+    """MCP declarations keep OAuth references stable and avoid plaintext rows."""
+    secret_ref = f"secret:{uuid4()}"
+    plaintext = "oauth-token-plaintext"
+    declarations = MCPDeclarationStore.open(tmp_path)
+    try:
+        declarations.write_global(
+            MCPConfig(
+                servers={
+                    "remote": HTTPServerConfig(
+                        type="http",
+                        url="https://mcp.example.test",
+                        headers={"Authorization": secret_ref},
+                    )
+                }
+            ),
+            expected_revision=None,
+            actor="test",
+        )
+    finally:
+        declarations.close()
+
+    store = ResourceStore.open(tmp_path)
+    try:
+        row_payload = store.read_tx(
+            lambda conn: conn.execute(
+                "SELECT payload_json FROM config_sections WHERE file = 'mcp' AND section = 'mcp'"
+            ).fetchone()[0]
+        )
+        export_path = tmp_path / "export.json"
+        store.export("json", export_path, dry_run=False)
+        export_payload = orjson.loads(export_path.read_bytes())
+    finally:
+        store.close()
+
+    assert secret_ref in row_payload
+    assert plaintext not in row_payload
+    assert plaintext not in orjson.dumps(export_payload).decode()
 
 
 @pytest.mark.anyio

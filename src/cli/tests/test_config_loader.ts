@@ -8,6 +8,7 @@ import { assert } from "./helpers.js";
 const missing = join(tmpdir(), `deepcli-missing-${Date.now()}.yaml`);
 const defaults = loadCliConfig({ path: missing, env: {} });
 assert(defaults.config.kernel.url === "ws://localhost:8200", "missing config should use default kernel URL");
+assert(defaults.config.kernel.health_url === "http://localhost:8200/health", "missing config should use Access Router health URL");
 assert(defaults.config.session.startup === "new", "missing config should create a new session by default");
 
 const dir = mkdtempSync(join(tmpdir(), "deepcli-cli-config-"));
@@ -31,7 +32,7 @@ try {
     args: { port: 9200, theme: "dark-midnight" },
   });
   assert(loaded.config.kernel.url === "ws://localhost:9200", "argv port should override env and config URL");
-  assert(loaded.config.kernel.health_url === "http://localhost:9200/", "argv port should update health URL");
+  assert(loaded.config.kernel.health_url === "http://localhost:9200/health", "argv port should update health URL");
   assert(loaded.config.kernel.token === "env-token", "env token should override literal config token");
   assert(loaded.config.session.startup === "last", "config session startup should load");
   assert(loaded.config.session.picker_limit === 7, "numeric config field should load");

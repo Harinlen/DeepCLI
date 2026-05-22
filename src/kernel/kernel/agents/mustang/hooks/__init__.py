@@ -25,6 +25,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from kernel.agents.mustang.hooks.config import HooksConfig, ProjectHooksConfig
+from kernel.agents.mustang.hooks.declarations import (
+    HookDeclarationImportReport,
+    HookDeclarationStore,
+)
 from kernel.agents.mustang.hooks.loader import LoadedHook, discover
 from kernel.agents.mustang.hooks.manifest import HookManifest, HookRequires, ManifestError
 from kernel.agents.mustang.hooks.registry import HookRegistry
@@ -91,6 +95,7 @@ class HookManager(Subsystem):
         )
         self._registry = HookRegistry()
         self._loaded: list[LoadedHook] = []
+        self._declaration_import_report: HookDeclarationImportReport | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -107,11 +112,7 @@ class HookManager(Subsystem):
         )
         cfg = section.get()
 
-        self._loaded = discover(
-            user_dir=self._user_hooks_dir,
-            project_dir=self._project_hooks_dir,
-            project_enabled=cfg.project_hooks.enabled,
-        )
+        self._loaded = self._discover_startup_hooks(project_enabled=cfg.project_hooks.enabled)
         for entry in self._loaded:
             for event in entry.events:
                 self._registry.register(event, entry.handler)
@@ -179,6 +180,54 @@ class HookManager(Subsystem):
     def loaded_hooks(self) -> tuple[LoadedHook, ...]:
         """Return immutable snapshot of every hook that survived discovery."""
         return tuple(self._loaded)
+
+    @property
+    def declaration_import_report(self) -> HookDeclarationImportReport | None:
+        """Last global hook declaration import report, if ResourceStore-backed."""
+        return self._declaration_import_report
+
+    def _discover_startup_hooks(self, *, project_enabled: list[str]) -> list[LoadedHook]:
+        resource_user_hooks = self._load_resource_store_user_declarations()
+        user_dir = (
+            self._user_hooks_dir
+            if resource_user_hooks is None
+            else self._user_hooks_dir / ".resource-store-managed"
+        )
+        loaded = discover(
+            user_dir=user_dir,
+            project_dir=self._project_hooks_dir,
+            project_enabled=project_enabled,
+        )
+        return list(resource_user_hooks or ()) + loaded
+
+    def _load_resource_store_user_declarations(self) -> list[LoadedHook] | None:
+        resource_home = self._resource_home()
+        if resource_home is None:
+            return None
+        store = HookDeclarationStore.open(resource_home)
+        try:
+            record = store.read_global()
+            if record is None:
+                self._declaration_import_report = store.import_legacy_user_hooks(
+                    self._user_hooks_dir,
+                    actor="system",
+                )
+                record = store.read_global()
+            else:
+                self._declaration_import_report = store.import_legacy_user_hooks(
+                    self._user_hooks_dir,
+                    actor="system",
+                    dry_run=True,
+                )
+            return list(record.hooks) if record is not None else []
+        finally:
+            store.close()
+
+    def _resource_home(self) -> Path | None:
+        state_dir = getattr(self._module_table, "state_dir", None)
+        if isinstance(state_dir, Path):
+            return state_dir.parent if state_dir.name == "state" else state_dir
+        return None
 
 
 __all__ = [

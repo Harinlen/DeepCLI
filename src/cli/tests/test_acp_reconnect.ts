@@ -2,7 +2,15 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { AcpClient, KernelDisconnected } from "../src/acp/client.js";
 import { assert } from "./helpers.js";
 
-const server = new WebSocketServer({ port: 0 });
+let acceptedToken = "dev";
+let clientToken = "dev";
+const server = new WebSocketServer({
+  port: 0,
+  verifyClient: (info, done) => {
+    const token = new URL(info.req.url ?? "/", "ws://127.0.0.1").searchParams.get("token");
+    done(token === acceptedToken, token === acceptedToken ? 200 : 403);
+  },
+});
 if (server.address() === null) {
   await new Promise<void>((resolve) => server.once("listening", resolve));
 }
@@ -37,7 +45,9 @@ server.on("connection", (socket) => {
   });
 });
 
-const client = await AcpClient.connect(`ws://127.0.0.1:${port}`, "dev");
+const client = await AcpClient.connect(`ws://127.0.0.1:${port}`, clientToken, {
+  tokenProvider: () => clientToken,
+});
 let disconnected = false;
 let reconnected = false;
 const states: string[] = [];
@@ -54,6 +64,8 @@ client.onConnectionStateChange((state) => {
 const pending = client.request("session/list", {}, { timeoutMs: 0 });
 await withTimeout(firstListReceived, "server did not receive initial request");
 (client as unknown as { ws: WebSocket }).ws.emit("close", 1006, Buffer.from(""));
+acceptedToken = "rotated";
+clientToken = "rotated";
 
 let rejected: unknown;
 try {

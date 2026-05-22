@@ -271,6 +271,9 @@ export function parseKey(data: string, ..._rest: unknown[]): string | undefined 
 	const kitty = parseCsiUKey(data);
 	if (kitty) return kitty;
 
+	const modifyOtherKeys = parseModifyOtherKeys(data);
+	if (modifyOtherKeys) return modifyOtherKeys;
+
 	const modifiedCursor = parseModifiedCursorKey(data);
 	if (modifiedCursor) return modifiedCursor;
 
@@ -297,6 +300,21 @@ function parseCsiUKey(data: string): string | undefined {
 	if (!match) return undefined;
 	const codepoint = Number(match[1]);
 	const modifierValue = match[2] ? Number(match[2]) : 1;
+	const key = keyNameFromCodepoint(codepoint);
+	if (!key) return undefined;
+	const modifierMask = Math.max(0, modifierValue - 1);
+	return withModifiers(key, {
+		shift: (modifierMask & 1) !== 0,
+		alt: (modifierMask & 2) !== 0,
+		ctrl: (modifierMask & 4) !== 0,
+	});
+}
+
+function parseModifyOtherKeys(data: string): string | undefined {
+	const match = /^\x1b\[27;(\d+);(\d+)[~u]$/.exec(data);
+	if (!match) return undefined;
+	const modifierValue = Number(match[1]);
+	const codepoint = Number(match[2]);
 	const key = keyNameFromCodepoint(codepoint);
 	if (!key) return undefined;
 	const modifierMask = Math.max(0, modifierValue - 1);

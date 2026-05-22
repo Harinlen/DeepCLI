@@ -37,7 +37,9 @@ from kernel.core.config.section import (
     ReadOnlySection,
     _Section,
 )
+from kernel.core.config.sqlite_backend import ConfigSQLiteBackend
 from kernel.core.paths import user_config_dir
+from kernel.core.storage import ResourceStore
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +77,7 @@ class ConfigManager:
         project_dir: Path | None = None,
         cli_overrides: Sequence[str] | None = None,
         secret_resolver: Callable[[str], str | None] | None = None,
+        resource_home: Path | None = None,
     ) -> None:
         self._global_dir: Path = global_dir if global_dir is not None else _DEFAULT_GLOBAL_DIR
         self._project_dir: Path = (
@@ -82,6 +85,10 @@ class ConfigManager:
         )
         self._cli_overrides: tuple[str, ...] = tuple(cli_overrides or ())
         self._secret_resolver = secret_resolver
+        self._resource_home = resource_home
+        self._resource_store: ResourceStore | None = None
+        self._sqlite_backend: ConfigSQLiteBackend | None = None
+        self._legacy_migration_report: Any | None = None
 
         # Populated by ``startup``.
         self._raw: dict[str, dict[str, Any]] = {}
@@ -102,11 +109,13 @@ class ConfigManager:
         """
         if self._started:
             return
-        self._raw = loader.collect(
-            global_dir=self._global_dir,
-            project_dir=self._project_dir,
-            cli_overrides=self._cli_overrides,
-        )
+        if self._resource_home is not None:
+            from kernel.core.storage.import_export import apply_legacy_yaml_import
+
+            self._legacy_migration_report = apply_legacy_yaml_import(self._resource_home)
+            self._resource_store = ResourceStore.open(self._resource_home)
+            self._sqlite_backend = ConfigSQLiteBackend(self._resource_store)
+        self._raw = self._load_raw()
         self._started = True
         logger.info(
             "ConfigManager loaded %d file(s) from global=%s project=%s",
@@ -114,6 +123,42 @@ class ConfigManager:
             self._global_dir,
             self._project_dir,
         )
+
+    def refresh_from_resource_store(self) -> None:
+        """Refresh already materialized sections from ResourceStore revisions."""
+        if self._sqlite_backend is None:
+            return
+
+        self._raw = self._load_raw()
+        for (file, section), sec in self._sections.items():
+            raw_section = self._raw.get(file, {}).get(section) or {}
+            if not isinstance(raw_section, dict):
+                raise ValueError(
+                    f"Config {file}.{section} must be a mapping, got {type(raw_section).__name__}"
+                )
+            if self._secret_resolver is not None:
+                raw_section = _expand_secrets_in_dict(raw_section, self._secret_resolver)
+            instance = sec.schema.model_validate(raw_section)
+            record = self._sqlite_backend.read(file=file, section=section)
+            sec.refresh(instance, revision=record.revision if record is not None else None)
+
+    def current_revisions(self) -> dict[str, int]:
+        """Return ResourceStore config revisions for this manager."""
+        if self._resource_store is None:
+            return {}
+        return self._resource_store.current_revisions("config.")
+
+    @property
+    def legacy_migration_report(self) -> Any | None:
+        """Last legacy import report from ResourceStore startup, if enabled."""
+        return self._legacy_migration_report
+
+    def close(self) -> None:
+        """Close the ResourceStore handle, if this manager opened one."""
+        if self._resource_store is not None:
+            self._resource_store.close()
+            self._resource_store = None
+            self._sqlite_backend = None
 
     def bind_section(
         self,
@@ -231,15 +276,57 @@ class ConfigManager:
             raw_section = _expand_secrets_in_dict(raw_section, self._secret_resolver)
 
         instance = schema.model_validate(raw_section)
+        record = (
+            self._sqlite_backend.read(file=file, section=section) if self._sqlite_backend else None
+        )
         sec: _Section[T] = _Section(
             file=file,
             section=section,
             schema=schema,
             current=instance,
             write_path=self._global_dir / f"{file}.yaml",
+            revision=record.revision if record is not None else None,
+            persist=self._make_sqlite_persist(file, section) if self._sqlite_backend else None,
         )
         self._sections[key] = sec
         return sec
+
+    def _load_raw(self) -> dict[str, dict[str, Any]]:
+        if self._sqlite_backend is None:
+            return loader.collect(
+                global_dir=self._global_dir,
+                project_dir=self._project_dir,
+                cli_overrides=self._cli_overrides,
+            )
+
+        raw = self._sqlite_backend.read_global_raw()
+        project_and_cli = loader.collect_project_and_cli(
+            project_dir=self._project_dir,
+            cli_overrides=self._cli_overrides,
+        )
+        for file_stem, patch in project_and_cli.items():
+            current = raw.get(file_stem)
+            raw[file_stem] = loader.deep_merge(current, patch) if current is not None else patch
+        return raw
+
+    def _make_sqlite_persist(
+        self,
+        file: str,
+        section: str,
+    ) -> Callable[[T, int | None], int | None]:
+        def _persist(value: T, expected_revision: int | None) -> int:
+            if self._sqlite_backend is None:
+                raise RuntimeError("ConfigManager ResourceStore backend is closed")
+            record = self._sqlite_backend.write(
+                file=file,
+                section=section,
+                payload=value.model_dump(exclude_defaults=True),
+                expected_revision=expected_revision,
+                actor="system",
+            )
+            return record.revision
+
+        return _persist
 
 
 # ---------------------------------------------------------------------------

@@ -49,6 +49,7 @@ const fakeSession = {
 		memory: { loaded: 0, writableScopes: 0 },
 		environment: { lspServers: [], mcpServers: [] },
 	}),
+	managementRequest: async (method: string, params: Record<string, unknown>) => ({ method, params }),
 	cancel() {},
 	cancelExecution() {},
 };
@@ -150,6 +151,9 @@ assert(adapter.modelRegistry.authStorage.hasAuth("deepseek") === false, "adapter
 assert(adapter.currentPermissionMode === "plan", "adapter should track kernel current mode updates");
 const costReport = await adapter.fetchCostReport();
 assert(costReport.tokens.total === 168, "adapter should fetch /cost usage from the active session");
+const activeManagementResult = await adapter.managementRequest("agent/test", { ok: true }) as { method?: string; params?: Record<string, unknown> };
+assert(activeManagementResult.method === "agent/test", "adapter should expose management requests to slash commands");
+assert(activeManagementResult.params?.ok === true, "adapter should forward management request params");
 assert(
 	renderOrder.join("|") === "assistant:start|assistant:end:thinkinghello|tool:tool-1|assistant:start|assistant:end:after",
 	`adapter should project ACP stream into ordered render blocks, got: ${renderOrder.join("|")}`,
@@ -264,7 +268,7 @@ assert(
 let lazyCreateCalls = 0;
 const lazyExecuteCalls: string[] = [];
 const lazyClient = {
-	request: async (_method: string, _params: unknown) => ({}),
+	request: async (method: string, params: unknown) => ({ method, params }),
 	notify: () => {},
 	promptRequest: async (_sessionId: string, _text: string) => ({ stopReason: "stop" }),
 	executeShellRequest: async (sessionId: string) => {
@@ -289,6 +293,9 @@ const lazyAdapter = new MustangAgentSessionAdapter({
 	} as never,
 });
 assert(lazyAdapter.sessionId === "pending", "adapter without startup session should expose pending session id");
+const lazyManagementResult = await lazyAdapter.managementRequest("agent/pending", { pending: true }) as { method?: string; params?: Record<string, unknown> };
+assert(lazyManagementResult.method === "agent/pending", "pending adapter should still expose management requests");
+assert((lazyManagementResult.params as Record<string, unknown>)?.pending === true, "pending adapter should forward management params through the ACP client");
 await lazyAdapter.executeBash("pwd", () => {});
 assert(lazyCreateCalls === 1, "first shell execution should create the lazy session");
 assert(lazyAdapter.sessionId === "lazy-session", "lazy session id should update after first shell execution");

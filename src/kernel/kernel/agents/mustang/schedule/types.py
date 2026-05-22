@@ -164,6 +164,7 @@ class CronTask:
     delivery: DeliveryConfig = field(default_factory=DeliveryConfig)
 
     # ── ownership ──
+    owner_agent_id: str = "primary"
     session_id: str | None = None  # creator session
     project_dir: str | None = None  # cwd for isolated session
 

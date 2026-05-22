@@ -40,6 +40,8 @@ class RuleStore:
     def __init__(self) -> None:
         self._config_rules: list[PermissionRule] = []
         self._flag_rules: list[PermissionRule] = []
+        self._config_section: MutableSection[PermissionsSection] | None = None
+        self._config_revision: int | None = None
 
     # ------------------------------------------------------------------
     # Config layer
@@ -47,8 +49,10 @@ class RuleStore:
 
     def bind_config(self, section: MutableSection[PermissionsSection]) -> None:
         """Parse the current config + subscribe to updates."""
+        self._config_section = section
         current = section.get()
         self._config_rules = _parse_section(current)
+        self._config_revision = section.revision
 
         async def _on_change(_old: PermissionsSection, new: PermissionsSection) -> None:
             try:
@@ -61,6 +65,7 @@ class RuleStore:
                 )
                 return
             self._config_rules = parsed
+            self._config_revision = section.revision
             logger.info("RuleStore: reloaded %d config rules", len(parsed))
 
         section.changed.connect(_on_change)
@@ -82,11 +87,26 @@ class RuleStore:
 
     def snapshot(self) -> list[PermissionRule]:
         """Return the full rule list in precedence order (later = higher)."""
+        self.refresh_from_bound_config()
         # Config layer first, then flag layer — matches the doc's
         # user → project → local → flag precedence.  Since ConfigManager
         # has already merged user/project/local into one section, we
         # represent them together as USER-sourced rules.
         return [*self._config_rules, *self._flag_rules]
+
+    def refresh_from_bound_config(self) -> bool:
+        """Reload config rules when the bound section revision changed."""
+        section = self._config_section
+        if section is None:
+            return False
+        revision = section.revision
+        if revision == self._config_revision:
+            return False
+        parsed = _parse_section(section.get())
+        self._config_rules = parsed
+        self._config_revision = revision
+        logger.info("RuleStore: reloaded %d config rules from revision %s", len(parsed), revision)
+        return True
 
 
 # ---------------------------------------------------------------------------

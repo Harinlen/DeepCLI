@@ -59,15 +59,19 @@ editor.onShowHotkeys = () => calls.push("hotkeys");
 
 const cases: Array<[string, string, string]> = [
 	["escape", "\x1b", "interrupt"],
+	["escape modifyOtherKeys", "\x1b[27;1;27~", "interrupt"],
 	["ctrl+c", "\x03", "clear"],
 	["ctrl+d", "\x04", "exit"],
 	["ctrl+z", "\x1a", "suspend"],
 	["alt+t", "\x1bt", "thinking-cycle"],
+	["alt+t modifyOtherKeys", "\x1b[27;3;116~", "thinking-cycle"],
 	["shift+tab", "\x1b[Z", "permission-cycle"],
 	["shift+tab CSI-u", "\x1b[9;2u", "permission-cycle"],
 	["ctrl+p", "\x10", "model-forward"],
 	["shift+ctrl+p CSI-u", "\x1b[80;6u", "model-backward"],
+	["shift+ctrl+p modifyOtherKeys", "\x1b[27;6;80~", "model-backward"],
 	["alt+p", "\x1bp", "model-temporary"],
+	["alt+p modifyOtherKeys", "\x1b[27;3;112~", "model-temporary"],
 	["ctrl+l", "\x0c", "model-select"],
 	["ctrl+r", "\x12", "history"],
 	["ctrl+t", "\x14", "thinking-toggle"],
@@ -75,6 +79,7 @@ const cases: Array<[string, string, string]> = [
 	["ctrl+v", "\x16", "paste-image"],
 	["alt+shift+c", "\x1bC", "copy-prompt"],
 	["ctrl+o", "\x0f", "expand-tools"],
+	["ctrl+o modifyOtherKeys", "\x1b[27;5;111~", "expand-tools"],
 	["alt+up", "\x1b[1;3A", "dequeue"],
 	["?", "?", "hotkeys"],
 ];
@@ -101,8 +106,10 @@ editor.setCustomKeyHandler("ctrl+s", () => customCalls.push("session-observe"));
 
 for (const [label, sequence, expected] of [
 	["alt+shift+p", "\x1bP", "plan-toggle"],
+	["alt+shift+p modifyOtherKeys", "\x1b[27;4;80~", "plan-toggle"],
 	["ctrl+enter CSI-u", "\x1b[13;5u", "follow-up"],
 	["alt+h", "\x1bh", "stt"],
+	["alt+h modifyOtherKeys", "\x1b[27;3;104~", "stt"],
 	["alt+shift+l", "\x1bL", "copy-line"],
 	["ctrl+s", "\x13", "session-observe"],
 ] as const) {

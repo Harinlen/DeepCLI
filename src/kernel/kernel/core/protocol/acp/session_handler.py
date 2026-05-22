@@ -1127,6 +1127,16 @@ class AcpSessionHandler:
             return self._get_commands_handler()
         if target == "tools":
             return self._get_tools_handler()
+        if target == "global":
+            return self._get_global_handler()
+        if target == "flags":
+            return self._get_flags_handler()
+        if target == "agents":
+            return self._get_agents_handler()
+        if target == "gateways":
+            return self._get_gateways_handler()
+        if target == "mcp":
+            return self._get_mcp_handler()
         raise InternalError(f"Unknown routing target: {target!r}")
 
     def _get_session_handler(self) -> SessionHandler:
@@ -1185,6 +1195,47 @@ class AcpSessionHandler:
             return self._module_table.get(ToolManager)
         except KeyError:
             raise InternalError("ToolManager subsystem is not available")
+
+    def _get_global_handler(self) -> Any:
+        """Build the ResourceStore global command service for this runtime."""
+        from kernel.core.storage.global_commands import GlobalResourceCommandService
+
+        state_dir = getattr(self._module_table, "state_dir", None)
+        if state_dir is None:
+            raise InternalError("Kernel state directory is not available")
+        home = state_dir.parent if getattr(state_dir, "name", "") == "state" else state_dir
+        return GlobalResourceCommandService(home)
+
+    def _get_flags_handler(self) -> Any:
+        """Retrieve FlagManager from the module table."""
+        flags = getattr(self._module_table, "flags", None)
+        if flags is None:
+            raise InternalError("FlagManager is not available")
+        return flags
+
+    def _get_agents_handler(self) -> Any:
+        """Retrieve the AgentCommandService management facade."""
+        service = getattr(self._module_table, "agent_command_service", None)
+        if service is None:
+            raise InternalError("AgentCommandService is not available")
+        return service
+
+    def _get_gateways_handler(self) -> Any:
+        """Retrieve the GatewayCommandService management facade."""
+        service = getattr(self._module_table, "gateway_command_service", None)
+        if service is None:
+            raise InternalError("GatewayCommandService is not available")
+        return service
+
+    def _get_mcp_handler(self) -> Any:
+        """Build the ResourceStore MCP declaration command service."""
+        from kernel.agents.mustang.mcp.command_surface import MCPCommandService
+
+        state_dir = getattr(self._module_table, "state_dir", None)
+        if state_dir is None:
+            raise InternalError("Kernel state directory is not available")
+        home = state_dir.parent if getattr(state_dir, "name", "") == "state" else state_dir
+        return MCPCommandService(home, config_manager=getattr(self._module_table, "config", None))
 
     def _make_error_response(self, req_id: str | int, exc: Exception) -> AcpOutboundError:
         code = getattr(exc, "code", INTERNAL_ERROR)

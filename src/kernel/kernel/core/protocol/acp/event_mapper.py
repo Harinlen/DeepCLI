@@ -126,9 +126,7 @@ def _to_acp_content_block(
 
 def _content_blocks_to_dicts(blocks: list[Any]) -> list[dict[str, Any]]:
     """Convert a list of protocol-neutral ContentBlocks to ACP dicts."""
-    return [
-        _to_acp_content_block(b).model_dump(exclude_none=True) for b in blocks
-    ]
+    return [_to_acp_content_block(b).model_dump(exclude_none=True) for b in blocks]
 
 
 # ---------------------------------------------------------------------------

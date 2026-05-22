@@ -29,6 +29,10 @@ from typing import TYPE_CHECKING, Any
 
 from kernel.agents.mustang.skills.arguments import substitute_arguments, substitute_config
 from kernel.agents.mustang.skills.config import SkillsConfig
+from kernel.agents.mustang.skills.declarations import (
+    SkillDeclarationImportReport,
+    SkillDeclarationStore,
+)
 from kernel.agents.mustang.skills.eligibility import is_visible
 from kernel.agents.mustang.skills.loader import (
     activate_conditional,
@@ -118,6 +122,7 @@ class SkillManager(Subsystem):
         self._disabled: set[str] = set()
         self._gateway_disabled: dict[str, set[str]] = {}
         self._listing_cache: str | None = None
+        self._declaration_import_report: SkillDeclarationImportReport | None = None
 
         # Signal: emitted when the available skill set changes
         # (dynamic discovery, conditional activation, MCP skill registration).
@@ -154,24 +159,7 @@ class SkillManager(Subsystem):
                 )
                 self._claude_compat = False
 
-        # Resolve discovery paths.
-        project_compat = (
-            (Path.cwd() / _CLAUDE_PROJECT_SKILLS_SUBDIR) if self._claude_compat else None
-        )
-        user_compat = _CLAUDE_USER_SKILLS_DIR if self._claude_compat else None
-
-        # External dirs (Hermes pattern) — empty for now until config
-        # schema is wired.
-        external_dirs: list[Path] = []
-
-        unconditional, conditional = discover(
-            project_dir=self._project_skills_dir,
-            project_compat_dir=project_compat,
-            external_dirs=external_dirs,
-            user_dir=self._user_skills_dir,
-            user_compat_dir=user_compat,
-            bundled_skills=[],  # Populated by register_bundled_skill later.
-        )
+        unconditional, conditional = self._discover_startup_skills()
 
         for skill in unconditional:
             self._registry.register(skill)
@@ -191,6 +179,11 @@ class SkillManager(Subsystem):
         self._known_dynamic_dirs.clear()
         self._listing_cache = None
         logger.info("SkillManager: shutdown complete")
+
+    @property
+    def declaration_import_report(self) -> SkillDeclarationImportReport | None:
+        """Last global skill declaration import report, if ResourceStore-backed."""
+        return self._declaration_import_report
 
     # ------------------------------------------------------------------
     # Listing (consumed by PromptBuilder)
@@ -472,6 +465,64 @@ class SkillManager(Subsystem):
         # TODO: read overrides from config.yaml skills.<name>.* when
         # config schema is wired.
         return defaults
+
+    def _discover_startup_skills(self) -> tuple[list[LoadedSkill], list[LoadedSkill]]:
+        """Discover startup skills, using ResourceStore for global/user declarations."""
+        project_compat = (
+            (Path.cwd() / _CLAUDE_PROJECT_SKILLS_SUBDIR) if self._claude_compat else None
+        )
+        user_compat = _CLAUDE_USER_SKILLS_DIR if self._claude_compat else None
+        external_dirs: list[Path] = []
+        resource_user_skills = self._load_resource_store_user_declarations()
+        user_dir = (
+            self._user_skills_dir
+            if resource_user_skills is None
+            else self._user_skills_dir / ".resource-store-managed"
+        )
+
+        unconditional, conditional = discover(
+            project_dir=self._project_skills_dir,
+            project_compat_dir=project_compat,
+            external_dirs=external_dirs,
+            user_dir=user_dir,
+            user_compat_dir=user_compat,
+            bundled_skills=[],
+        )
+        for skill in resource_user_skills or ():
+            if skill.manifest.paths:
+                conditional.append(skill)
+            else:
+                unconditional.append(skill)
+        return unconditional, conditional
+
+    def _load_resource_store_user_declarations(self) -> list[LoadedSkill] | None:
+        resource_home = self._resource_home()
+        if resource_home is None:
+            return None
+        store = SkillDeclarationStore.open(resource_home)
+        try:
+            record = store.read_global()
+            if record is None:
+                self._declaration_import_report = store.import_legacy_user_skills(
+                    self._user_skills_dir,
+                    actor="system",
+                )
+                record = store.read_global()
+            else:
+                self._declaration_import_report = store.import_legacy_user_skills(
+                    self._user_skills_dir,
+                    actor="system",
+                    dry_run=True,
+                )
+            return list(record.skills) if record is not None else []
+        finally:
+            store.close()
+
+    def _resource_home(self) -> Path | None:
+        state_dir = getattr(self._module_table, "state_dir", None)
+        if isinstance(state_dir, Path):
+            return state_dir.parent if state_dir.name == "state" else state_dir
+        return None
 
 
 # ------------------------------------------------------------------

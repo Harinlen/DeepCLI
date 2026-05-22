@@ -23,6 +23,8 @@ from typing import Any
 from kernel.agents.mustang.mcp.client import McpClient
 from kernel.agents.mustang.mcp.config import (
     MCPConfig,
+    MCP_CONFIG_FILE,
+    MCP_CONFIG_SECTION,
     MCPPolicyConfig,
     ServerConfig,
     filter_by_policy,
@@ -101,8 +103,8 @@ class MCPManager(Subsystem):
         # 1. Bind config section.
         try:
             section = self._module_table.config.bind_section(
-                file="mcp",
-                section="mcp",
+                file=MCP_CONFIG_FILE,
+                section=MCP_CONFIG_SECTION,
                 schema=MCPConfig,
             )
             cfg = section.get()

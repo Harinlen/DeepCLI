@@ -85,12 +85,7 @@ class CronScheduler:
         """Return a callable for CronExecutor's heartbeat loop."""
 
         async def _heartbeat(task_id: str) -> None:
-            db = self._store.db
-            await db.execute(
-                "UPDATE cron_tasks SET running_heartbeat = ? WHERE id = ? AND running_by = ?",
-                (time.time(), task_id, self._kernel_id),
-            )
-            await db.commit()
+            await self._store.heartbeat(task_id, self._kernel_id)
 
         return _heartbeat
 
@@ -359,41 +354,11 @@ class CronScheduler:
 
     async def _claim_tasks(self, tasks: list[CronTask]) -> list[CronTask]:
         """Atomically claim due tasks via SQLite CAS."""
-        claimed: list[CronTask] = []
-        now = time.time()
-        db = self._store.db
-        for task in tasks:
-            if not task.durable:
-                # Non-durable tasks are memory-only, no CAS needed
-                # (only visible to this kernel instance)
-                task.running_by = self._kernel_id
-                task.running_heartbeat = now
-                claimed.append(task)
-                continue
-
-            cursor = await db.execute(
-                """UPDATE cron_tasks
-                SET running_by = ?, running_heartbeat = ?
-                WHERE id = ? AND running_by IS NULL AND status = 'active'""",
-                (self._kernel_id, now, task.id),
-            )
-            await db.commit()
-            if cursor.rowcount > 0:
-                task.running_by = self._kernel_id
-                task.running_heartbeat = now
-                claimed.append(task)
-
-        return claimed
+        return await self._store.claim_tasks(tasks, self._kernel_id)
 
     async def _release_task(self, task_id: str) -> None:
         """Release the claim after execution completes."""
-        db = self._store.db
-        await db.execute(
-            "UPDATE cron_tasks SET running_by = NULL, running_heartbeat = NULL "
-            "WHERE id = ? AND running_by = ?",
-            (task_id, self._kernel_id),
-        )
-        await db.commit()
+        await self._store.release_task(task_id, self._kernel_id)
 
     async def _cleanup_stale_claims(self) -> None:
         """Clear abandoned claims from crashed kernel instances.
@@ -401,18 +366,12 @@ class CronScheduler:
         Called every tick (not just startup) so that a crash of another
         kernel running alongside this one is detected within ≤60 s + 2 min.
         """
-        db = self._store.db
         cutoff = time.time() - HEARTBEAT_STALE_THRESHOLD_S
-        cursor = await db.execute(
-            "UPDATE cron_tasks SET running_by = NULL, running_heartbeat = NULL "
-            "WHERE running_by IS NOT NULL AND running_heartbeat < ?",
-            (cutoff,),
-        )
-        await db.commit()
-        if cursor.rowcount > 0:
+        cleared = await self._store.cleanup_stale_claims(cutoff)
+        if cleared > 0:
             logger.warning(
                 "Cleared %d stale cron claims (heartbeat > %.0fs old)",
-                cursor.rowcount,
+                cleared,
                 HEARTBEAT_STALE_THRESHOLD_S,
             )
 
@@ -437,20 +396,12 @@ class CronScheduler:
         cutoff = time.time() - self._session_retention_hours * 3600
         session_mgr = self._executor._session_manager
 
-        # Find old cron execution session IDs from the store
-        db = self._store.db
-        async with db.execute(
-            "SELECT DISTINCT session_id FROM cron_executions WHERE started_at < ?",
-            (cutoff,),
-        ) as cursor:
-            rows = await cursor.fetchall()
-
-        if not rows:
+        session_ids = await self._store.old_execution_session_ids(cutoff)
+        if not session_ids:
             return
 
         deleted = 0
-        for row in rows:
-            sid = row[0]
+        for sid in session_ids:
             try:
                 ok = await session_mgr.delete_session(sid)
                 if ok:

@@ -22,6 +22,12 @@ const cases: Array<[string, string]> = [
 	["\x1b[1;5C", "ctrl+right"],
 	["\x1b[13;5u", "ctrl+enter"],
 	["\x1b[80;6u", "ctrl+shift+p"],
+	["\x1b[27;1;27~", "escape"],
+	["\x1b[27;1;27u", "escape"],
+	["\x1b[27;3;112~", "alt+p"],
+	["\x1b[27;4;80~", "shift+alt+p"],
+	["\x1b[27;5;111~", "ctrl+o"],
+	["\x1b[27;6;80~", "ctrl+shift+p"],
 ];
 
 for (const [sequence, key] of cases) {

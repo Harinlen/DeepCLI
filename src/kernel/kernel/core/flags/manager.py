@@ -9,8 +9,12 @@ from pydantic import BaseModel
 
 from kernel.core.flags.kernel_flags import KernelFlags
 from kernel.core.paths import user_config_dir, user_path
+from kernel.core.flags.sqlite_backend import FlagSQLiteBackend
+from kernel.core.storage import ResourceStore
+from kernel.core.storage.errors import RevisionConflict
 
 logger = logging.getLogger(__name__)
+
 
 def _resolve_default_path() -> Path:
     """Return the flags file path, with env-var override for testing.
@@ -52,8 +56,11 @@ class FlagManager:
     separate ``bind_section`` / signal-based interface.
     """
 
-    def __init__(self, path: Path | None = None) -> None:
+    def __init__(self, path: Path | None = None, *, resource_home: Path | None = None) -> None:
         self._path: Path = path if path is not None else _DEFAULT_PATH
+        self._resource_home = resource_home
+        self._resource_store: ResourceStore | None = None
+        self._sqlite_backend: FlagSQLiteBackend | None = None
         self._raw: dict[str, Any] = {}
         self._schemas: dict[str, type[BaseModel]] = {}
         self._instances: dict[str, BaseModel] = {}
@@ -68,9 +75,24 @@ class FlagManager:
         if self._initialized:
             return
 
-        self._raw = self._load_raw(self._read_path())
+        if self._resource_home is not None:
+            from kernel.core.storage.import_export import apply_legacy_yaml_import
+
+            apply_legacy_yaml_import(self._resource_home)
+            self._resource_store = ResourceStore.open(self._resource_home)
+            self._sqlite_backend = FlagSQLiteBackend(self._resource_store)
+            self._raw = self._sqlite_backend.read_all_raw()
+        else:
+            self._raw = self._load_raw(self._read_path())
         self.register("kernel", KernelFlags)
         self._initialized = True
+
+    def close(self) -> None:
+        """Close the ResourceStore handle, if this manager opened one."""
+        if self._resource_store is not None:
+            self._resource_store.close()
+            self._resource_store = None
+            self._sqlite_backend = None
 
     def register(self, section: str, schema: type[T]) -> T:
         """Register a section schema and return its frozen instance.
@@ -119,6 +141,93 @@ class FlagManager:
         """
         return {name: (self._schemas[name], self._instances[name]) for name in self._schemas}
 
+    def management_list(self) -> list[dict[str, Any]]:
+        """Return flag sections visible to the management ACP surface."""
+        return [
+            {
+                "section": name,
+                "payload": instance.model_dump(),
+                "revision": self._read_revision(name),
+                "pending_restart": self._pending_restart(name),
+            }
+            for name, instance in self._instances.items()
+        ]
+
+    def management_read(self, section: str) -> dict[str, Any]:
+        """Return one flag section and its ResourceStore revision."""
+        instance = self.get_section(section)
+        return {
+            "section": section,
+            "payload": instance.model_dump(),
+            "revision": self._read_revision(section),
+            "pending_restart": self._pending_restart(section),
+        }
+
+    def management_set(
+        self,
+        *,
+        section: str,
+        key: str,
+        value: Any,
+        expected_revision: int | None,
+        actor: str | None,
+    ) -> dict[str, Any]:
+        """Persist a flag value for the next process restart."""
+        backend = self._require_sqlite_backend()
+        current = backend.read(section)
+        payload = dict(current.payload if current is not None else self._startup_payload(section))
+        payload[key] = value
+        self._validate_payload(section, payload)
+        record = backend.write(
+            section=section,
+            payload=payload,
+            expected_revision=expected_revision if current is not None else None,
+            actor=actor,
+        )
+        return {
+            "section": section,
+            "revision": record.revision,
+            "applies": "after_restart",
+            "pending_restart": True,
+        }
+
+    def management_reset(
+        self,
+        *,
+        section: str,
+        key: str | None,
+        expected_revision: int | None,
+        actor: str | None,
+    ) -> dict[str, Any]:
+        """Persist a flag reset for the next process restart."""
+        backend = self._require_sqlite_backend()
+        current = backend.read(section)
+        if current is None and expected_revision not in (None, 0):
+            raise RevisionConflict(
+                f"Flag section {section} does not exist",
+                resource_key=f"flags.{section}",
+                current_revision=None,
+                current_hash=None,
+            )
+        payload = dict(current.payload if current is not None else self._startup_payload(section))
+        if key is None:
+            payload = {}
+        else:
+            payload.pop(key, None)
+        self._validate_payload(section, payload)
+        record = backend.write(
+            section=section,
+            payload=payload,
+            expected_revision=expected_revision if current is not None else None,
+            actor=actor,
+        )
+        return {
+            "section": section,
+            "revision": record.revision,
+            "applies": "after_restart",
+            "pending_restart": True,
+        }
+
     def _read_path(self) -> Path:
         """Return canonical path, with read-only fallback for old installs."""
         if self._path.exists() or self._path != _DEFAULT_PATH:
@@ -144,3 +253,32 @@ class FlagManager:
                 f"{path} must contain a YAML mapping at the top level, got {type(data).__name__}"
             )
         return data
+
+    def _require_sqlite_backend(self) -> FlagSQLiteBackend:
+        if self._sqlite_backend is None:
+            raise RuntimeError("Flag management requires ResourceStore-backed FlagManager")
+        return self._sqlite_backend
+
+    def _startup_payload(self, section: str) -> dict[str, Any]:
+        instance = self.get_section(section)
+        return instance.model_dump(exclude_defaults=True)
+
+    def _validate_payload(self, section: str, payload: dict[str, Any]) -> None:
+        schema = self._schemas.get(section)
+        if schema is None:
+            raise KeyError(f"Flag section not registered: {section!r}")
+        schema.model_validate(payload)
+
+    def _read_revision(self, section: str) -> int | None:
+        if self._sqlite_backend is None:
+            return None
+        record = self._sqlite_backend.read(section)
+        return record.revision if record is not None else None
+
+    def _pending_restart(self, section: str) -> bool:
+        if self._sqlite_backend is None:
+            return False
+        record = self._sqlite_backend.read(section)
+        if record is None:
+            return False
+        return record.payload != self._startup_payload(section)

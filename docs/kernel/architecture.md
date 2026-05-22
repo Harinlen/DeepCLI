@@ -2,7 +2,7 @@
 
 > **Quick header**
 > - **Role**: top-level runtime map for the supervised Kernel.
-> - **Current code**: `kernel.supervisor`, `kernel.agent_hub`, `kernel.agents.access`, `kernel.agents.mustang.runtime`, `kernel.agents.mustang.*`, `kernel.core.*`.
+> - **Current code**: `kernel.supervisor`, `kernel.agent_hub`, `kernel.access_router`, `kernel.agents.access`, `kernel.agents.mustang.runtime`, `kernel.agents.mustang.*`, `kernel.core.*`.
 > - **Owns**: process topology, request path, lifecycle order, storage boundaries.
 > - **Does not own**: subsystem internals, ACP schema definitions, or historical plan details.
 

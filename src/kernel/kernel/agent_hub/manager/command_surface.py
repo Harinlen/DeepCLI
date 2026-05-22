@@ -161,7 +161,9 @@ class AgentCommandService:
     def stop(self, agent_id: str) -> dict[str, object]:
         return self._manager.stop(agent_id, actor_agent_id="primary").model_dump()
 
-    def restart(self, agent_id: str, *, router_endpoint: str, router_token: str) -> dict[str, object]:
+    def restart(
+        self, agent_id: str, *, router_endpoint: str, router_token: str
+    ) -> dict[str, object]:
         self.stop(agent_id)
         return self.start(agent_id, router_endpoint=router_endpoint, router_token=router_token)
 

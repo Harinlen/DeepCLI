@@ -50,6 +50,7 @@ async def _amain() -> None:
     parser.add_argument("--state-dir", required=True)
     parser.add_argument("--session-store-path", required=True)
     parser.add_argument("--workspace", default=str(Path.cwd()))
+    parser.add_argument("--resource-home")
     parser.add_argument("--runtime-file", required=True)
     parser.add_argument("--supervisor-control-socket")
     parser.add_argument("--supervisor-control-token")
@@ -65,6 +66,7 @@ async def _amain() -> None:
         agent_id=args.agent_id,
         state_dir=Path(args.state_dir),
         workspace=Path(args.workspace),
+        resource_home=Path(args.resource_home) if args.resource_home else None,
     )
     await session_service.startup()
 
@@ -236,7 +238,9 @@ async def _run_access_router_client(
     args: argparse.Namespace,
     session_service: AgentSessionRuntimeService,
 ) -> None:
-    endpoint = str(args.access_router_endpoint).replace("http://", "ws://").replace("https://", "wss://")
+    endpoint = (
+        str(args.access_router_endpoint).replace("http://", "ws://").replace("https://", "wss://")
+    )
     runtime_url = endpoint.rstrip("/") + "/runtime"
     while True:
         try:
@@ -283,13 +287,15 @@ async def _run_access_router_client(
                         if request.get("method") == "_mustang.runtime/request":
                             acp = RuntimeAcpRequest.model_validate(request.get("params", {}))
                             result = await _deliver_router_acp(acp, session_service, peer)
-                        elif request.get("method") == "_mustang.runtime/ping":
-                            result = {"ok": True}
                         else:
                             result = {"ok": False, "error": "unknown_runtime_method"}
-                        await ws.send(json.dumps({"jsonrpc": "2.0", "id": request_id, "result": result}))
+                        await ws.send(
+                            json.dumps({"jsonrpc": "2.0", "id": request_id, "result": result})
+                        )
                     except Exception as exc:
-                        code: str | int = -32601 if isinstance(exc, ValueError) else type(exc).__name__
+                        code: str | int = (
+                            -32601 if isinstance(exc, ValueError) else type(exc).__name__
+                        )
                         await ws.send(
                             json.dumps(
                                 {
@@ -338,9 +344,13 @@ async def _deliver_router_acp(
     if method == "session/new":
         return await session_service.new_session(NewSessionRequest.model_validate(params))
     if method == "session/list":
-        return _camelize(await session_service.list_sessions(ListSessionsRequest.model_validate(params)))
+        return _camelize(
+            await session_service.list_sessions(ListSessionsRequest.model_validate(params))
+        )
     if method == "session/load":
-        result = _camelize(await session_service.load_session(LoadSessionRequest.model_validate(params)))
+        result = _camelize(
+            await session_service.load_session(LoadSessionRequest.model_validate(params))
+        )
         for update in result.get("updates", []):
             if isinstance(update, dict):
                 if peer is None:
@@ -348,7 +358,9 @@ async def _deliver_router_acp(
                 await peer.notify_client(method="session/update", params=update)
         return result
     if method == "session/resume":
-        return _camelize(await session_service.resume_session(ResumeSessionRequest.model_validate(params)))
+        return _camelize(
+            await session_service.resume_session(ResumeSessionRequest.model_validate(params))
+        )
     if method == "session/close":
         return await session_service.close_session(CloseSessionRequest.model_validate(params))
     if method == "session/prompt":
@@ -385,13 +397,25 @@ async def _deliver_router_acp(
         return await session_service.get_usage(GetUsageRequest.model_validate(params))
     if method.startswith("_mustang.agent/model/"):
         return await session_service.model_request(method, params)
-    if method == "_mustang.agent/secrets/auth":
+    if (
+        method == "_mustang.agent/secrets/auth"
+        or method.startswith("_mustang.agent/secrets/")
+        or method.startswith("_mustang.agent/flags/")
+        or method.startswith("_mustang.agent/global/")
+    ):
         from kernel.core.protocol.acp.routing import REQUEST_DISPATCH
+        from kernel.core.storage.global_commands import GlobalResourceCommandService
 
         if session_service.module_table is None:
             raise RuntimeError("session runtime service is not started")
         spec = REQUEST_DISPATCH[method]
-        handler = session_service.module_table.secrets
+        handler: Any
+        if spec.target == "global":
+            handler = GlobalResourceCommandService(session_service.resource_home)
+        elif spec.target == "flags":
+            handler = session_service.module_table.flags
+        else:
+            handler = session_service.module_table.secrets
         request_params = spec.params_type.model_validate(params)
         result = await spec.handler(handler, None, request_params)  # type: ignore[arg-type]
         return result.model_dump(by_alias=True)

@@ -25,10 +25,12 @@ matching ``_get_<target>_handler()`` branch in ``session_handler.py``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal
 
 from pydantic import BaseModel
 from pydantic.alias_generators import to_camel
+import orjson
 
 from kernel.agents.mustang.llm.config import ModelRef
 from kernel.core.protocol.acp.namespaces import AcpMethod, MustangMethod
@@ -36,6 +38,84 @@ from kernel.core.protocol.acp.schemas.commands import (
     CommandEntry,
     ListCommandsRequest,
     ListCommandsResponse,
+)
+from kernel.core.protocol.acp.schemas.agents import (
+    AgentHealthRequest,
+    AgentHealthResponse,
+    AgentLifecycleRequest,
+    AgentLifecycleResponse,
+    AgentRecordResponse,
+    AgentSendRequest,
+    AgentSendResponse,
+    AgentsAddRequest,
+    AgentsBindRequest,
+    AgentsBindResponse,
+    AgentsBindingsRequest,
+    AgentsBindingsResponse,
+    AgentsDeleteRequest,
+    AgentsDeleteResponse,
+    AgentsGrantRequest,
+    AgentsGrantResponse,
+    AgentsGrantsRequest,
+    AgentsGrantsResponse,
+    AgentsListRequest,
+    AgentsListResponse,
+    AgentsRevokeGrantRequest,
+    AgentsSetIdentityRequest,
+    AgentsUnbindRequest,
+    AgentsUnbindResponse,
+)
+from kernel.core.protocol.acp.schemas.flags import (
+    FlagSectionEntry,
+    FlagsListRequest,
+    FlagsListResponse,
+    FlagsReadRequest,
+    FlagsReadResponse,
+    FlagsResetRequest,
+    FlagsSetRequest,
+    FlagsWriteResponse,
+)
+from kernel.core.protocol.acp.schemas.global_resource import (
+    GlobalBackupRequest,
+    GlobalBackupResponse,
+    GlobalBackupsRequest,
+    GlobalBackupsResponse,
+    GlobalExportRequest,
+    GlobalExportResponse,
+    GlobalImportRequest,
+    GlobalImportResponse,
+    GlobalRestoreRequest,
+    GlobalRestoreResponse,
+)
+from kernel.core.protocol.acp.schemas.gateways import (
+    GatewayBindRequest,
+    GatewayBindResponse,
+    GatewayBindingsRequest,
+    GatewayBindingsResponse,
+    GatewayCreateRequest,
+    GatewayDeleteRequest,
+    GatewayDeleteResponse,
+    GatewayIdRequest,
+    GatewayReloadRequest,
+    GatewayReloadResponse,
+    GatewayRecordResponse,
+    GatewayRevisionResponse,
+    GatewayUnbindRequest,
+    GatewayUnbindResponse,
+    GatewaysListRequest,
+    GatewaysListResponse,
+    GatewaysStatusRequest,
+    GatewaysStatusResponse,
+)
+from kernel.core.protocol.acp.schemas.mcp import (
+    MCPDeleteRequest,
+    MCPDeleteResponse,
+    MCPListRequest,
+    MCPListResponse,
+    MCPReadRequest,
+    MCPReadResponse,
+    MCPWriteRequest,
+    MCPWriteResponse,
 )
 from kernel.core.protocol.acp.schemas.model import (
     AcpProfileEntry,
@@ -95,6 +175,18 @@ from kernel.core.protocol.acp.schemas.session import (
     SetSessionModeRequest,
     SetSessionModeResponse,
 )
+from kernel.core.protocol.acp.schemas.secrets import (
+    SecretAuditEntry,
+    SecretMetaEntry,
+    SecretsAuditRequest,
+    SecretsAuditResponse,
+    SecretsDeleteRequest,
+    SecretsDeleteResponse,
+    SecretsListRequest,
+    SecretsListResponse,
+    SecretsRenameRequest,
+    SecretsRenameResponse,
+)
 from kernel.core.protocol.acp.schemas.web_fetch import (
     SetWebFetchBackendRequest,
     SetWebFetchBackendResponse,
@@ -127,6 +219,7 @@ from kernel.core.protocol.interfaces.contracts.execute_shell_params import Execu
 from kernel.core.protocol.interfaces.contracts.get_usage_params import GetUsageParams
 from kernel.core.protocol.interfaces.contracts.handler_context import HandlerContext
 from kernel.core.protocol.interfaces.errors import InvalidParams
+from kernel.core.storage.global_commands import GlobalRestoreUnavailable
 from kernel.core.protocol.interfaces.contracts.list_profiles_params import (
     ListProfilesParams,
 )
@@ -181,7 +274,18 @@ from kernel.core.protocol.interfaces.model_handler import ModelHandler
 from kernel.core.protocol.interfaces.session_handler import SessionHandler
 
 # Discriminator for which kernel subsystem handles a request.
-HandlerTarget = Literal["session", "model", "secrets", "commands", "tools"]
+HandlerTarget = Literal[
+    "session",
+    "model",
+    "secrets",
+    "commands",
+    "tools",
+    "global",
+    "flags",
+    "agents",
+    "gateways",
+    "mcp",
+]
 
 
 @dataclass(frozen=True)
@@ -717,6 +821,670 @@ def _mask_secret(value: str | None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# global/* handler wrappers
+# ---------------------------------------------------------------------------
+
+
+def _require_primary(actor_agent_id: str) -> None:
+    if actor_agent_id != "primary":
+        raise InvalidParams("only primary Agent may run this management method")
+
+
+async def _handle_global_backup(
+    service: Any, ctx: HandlerContext, p: GlobalBackupRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    record = service.backup(
+        actor_agent_id=p.actor_agent_id,
+        output_dir=Path(p.output_dir) if p.output_dir else None,
+    )
+    return GlobalBackupResponse(
+        path=record.path,
+        checksum=record.checksum,
+        source_schema_version=record.source_schema_version,
+    )
+
+
+async def _handle_global_backups(
+    service: Any, ctx: HandlerContext, p: GlobalBackupsRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    result = service.backups(
+        actor_agent_id=p.actor_agent_id,
+        backup_dir=Path(p.backup_dir) if p.backup_dir else None,
+    )
+    return GlobalBackupsResponse(backups=list(result.backups))
+
+
+async def _handle_global_export(
+    service: Any, ctx: HandlerContext, p: GlobalExportRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    result = service.export(
+        actor_agent_id=p.actor_agent_id,
+        output_path=Path(p.output_path) if p.output_path else None,
+        dry_run=p.dry_run,
+        include_history=p.include_history,
+    )
+    return GlobalExportResponse(
+        dry_run=result.dry_run,
+        format="json",
+        output_path=result.output_path,
+        resource_count=result.resource_count,
+        event_count=result.event_count,
+        warnings=list(result.warnings),
+    )
+
+
+async def _handle_global_import(
+    service: Any, ctx: HandlerContext, p: GlobalImportRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        if p.dry_run:
+            result = service.import_dry_run(
+                actor_agent_id=p.actor_agent_id,
+                input_path=Path(p.input_path),
+            )
+            meta = None
+        else:
+            result = service.import_apply(
+                actor_agent_id=p.actor_agent_id,
+                input_path=Path(p.input_path),
+            )
+            meta = None
+    except GlobalRestoreUnavailable as exc:
+        from kernel.core.storage.models import ImportReport
+
+        result = ImportReport(
+            dry_run=False,
+            planned_writes=0,
+            conflicts=(),
+            errors=(),
+            warnings=(str(exc),),
+        )
+        meta = {"unavailable": True}
+    return GlobalImportResponse(
+        dry_run=result.dry_run,
+        planned_writes=result.planned_writes,
+        conflicts=list(result.conflicts),
+        errors=list(result.errors),
+        warnings=list(result.warnings),
+        unavailable=meta is not None and bool(meta.get("unavailable")),
+        meta=meta,
+    )
+
+
+async def _handle_global_restore(
+    service: Any, ctx: HandlerContext, p: GlobalRestoreRequest
+) -> BaseModel:
+    del service, ctx
+    _require_primary(p.actor_agent_id)
+    return GlobalRestoreResponse(
+        message="online global restore is unavailable until global writes can be quiesced"
+    )
+
+
+# ---------------------------------------------------------------------------
+# flags/* handler wrappers
+# ---------------------------------------------------------------------------
+
+
+async def _handle_flags_list(fm: Any, ctx: HandlerContext, p: FlagsListRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    return FlagsListResponse(
+        sections=[FlagSectionEntry.model_validate(item) for item in fm.management_list()]
+    )
+
+
+async def _handle_flags_read(fm: Any, ctx: HandlerContext, p: FlagsReadRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    return FlagsReadResponse.model_validate(fm.management_read(p.section))
+
+
+async def _handle_flags_set(fm: Any, ctx: HandlerContext, p: FlagsSetRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        result = fm.management_set(
+            section=p.section,
+            key=p.key,
+            value=p.value,
+            expected_revision=p.expected_revision,
+            actor=p.actor_agent_id,
+        )
+    except (KeyError, ValueError) as exc:
+        raise InvalidParams(str(exc))
+    return FlagsWriteResponse.model_validate(result)
+
+
+async def _handle_flags_reset(fm: Any, ctx: HandlerContext, p: FlagsResetRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        result = fm.management_reset(
+            section=p.section,
+            key=p.key,
+            expected_revision=p.expected_revision,
+            actor=p.actor_agent_id,
+        )
+    except (KeyError, ValueError) as exc:
+        raise InvalidParams(str(exc))
+    return FlagsWriteResponse.model_validate(result)
+
+
+# ---------------------------------------------------------------------------
+# secrets metadata handler wrappers
+# ---------------------------------------------------------------------------
+
+
+async def _handle_secrets_list(sm: Any, ctx: HandlerContext, p: SecretsListRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    return SecretsListResponse(
+        secrets=[
+            SecretMetaEntry(
+                secret_id=record.secret_id,
+                name=record.name,
+                revision=record.revision,
+                created_at=record.created_at,
+                updated_at=record.updated_at,
+            )
+            for record in sm.list()
+        ]
+    )
+
+
+async def _handle_secrets_audit(sm: Any, ctx: HandlerContext, p: SecretsAuditRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    events = []
+    for event in sm.audit(p.secret_id):
+        metadata = orjson.loads(event.metadata_json or "{}")
+        events.append(
+            SecretAuditEntry(
+                id=event.id,
+                secret_id=event.secret_id,
+                event_type=event.event_type,
+                actor_agent_id=event.actor_agent_id,
+                created_at=event.created_at,
+                metadata=metadata if isinstance(metadata, dict) else {},
+            )
+        )
+    return SecretsAuditResponse(events=events)
+
+
+async def _handle_secrets_rename(
+    sm: Any, ctx: HandlerContext, p: SecretsRenameRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    ref = sm.rename(
+        p.secret_id,
+        p.name,
+        expected_revision=p.expected_revision,
+        actor=p.actor_agent_id,
+    )
+    return SecretsRenameResponse(
+        secret_id=ref.secret_id,
+        ref=ref.ref,
+        name=ref.name,
+        revision=ref.revision,
+    )
+
+
+async def _handle_secrets_delete(
+    sm: Any, ctx: HandlerContext, p: SecretsDeleteRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        deleted = sm.delete_uuid(
+            p.secret_id,
+            expected_revision=p.expected_revision,
+            actor=p.actor_agent_id,
+            confirm=p.confirm,
+        )
+    except ValueError as exc:
+        raise InvalidParams(str(exc))
+    return SecretsDeleteResponse(deleted=deleted)
+
+
+# ---------------------------------------------------------------------------
+# agents/* and agent/send handler wrappers
+# ---------------------------------------------------------------------------
+
+
+def _invalid_management_error(exc: Exception) -> InvalidParams:
+    return InvalidParams(str(exc))
+
+
+async def _handle_agents_list(service: Any, ctx: HandlerContext, p: AgentsListRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    return AgentsListResponse.model_validate(
+        _camelise(service.list(include_bindings=p.include_bindings))
+    )
+
+
+async def _handle_agents_add(service: Any, ctx: HandlerContext, p: AgentsAddRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        agent = service.add(
+            p.agent_id,
+            workspace=Path(p.workspace),
+            name=p.name,
+            state_dir=Path(p.state_dir) if p.state_dir else None,
+            actor_agent_id=p.actor_agent_id,
+        )
+    except (KeyError, ValueError, PermissionError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+    return AgentRecordResponse(agent=_camelise(agent))
+
+
+async def _handle_agents_delete(
+    service: Any, ctx: HandlerContext, p: AgentsDeleteRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        result = service.delete(
+            p.agent_id,
+            confirm=p.confirm,
+            actor_agent_id=p.actor_agent_id,
+        )
+    except (KeyError, ValueError, PermissionError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+    return AgentsDeleteResponse.model_validate(result)
+
+
+async def _handle_agents_set_identity(
+    service: Any, ctx: HandlerContext, p: AgentsSetIdentityRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        agent = service.set_identity(
+            p.agent_id,
+            name=p.name,
+            avatar=p.avatar,
+            theme=p.theme,
+            identity_patch=p.identity_patch,
+            actor_agent_id=p.actor_agent_id,
+        )
+    except (KeyError, ValueError, PermissionError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+    return AgentRecordResponse(agent=_camelise(agent))
+
+
+async def _handle_agents_bindings(
+    service: Any, ctx: HandlerContext, p: AgentsBindingsRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    return AgentsBindingsResponse(bindings=_camelise(service.bindings(agent_id=p.agent_id)))
+
+
+async def _handle_agents_bind(service: Any, ctx: HandlerContext, p: AgentsBindRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        binding = service.bind(
+            agent_id=p.agent_id,
+            bind=p.bind,
+            session_id=p.session_id,
+            actor_agent_id=p.actor_agent_id,
+        )
+    except (KeyError, ValueError, PermissionError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+    return AgentsBindResponse(binding=_camelise(binding))
+
+
+async def _handle_agents_unbind(
+    service: Any, ctx: HandlerContext, p: AgentsUnbindRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        removed = service.unbind(
+            agent_id=p.agent_id,
+            bind=p.bind,
+            all=p.all,
+            actor_agent_id=p.actor_agent_id,
+        )
+    except (KeyError, ValueError, PermissionError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+    return AgentsUnbindResponse(removed=removed)
+
+
+async def _handle_agents_start(
+    service: Any, ctx: HandlerContext, p: AgentLifecycleRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        status = service.start(
+            p.agent_id,
+            router_endpoint=p.router_endpoint or "",
+            router_token=p.router_token or "",
+        )
+    except (KeyError, ValueError, PermissionError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+    return AgentLifecycleResponse(status=_camelise(status))
+
+
+async def _handle_agents_stop(
+    service: Any, ctx: HandlerContext, p: AgentLifecycleRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        status = service.stop(p.agent_id)
+    except (KeyError, ValueError, PermissionError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+    return AgentLifecycleResponse(status=_camelise(status))
+
+
+async def _handle_agents_restart(
+    service: Any, ctx: HandlerContext, p: AgentLifecycleRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        status = service.restart(
+            p.agent_id,
+            router_endpoint=p.router_endpoint or "",
+            router_token=p.router_token or "",
+        )
+    except (KeyError, ValueError, PermissionError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+    return AgentLifecycleResponse(status=_camelise(status))
+
+
+async def _handle_agents_health(
+    service: Any, ctx: HandlerContext, p: AgentHealthRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        health = service.health(p.agent_id)
+    except (KeyError, ValueError, PermissionError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+    return AgentHealthResponse(health=_camelise(health))
+
+
+async def _handle_agents_grants(
+    service: Any, ctx: HandlerContext, p: AgentsGrantsRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    return AgentsGrantsResponse(grants=_camelise(service.grants(agent_id=p.agent_id)))
+
+
+async def _handle_agents_grant(
+    service: Any, ctx: HandlerContext, p: AgentsGrantRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        grant = service.grant(
+            p.agent_id,
+            p.capability,
+            scope=p.scope,
+            resource=p.resource,
+            workspace=p.workspace,
+            expires_at=p.expires_at,
+            actor_agent_id=p.actor_agent_id,
+        )
+    except (KeyError, ValueError, PermissionError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+    return AgentsGrantResponse(grant=_camelise(grant))
+
+
+async def _handle_agents_revoke_grant(
+    service: Any, ctx: HandlerContext, p: AgentsRevokeGrantRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        grant = service.revoke_grant(p.grant_id, actor_agent_id=p.actor_agent_id)
+    except (KeyError, ValueError, PermissionError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+    return AgentsGrantResponse(grant=_camelise(grant))
+
+
+async def _handle_agent_send(service: Any, ctx: HandlerContext, p: AgentSendRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        result = await service.send(
+            agent_id=p.agent_id,
+            message=p.message,
+            session_id=p.session_id,
+            deliver=p.deliver,
+        )
+    except RuntimeError as exc:
+        message = str(exc)
+        if "route unavailable" in message or "route stale" in message:
+            return AgentSendResponse(
+                delivered=False,
+                error_code="route_unavailable",
+                message=message,
+            )
+        raise _invalid_management_error(exc)
+    return AgentSendResponse(delivered=True, result=_camelise(result))
+
+
+# ---------------------------------------------------------------------------
+# gateways/* handler wrappers
+# ---------------------------------------------------------------------------
+
+
+async def _handle_gateways_list(
+    service: Any, ctx: HandlerContext, p: GatewaysListRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    return GatewaysListResponse(gateways=_camelise(service.list()))
+
+
+async def _handle_gateways_create(
+    service: Any, ctx: HandlerContext, p: GatewayCreateRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        gateway = service.create(
+            gateway_id=p.gateway_id,
+            gateway_type=p.gateway_type,
+            config=p.config,
+            enabled=p.enabled,
+            actor=p.actor_agent_id,
+        )
+    except (KeyError, ValueError, PermissionError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+    return GatewayRecordResponse(gateway=_camelise(gateway))
+
+
+async def _handle_gateways_status(
+    service: Any, ctx: HandlerContext, p: GatewaysStatusRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        status = service.status(p.gateway_id)
+    except KeyError as exc:
+        raise _invalid_management_error(exc)
+    return GatewaysStatusResponse(status=_camelise(status))
+
+
+async def _handle_gateways_enable(
+    service: Any, ctx: HandlerContext, p: GatewayIdRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        revision = service.enable(p.gateway_id, actor=p.actor_agent_id)
+    except KeyError as exc:
+        raise _invalid_management_error(exc)
+    return GatewayRevisionResponse(gateway_id=p.gateway_id, revision=revision)
+
+
+async def _handle_gateways_delete(
+    service: Any, ctx: HandlerContext, p: GatewayDeleteRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        result = service.delete(p.gateway_id, confirm=p.confirm, actor=p.actor_agent_id)
+    except (KeyError, ValueError, PermissionError) as exc:
+        raise _invalid_management_error(exc)
+    return GatewayDeleteResponse.model_validate(result)
+
+
+async def _handle_gateways_disable(
+    service: Any, ctx: HandlerContext, p: GatewayIdRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        revision = service.disable(p.gateway_id, actor=p.actor_agent_id)
+    except KeyError as exc:
+        raise _invalid_management_error(exc)
+    return GatewayRevisionResponse(gateway_id=p.gateway_id, revision=revision)
+
+
+async def _handle_gateways_reload(
+    service: Any, ctx: HandlerContext, p: GatewayReloadRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        result = service.reload(p.gateway_id, fail=p.fail)
+    except KeyError as exc:
+        raise _invalid_management_error(exc)
+    return GatewayReloadResponse(
+        gateway_id=result.gateway_id,
+        status=result.status,
+        error=result.error,
+    )
+
+
+async def _handle_gateways_bindings(
+    service: Any, ctx: HandlerContext, p: GatewayBindingsRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    return GatewayBindingsResponse(
+        bindings=_camelise(service.bindings(gateway_id=p.gateway_id, agent_id=p.agent_id))
+    )
+
+
+async def _handle_gateways_bind(
+    service: Any, ctx: HandlerContext, p: GatewayBindRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        binding = service.bind(
+            gateway_id=p.gateway_id,
+            channel_key=p.channel_key,
+            agent_id=p.agent_id,
+            session_id=p.session_id,
+            actor=p.actor_agent_id,
+        )
+    except (KeyError, ValueError, PermissionError) as exc:
+        raise _invalid_management_error(exc)
+    return GatewayBindResponse(binding=_camelise(binding))
+
+
+async def _handle_gateways_unbind(
+    service: Any, ctx: HandlerContext, p: GatewayUnbindRequest
+) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        service.unbind(p.binding_id, actor=p.actor_agent_id)
+    except KeyError as exc:
+        raise _invalid_management_error(exc)
+    return GatewayUnbindResponse(unbound=True)
+
+
+# ---------------------------------------------------------------------------
+# mcp/* handler wrappers
+# ---------------------------------------------------------------------------
+
+
+async def _handle_mcp_list(service: Any, ctx: HandlerContext, p: MCPListRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    return MCPListResponse.model_validate(service.list())
+
+
+async def _handle_mcp_read(service: Any, ctx: HandlerContext, p: MCPReadRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        return MCPReadResponse.model_validate(service.read(p.name))
+    except KeyError as exc:
+        raise _invalid_management_error(exc)
+
+
+async def _handle_mcp_create(service: Any, ctx: HandlerContext, p: MCPWriteRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        return MCPWriteResponse.model_validate(
+            service.create(
+                p.name,
+                p.config,
+                expected_revision=p.expected_revision,
+                actor=p.actor_agent_id,
+            )
+        )
+    except (KeyError, ValueError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+
+
+async def _handle_mcp_update(service: Any, ctx: HandlerContext, p: MCPWriteRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        return MCPWriteResponse.model_validate(
+            service.update(
+                p.name,
+                p.config,
+                expected_revision=p.expected_revision,
+                actor=p.actor_agent_id,
+            )
+        )
+    except (KeyError, ValueError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+
+
+async def _handle_mcp_delete(service: Any, ctx: HandlerContext, p: MCPDeleteRequest) -> BaseModel:
+    del ctx
+    _require_primary(p.actor_agent_id)
+    try:
+        return MCPDeleteResponse.model_validate(
+            service.delete(
+                p.name,
+                expected_revision=p.expected_revision,
+                actor=p.actor_agent_id,
+            )
+        )
+    except (KeyError, ValueError, RuntimeError) as exc:
+        raise _invalid_management_error(exc)
+
+
+# ---------------------------------------------------------------------------
 # commands/* handler wrappers
 # ---------------------------------------------------------------------------
 
@@ -790,6 +1558,264 @@ REQUEST_DISPATCH: dict[str, RequestSpec] = {
         params_type=ListCommandsRequest,
         result_type=ListCommandsResponse,
         target="commands",
+    ),
+    MustangMethod.AGENTS_LIST: RequestSpec(
+        handler=_handle_agents_list,
+        params_type=AgentsListRequest,
+        result_type=AgentsListResponse,
+        target="agents",
+    ),
+    MustangMethod.AGENTS_ADD: RequestSpec(
+        handler=_handle_agents_add,
+        params_type=AgentsAddRequest,
+        result_type=AgentRecordResponse,
+        target="agents",
+    ),
+    MustangMethod.AGENTS_DELETE: RequestSpec(
+        handler=_handle_agents_delete,
+        params_type=AgentsDeleteRequest,
+        result_type=AgentsDeleteResponse,
+        target="agents",
+    ),
+    MustangMethod.AGENTS_SET_IDENTITY: RequestSpec(
+        handler=_handle_agents_set_identity,
+        params_type=AgentsSetIdentityRequest,
+        result_type=AgentRecordResponse,
+        target="agents",
+    ),
+    MustangMethod.AGENTS_BINDINGS: RequestSpec(
+        handler=_handle_agents_bindings,
+        params_type=AgentsBindingsRequest,
+        result_type=AgentsBindingsResponse,
+        target="agents",
+    ),
+    MustangMethod.AGENTS_BIND: RequestSpec(
+        handler=_handle_agents_bind,
+        params_type=AgentsBindRequest,
+        result_type=AgentsBindResponse,
+        target="agents",
+    ),
+    MustangMethod.AGENTS_UNBIND: RequestSpec(
+        handler=_handle_agents_unbind,
+        params_type=AgentsUnbindRequest,
+        result_type=AgentsUnbindResponse,
+        target="agents",
+    ),
+    MustangMethod.AGENTS_START: RequestSpec(
+        handler=_handle_agents_start,
+        params_type=AgentLifecycleRequest,
+        result_type=AgentLifecycleResponse,
+        target="agents",
+    ),
+    MustangMethod.AGENTS_STOP: RequestSpec(
+        handler=_handle_agents_stop,
+        params_type=AgentLifecycleRequest,
+        result_type=AgentLifecycleResponse,
+        target="agents",
+    ),
+    MustangMethod.AGENTS_RESTART: RequestSpec(
+        handler=_handle_agents_restart,
+        params_type=AgentLifecycleRequest,
+        result_type=AgentLifecycleResponse,
+        target="agents",
+    ),
+    MustangMethod.AGENTS_HEALTH: RequestSpec(
+        handler=_handle_agents_health,
+        params_type=AgentHealthRequest,
+        result_type=AgentHealthResponse,
+        target="agents",
+    ),
+    MustangMethod.AGENTS_GRANTS: RequestSpec(
+        handler=_handle_agents_grants,
+        params_type=AgentsGrantsRequest,
+        result_type=AgentsGrantsResponse,
+        target="agents",
+    ),
+    MustangMethod.AGENTS_GRANT: RequestSpec(
+        handler=_handle_agents_grant,
+        params_type=AgentsGrantRequest,
+        result_type=AgentsGrantResponse,
+        target="agents",
+    ),
+    MustangMethod.AGENTS_REVOKE_GRANT: RequestSpec(
+        handler=_handle_agents_revoke_grant,
+        params_type=AgentsRevokeGrantRequest,
+        result_type=AgentsGrantResponse,
+        target="agents",
+    ),
+    MustangMethod.AGENT_SEND: RequestSpec(
+        handler=_handle_agent_send,
+        params_type=AgentSendRequest,
+        result_type=AgentSendResponse,
+        target="agents",
+    ),
+    MustangMethod.GATEWAYS_LIST: RequestSpec(
+        handler=_handle_gateways_list,
+        params_type=GatewaysListRequest,
+        result_type=GatewaysListResponse,
+        target="gateways",
+    ),
+    MustangMethod.GATEWAYS_CREATE: RequestSpec(
+        handler=_handle_gateways_create,
+        params_type=GatewayCreateRequest,
+        result_type=GatewayRecordResponse,
+        target="gateways",
+    ),
+    MustangMethod.GATEWAYS_STATUS: RequestSpec(
+        handler=_handle_gateways_status,
+        params_type=GatewaysStatusRequest,
+        result_type=GatewaysStatusResponse,
+        target="gateways",
+    ),
+    MustangMethod.GATEWAYS_ENABLE: RequestSpec(
+        handler=_handle_gateways_enable,
+        params_type=GatewayIdRequest,
+        result_type=GatewayRevisionResponse,
+        target="gateways",
+    ),
+    MustangMethod.GATEWAYS_DELETE: RequestSpec(
+        handler=_handle_gateways_delete,
+        params_type=GatewayDeleteRequest,
+        result_type=GatewayDeleteResponse,
+        target="gateways",
+    ),
+    MustangMethod.GATEWAYS_DISABLE: RequestSpec(
+        handler=_handle_gateways_disable,
+        params_type=GatewayIdRequest,
+        result_type=GatewayRevisionResponse,
+        target="gateways",
+    ),
+    MustangMethod.GATEWAYS_RELOAD: RequestSpec(
+        handler=_handle_gateways_reload,
+        params_type=GatewayReloadRequest,
+        result_type=GatewayReloadResponse,
+        target="gateways",
+    ),
+    MustangMethod.GATEWAYS_BINDINGS: RequestSpec(
+        handler=_handle_gateways_bindings,
+        params_type=GatewayBindingsRequest,
+        result_type=GatewayBindingsResponse,
+        target="gateways",
+    ),
+    MustangMethod.GATEWAYS_BIND: RequestSpec(
+        handler=_handle_gateways_bind,
+        params_type=GatewayBindRequest,
+        result_type=GatewayBindResponse,
+        target="gateways",
+    ),
+    MustangMethod.GATEWAYS_UNBIND: RequestSpec(
+        handler=_handle_gateways_unbind,
+        params_type=GatewayUnbindRequest,
+        result_type=GatewayUnbindResponse,
+        target="gateways",
+    ),
+    MustangMethod.MCP_LIST: RequestSpec(
+        handler=_handle_mcp_list,
+        params_type=MCPListRequest,
+        result_type=MCPListResponse,
+        target="mcp",
+    ),
+    MustangMethod.MCP_READ: RequestSpec(
+        handler=_handle_mcp_read,
+        params_type=MCPReadRequest,
+        result_type=MCPReadResponse,
+        target="mcp",
+    ),
+    MustangMethod.MCP_CREATE: RequestSpec(
+        handler=_handle_mcp_create,
+        params_type=MCPWriteRequest,
+        result_type=MCPWriteResponse,
+        target="mcp",
+    ),
+    MustangMethod.MCP_UPDATE: RequestSpec(
+        handler=_handle_mcp_update,
+        params_type=MCPWriteRequest,
+        result_type=MCPWriteResponse,
+        target="mcp",
+    ),
+    MustangMethod.MCP_DELETE: RequestSpec(
+        handler=_handle_mcp_delete,
+        params_type=MCPDeleteRequest,
+        result_type=MCPDeleteResponse,
+        target="mcp",
+    ),
+    MustangMethod.GLOBAL_BACKUP: RequestSpec(
+        handler=_handle_global_backup,
+        params_type=GlobalBackupRequest,
+        result_type=GlobalBackupResponse,
+        target="global",
+    ),
+    MustangMethod.GLOBAL_BACKUPS: RequestSpec(
+        handler=_handle_global_backups,
+        params_type=GlobalBackupsRequest,
+        result_type=GlobalBackupsResponse,
+        target="global",
+    ),
+    MustangMethod.GLOBAL_EXPORT: RequestSpec(
+        handler=_handle_global_export,
+        params_type=GlobalExportRequest,
+        result_type=GlobalExportResponse,
+        target="global",
+    ),
+    MustangMethod.GLOBAL_IMPORT: RequestSpec(
+        handler=_handle_global_import,
+        params_type=GlobalImportRequest,
+        result_type=GlobalImportResponse,
+        target="global",
+    ),
+    MustangMethod.GLOBAL_RESTORE: RequestSpec(
+        handler=_handle_global_restore,
+        params_type=GlobalRestoreRequest,
+        result_type=GlobalRestoreResponse,
+        target="global",
+    ),
+    MustangMethod.FLAGS_LIST: RequestSpec(
+        handler=_handle_flags_list,
+        params_type=FlagsListRequest,
+        result_type=FlagsListResponse,
+        target="flags",
+    ),
+    MustangMethod.FLAGS_READ: RequestSpec(
+        handler=_handle_flags_read,
+        params_type=FlagsReadRequest,
+        result_type=FlagsReadResponse,
+        target="flags",
+    ),
+    MustangMethod.FLAGS_SET: RequestSpec(
+        handler=_handle_flags_set,
+        params_type=FlagsSetRequest,
+        result_type=FlagsWriteResponse,
+        target="flags",
+    ),
+    MustangMethod.FLAGS_RESET: RequestSpec(
+        handler=_handle_flags_reset,
+        params_type=FlagsResetRequest,
+        result_type=FlagsWriteResponse,
+        target="flags",
+    ),
+    MustangMethod.SECRETS_LIST: RequestSpec(
+        handler=_handle_secrets_list,
+        params_type=SecretsListRequest,
+        result_type=SecretsListResponse,
+        target="secrets",
+    ),
+    MustangMethod.SECRETS_AUDIT: RequestSpec(
+        handler=_handle_secrets_audit,
+        params_type=SecretsAuditRequest,
+        result_type=SecretsAuditResponse,
+        target="secrets",
+    ),
+    MustangMethod.SECRETS_RENAME: RequestSpec(
+        handler=_handle_secrets_rename,
+        params_type=SecretsRenameRequest,
+        result_type=SecretsRenameResponse,
+        target="secrets",
+    ),
+    MustangMethod.SECRETS_DELETE: RequestSpec(
+        handler=_handle_secrets_delete,
+        params_type=SecretsDeleteRequest,
+        result_type=SecretsDeleteResponse,
+        target="secrets",
     ),
     MustangMethod.WEB_FETCH_BACKEND_OPTIONS: RequestSpec(
         handler=_handle_web_fetch_backend_options,

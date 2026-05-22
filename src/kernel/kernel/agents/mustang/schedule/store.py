@@ -1,21 +1,16 @@
-"""CronStore — SQLite persistence for cron tasks and execution records.
-
-Design reference: ``docs/plans/schedule-manager.md`` § 3.3.
-
-Storage lives in ``~/.mustang/state/kernel.db`` (separate from the
-session database).  ``durable=False`` tasks are kept in an in-memory
-dict only and vanish on kernel restart.
-"""
+"""ResourceStore-backed persistence for scheduled tasks."""
 
 from __future__ import annotations
 
-import orjson
+import hashlib
 import logging
 import time
 from pathlib import Path
 from typing import Any
 
-import aiosqlite
+import orjson
+import sqlalchemy as sa
+import yaml
 
 from kernel.agents.mustang.schedule.types import (
     CronExecution,
@@ -27,197 +22,117 @@ from kernel.agents.mustang.schedule.types import (
     Schedule,
     ScheduleKind,
 )
+from kernel.core.storage import ResourceStore, tables
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Schema
-# ---------------------------------------------------------------------------
-
-_SCHEMA_SQL = """\
-CREATE TABLE IF NOT EXISTS cron_tasks (
-    id                  TEXT PRIMARY KEY,
-    schedule_kind       TEXT NOT NULL,
-    schedule_expr       TEXT NOT NULL DEFAULT '',
-    schedule_interval   REAL NOT NULL DEFAULT 0,
-    schedule_run_at     REAL NOT NULL DEFAULT 0,
-    prompt              TEXT NOT NULL,
-    description         TEXT NOT NULL DEFAULT '',
-    recurring           INTEGER NOT NULL DEFAULT 1,
-    durable             INTEGER NOT NULL DEFAULT 1,
-    skills              TEXT NOT NULL DEFAULT '[]',
-    model               TEXT,
-    timeout_seconds     REAL NOT NULL DEFAULT 1800,
-    inactivity_timeout  REAL NOT NULL DEFAULT 600,
-    delivery_target     TEXT NOT NULL DEFAULT 'session,acp',
-    delivery_on_failure INTEGER NOT NULL DEFAULT 1,
-    delivery_silent_pattern TEXT NOT NULL DEFAULT '',
-    session_id          TEXT,
-    project_dir         TEXT,
-    created_at          REAL NOT NULL,
-    last_fired_at       REAL,
-    next_fire_at        REAL,
-    status              TEXT NOT NULL DEFAULT 'active',
-    fire_count          INTEGER NOT NULL DEFAULT 0,
-    consecutive_failures INTEGER NOT NULL DEFAULT 0,
-    max_age_seconds     REAL NOT NULL DEFAULT 604800,
-    repeat_max_count    INTEGER,
-    repeat_max_duration REAL,
-    repeat_until        REAL,
-    failure_alert_after INTEGER,
-    failure_alert_cooldown REAL,
-    failure_alert_target TEXT,
-    last_failure_alert_at REAL,
-    running_by          TEXT,
-    running_heartbeat   REAL
-);
-
-CREATE TABLE IF NOT EXISTS cron_executions (
-    id              TEXT PRIMARY KEY,
-    task_id         TEXT NOT NULL REFERENCES cron_tasks(id),
-    session_id      TEXT NOT NULL,
-    started_at      REAL NOT NULL,
-    ended_at        REAL,
-    duration_ms     REAL,
-    status          TEXT NOT NULL DEFAULT 'running',
-    error           TEXT,
-    stop_reason     TEXT,
-    summary         TEXT,
-    delivery_status TEXT,
-    delivery_error  TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_cron_tasks_next_fire
-    ON cron_tasks(next_fire_at) WHERE status = 'active';
-CREATE INDEX IF NOT EXISTS idx_cron_executions_task
-    ON cron_executions(task_id);
-CREATE INDEX IF NOT EXISTS idx_cron_executions_started
-    ON cron_executions(started_at);
-"""
-
 
 class CronStore:
-    """SQLite + in-memory persistence for cron tasks.
+    """ResourceStore + in-memory persistence for cron tasks.
 
-    Durable tasks live in SQLite (``kernel.db``).  Non-durable tasks
-    live in ``_memory`` only and disappear on restart.
-
-    Multi-instance note: non-durable tasks are invisible to other
-    kernel instances sharing the same ``kernel.db``.
+    Durable scheduled tasks live in ResourceStore ``scheduled_tasks`` rows.
+    Non-durable tasks and execution records remain process-local because they
+    are runtime state, not global user truth.
     """
 
     def __init__(self) -> None:
-        self._db: aiosqlite.Connection | None = None
-        self._memory: dict[str, CronTask] = {}  # non-durable tasks
-        self._db_path: Path | None = None
-
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
+        self._store: ResourceStore | None = None
+        self._memory: dict[str, CronTask] = {}
+        self._executions: dict[str, CronExecution] = {}
+        self._home: Path | None = None
+        self.legacy_import_warnings: list[str] = []
 
     async def startup(self, db_path: Path) -> None:
-        """Open the database and ensure schema exists."""
-        self._db_path = db_path
-        self._db = await aiosqlite.connect(str(db_path))
-        self._db.row_factory = aiosqlite.Row
-        await self._db.execute("PRAGMA journal_mode=WAL")
-        await self._db.executescript(_SCHEMA_SQL)
-        await self._db.commit()
-        logger.info("CronStore opened: %s", db_path)
+        """Open ResourceStore, accepting old tests that pass a DB path."""
+        home = db_path.parent if db_path.suffix == ".db" else db_path
+        await self.startup_resource(home)
+
+    async def startup_resource(self, home: Path) -> None:
+        """Open ResourceStore and import legacy schedules once if present."""
+        self._home = home
+        self._store = ResourceStore.open(home)
+        self._import_legacy_yaml_once()
+        logger.info("CronStore opened ResourceStore home: %s", home)
 
     async def shutdown(self) -> None:
-        """Close the database connection."""
-        if self._db:
-            await self._db.close()
-            self._db = None
+        """Close ResourceStore and clear process-local state."""
+        if self._store is not None:
+            self._store.close()
+            self._store = None
         self._memory.clear()
-
-    @property
-    def db(self) -> aiosqlite.Connection:
-        """Direct access for claim/heartbeat SQL (CronScheduler)."""
-        if self._db is None:
-            raise RuntimeError("CronStore not started")
-        return self._db
-
-    # ------------------------------------------------------------------
-    # Task CRUD
-    # ------------------------------------------------------------------
+        self._executions.clear()
 
     async def add(self, task: CronTask) -> None:
         """Persist a new task."""
         if not task.durable:
             self._memory[task.id] = task
             return
-        assert self._db is not None
-        await self._db.execute(
-            """INSERT INTO cron_tasks (
-                id, schedule_kind, schedule_expr, schedule_interval,
-                schedule_run_at, prompt, description, recurring, durable,
-                skills, model, timeout_seconds, inactivity_timeout,
-                delivery_target, delivery_on_failure, delivery_silent_pattern,
-                session_id, project_dir, created_at, last_fired_at,
-                next_fire_at, status, fire_count, consecutive_failures,
-                max_age_seconds, repeat_max_count, repeat_max_duration,
-                repeat_until, failure_alert_after, failure_alert_cooldown,
-                failure_alert_target, last_failure_alert_at,
-                running_by, running_heartbeat
-            ) VALUES (
-                ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?, ?,
-                ?, ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?,
-                ?, ?,
-                ?, ?
-            )""",
-            _task_to_row(task),
-        )
-        await self._db.commit()
+        now = _now_iso()
+
+        def _write(conn: Any) -> None:
+            existing = conn.execute(
+                sa.select(tables.scheduled_tasks.c.task_id).where(
+                    tables.scheduled_tasks.c.task_id == task.id
+                )
+            ).fetchone()
+            if existing is not None:
+                raise ValueError(f"scheduled task already exists: {task.id}")
+            conn.execute(
+                tables.scheduled_tasks.insert().values(
+                    task_id=task.id,
+                    owner_agent_id=task.owner_agent_id,
+                    title=task.description or task.prompt[:80],
+                    schedule_json=_json(_schedule_payload(task)),
+                    target_json=_json(_target_payload(task)),
+                    status=task.status.value,
+                    revision=1,
+                    created_at=str(task.created_at),
+                    updated_at=now,
+                    updated_by_agent_id=task.owner_agent_id,
+                )
+            )
+            _insert_event(conn, task, "schedule.created", revision=1)
+
+        self._require_store().write_tx(_write)
 
     async def remove(self, task_id: str) -> bool:
-        """Soft-delete a task.  Returns False if not found."""
+        """Soft-delete a task. Returns False if not found."""
         if task_id in self._memory:
             self._memory[task_id].status = CronTaskStatus.deleted
             del self._memory[task_id]
             return True
-        assert self._db is not None
-        cursor = await self._db.execute(
-            "UPDATE cron_tasks SET status = ? WHERE id = ?",
-            (CronTaskStatus.deleted.value, task_id),
-        )
-        await self._db.commit()
-        return cursor.rowcount > 0
+        return self._update_row(task_id, status=CronTaskStatus.deleted.value, next_fire_at=None)
 
     async def get(self, task_id: str) -> CronTask | None:
         """Fetch a single task by ID."""
         if task_id in self._memory:
             return self._memory[task_id]
-        assert self._db is not None
-        async with self._db.execute("SELECT * FROM cron_tasks WHERE id = ?", (task_id,)) as cursor:
-            row = await cursor.fetchone()
-            return _row_to_task(row) if row else None
+        row = self._require_store().read_tx(
+            lambda conn: conn.execute(
+                sa.select(tables.scheduled_tasks).where(tables.scheduled_tasks.c.task_id == task_id)
+            ).fetchone()
+        )
+        return _row_to_task(row) if row is not None else None
 
     async def list_all(self) -> list[CronTask]:
-        """Return all tasks (including completed / deleted)."""
-        assert self._db is not None
-        async with self._db.execute("SELECT * FROM cron_tasks") as cursor:
-            rows = await cursor.fetchall()
-        tasks = [_row_to_task(r) for r in rows]
+        """Return all tasks, including completed/deleted."""
+        rows = self._require_store().read_tx(
+            lambda conn: conn.execute(sa.select(tables.scheduled_tasks)).fetchall()
+        )
+        tasks = [_row_to_task(row) for row in rows]
         tasks.extend(self._memory.values())
         return tasks
 
     async def list_active(self) -> list[CronTask]:
-        """Return only ``active`` tasks (durable + non-durable)."""
-        assert self._db is not None
-        async with self._db.execute(
-            "SELECT * FROM cron_tasks WHERE status = ?",
-            (CronTaskStatus.active.value,),
-        ) as cursor:
-            rows = await cursor.fetchall()
-        tasks = [_row_to_task(r) for r in rows]
+        """Return active tasks."""
+        rows = self._require_store().read_tx(
+            lambda conn: conn.execute(
+                sa.select(tables.scheduled_tasks).where(
+                    tables.scheduled_tasks.c.status == CronTaskStatus.active.value
+                )
+            ).fetchall()
+        )
+        tasks = [_row_to_task(row) for row in rows]
         tasks.extend(t for t in self._memory.values() if t.status == CronTaskStatus.active)
         return tasks
 
@@ -227,23 +142,22 @@ class CronStore:
         fired_at: float,
         next_at: float | None,
     ) -> None:
-        """Record a successful fire: bump fire_count, update timestamps."""
+        """Record a successful fire."""
         if task_id in self._memory:
-            t = self._memory[task_id]
-            t.last_fired_at = fired_at
-            t.next_fire_at = next_at
-            t.fire_count += 1
-            t.consecutive_failures = 0
+            task = self._memory[task_id]
+            task.last_fired_at = fired_at
+            task.next_fire_at = next_at
+            task.fire_count += 1
+            task.consecutive_failures = 0
             return
-        assert self._db is not None
-        await self._db.execute(
-            """UPDATE cron_tasks SET
-                last_fired_at = ?, next_fire_at = ?,
-                fire_count = fire_count + 1, consecutive_failures = 0
-            WHERE id = ?""",
-            (fired_at, next_at, task_id),
-        )
-        await self._db.commit()
+        loaded = await self.get(task_id)
+        if loaded is None:
+            return
+        loaded.last_fired_at = fired_at
+        loaded.next_fire_at = next_at
+        loaded.fire_count += 1
+        loaded.consecutive_failures = 0
+        self._replace_task(loaded, event_type="schedule.fired")
 
     async def update_status(
         self,
@@ -256,64 +170,127 @@ class CronStore:
     ) -> None:
         """Update task status and optional fields atomically."""
         if task_id in self._memory:
-            t = self._memory[task_id]
-            t.status = status
+            task = self._memory[task_id]
+            task.status = status
             if next_fire_at is not ...:
-                t.next_fire_at = next_fire_at  # type: ignore[assignment]
+                task.next_fire_at = next_fire_at  # type: ignore[assignment]
             if consecutive_failures is not None:
-                t.consecutive_failures = consecutive_failures
+                task.consecutive_failures = consecutive_failures
             if last_failure_alert_at is not ...:
-                t.last_failure_alert_at = last_failure_alert_at  # type: ignore[assignment]
+                task.last_failure_alert_at = last_failure_alert_at  # type: ignore[assignment]
             return
-
-        assert self._db is not None
-        sets: list[str] = ["status = ?"]
-        params: list[Any] = [status.value]
+        loaded = await self.get(task_id)
+        if loaded is None:
+            return
+        loaded.status = status
         if next_fire_at is not ...:
-            sets.append("next_fire_at = ?")
-            params.append(next_fire_at)
+            loaded.next_fire_at = next_fire_at  # type: ignore[assignment]
         if consecutive_failures is not None:
-            sets.append("consecutive_failures = ?")
-            params.append(consecutive_failures)
+            loaded.consecutive_failures = consecutive_failures
         if last_failure_alert_at is not ...:
-            sets.append("last_failure_alert_at = ?")
-            params.append(last_failure_alert_at)
-        params.append(task_id)
-        await self._db.execute(
-            f"UPDATE cron_tasks SET {', '.join(sets)} WHERE id = ?",
-            params,
-        )
-        await self._db.commit()
+            loaded.last_failure_alert_at = last_failure_alert_at  # type: ignore[assignment]
+        self._replace_task(loaded, event_type="schedule.updated")
 
-    # ------------------------------------------------------------------
-    # Execution records
-    # ------------------------------------------------------------------
+    async def claim_tasks(self, tasks: list[CronTask], kernel_id: str) -> list[CronTask]:
+        """Claim active due tasks by CAS on ``running_by``."""
+        claimed: list[CronTask] = []
+        now = time.time()
+        for task in tasks:
+            if not task.durable:
+                task.running_by = kernel_id
+                task.running_heartbeat = now
+                claimed.append(task)
+                continue
+
+            def _write(conn: Any) -> int:
+                current = conn.execute(
+                    sa.select(tables.scheduled_tasks).where(
+                        tables.scheduled_tasks.c.task_id == task.id,
+                        tables.scheduled_tasks.c.status == CronTaskStatus.active.value,
+                    )
+                ).fetchone()
+                if current is None:
+                    return 0
+                loaded = _row_to_task(current)
+                if loaded.running_by is not None:
+                    return 0
+                loaded.running_by = kernel_id
+                loaded.running_heartbeat = now
+                return _write_task_update(conn, loaded, event_type="schedule.claimed")
+
+            if self._require_store().write_tx(_write) > 0:
+                task.running_by = kernel_id
+                task.running_heartbeat = now
+                claimed.append(task)
+        return claimed
+
+    async def release_task(self, task_id: str, kernel_id: str) -> None:
+        """Release a claim after execution completes."""
+        task = await self.get(task_id)
+        if task is None or task.running_by != kernel_id:
+            return
+        task.running_by = None
+        task.running_heartbeat = None
+        self._replace_task(task, event_type="schedule.released")
+
+    async def heartbeat(self, task_id: str, kernel_id: str) -> None:
+        """Refresh the claim heartbeat for one task."""
+        task = await self.get(task_id)
+        if task is None or task.running_by != kernel_id:
+            return
+        task.running_heartbeat = time.time()
+        self._replace_task(task, event_type="schedule.heartbeat")
+
+    async def cleanup_stale_claims(self, cutoff: float) -> int:
+        """Clear claims whose heartbeat is older than cutoff."""
+        active = await self.list_active()
+        cleared = 0
+        for task in active:
+            if task.running_by is not None and (task.running_heartbeat or 0) < cutoff:
+                task.running_by = None
+                task.running_heartbeat = None
+                self._replace_task(task, event_type="schedule.claim_cleared")
+                cleared += 1
+        return cleared
+
+    async def disable_tasks_for_agent(
+        self,
+        agent_id: str,
+        *,
+        actor_agent_id: str,
+        reason: str = "agent_deleted",
+    ) -> int:
+        """Pause active schedules owned by a deleted Agent."""
+        del reason
+        tasks = [
+            task
+            for task in await self.list_all()
+            if task.owner_agent_id == agent_id and task.status == CronTaskStatus.active
+        ]
+        for task in tasks:
+            task.status = CronTaskStatus.paused
+            task.next_fire_at = None
+            self._replace_task(
+                task,
+                event_type="schedule.disabled_for_agent",
+                actor_agent_id=actor_agent_id,
+            )
+        return len(tasks)
+
+    def current_revision(self, task_id: str) -> int | None:
+        """Return the current ResourceStore revision for one scheduled task."""
+        row = self._require_store().read_tx(
+            lambda conn: conn.execute(
+                sa.select(tables.scheduled_tasks.c.revision).where(
+                    tables.scheduled_tasks.c.task_id == task_id
+                )
+            ).fetchone()
+        )
+        return int(row["revision"]) if row is not None else None
 
     async def add_execution(self, execution: CronExecution) -> None:
-        """Insert a new execution record."""
-        assert self._db is not None
-        await self._db.execute(
-            """INSERT INTO cron_executions (
-                id, task_id, session_id, started_at, ended_at,
-                duration_ms, status, error, stop_reason, summary,
-                delivery_status, delivery_error
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                execution.id,
-                execution.task_id,
-                execution.session_id,
-                execution.started_at,
-                execution.ended_at,
-                execution.duration_ms,
-                execution.status,
-                execution.error,
-                execution.stop_reason,
-                execution.summary,
-                execution.delivery_status,
-                execution.delivery_error,
-            ),
-        )
-        await self._db.commit()
+        """Insert a process-local execution record."""
+        self._executions[execution.id] = execution
 
     async def update_execution(
         self,
@@ -328,169 +305,338 @@ class CronStore:
         delivery_status: str | None = None,
         delivery_error: str | None = None,
     ) -> None:
-        """Update mutable fields of an execution record."""
-        assert self._db is not None
-        sets: list[str] = []
-        params: list[Any] = []
-        for col, val in [
-            ("ended_at", ended_at),
-            ("duration_ms", duration_ms),
-            ("status", status),
-            ("error", error),
-            ("stop_reason", stop_reason),
-            ("summary", summary),
-            ("delivery_status", delivery_status),
-            ("delivery_error", delivery_error),
-        ]:
-            if val is not None:
-                sets.append(f"{col} = ?")
-                params.append(val)
-        if not sets:
+        """Update process-local execution fields."""
+        execution = self._executions.get(execution_id)
+        if execution is None:
             return
-        params.append(execution_id)
-        await self._db.execute(
-            f"UPDATE cron_executions SET {', '.join(sets)} WHERE id = ?",
-            params,
-        )
-        await self._db.commit()
+        for key, value in {
+            "ended_at": ended_at,
+            "duration_ms": duration_ms,
+            "status": status,
+            "error": error,
+            "stop_reason": stop_reason,
+            "summary": summary,
+            "delivery_status": delivery_status,
+            "delivery_error": delivery_error,
+        }.items():
+            if value is not None:
+                setattr(execution, key, value)
 
     async def list_executions(self, task_id: str, limit: int = 20) -> list[CronExecution]:
-        """Return recent executions for a task, newest first."""
-        assert self._db is not None
-        async with self._db.execute(
-            "SELECT * FROM cron_executions WHERE task_id = ? ORDER BY started_at DESC LIMIT ?",
-            (task_id, limit),
-        ) as cursor:
-            rows = await cursor.fetchall()
-        return [_row_to_execution(r) for r in rows]
+        """Return recent process-local executions for a task."""
+        rows = [
+            execution for execution in self._executions.values() if execution.task_id == task_id
+        ]
+        return sorted(rows, key=lambda execution: execution.started_at, reverse=True)[:limit]
 
     async def prune_executions(self, retention_days: int = 30) -> int:
-        """Delete execution records older than *retention_days*.
-
-        Returns the number of rows deleted.
-        """
-        assert self._db is not None
+        """Delete process-local execution records older than retention."""
         cutoff = time.time() - retention_days * 86400
-        cursor = await self._db.execute(
-            "DELETE FROM cron_executions WHERE started_at < ?", (cutoff,)
+        old = [
+            execution_id
+            for execution_id, execution in self._executions.items()
+            if execution.started_at < cutoff
+        ]
+        for execution_id in old:
+            self._executions.pop(execution_id, None)
+        return len(old)
+
+    async def old_execution_session_ids(self, cutoff: float) -> list[str]:
+        """Return unique session ids from old process-local executions."""
+        return sorted(
+            {
+                execution.session_id
+                for execution in self._executions.values()
+                if execution.started_at < cutoff
+            }
         )
-        await self._db.commit()
-        return cursor.rowcount
+
+    def _replace_task(
+        self,
+        task: CronTask,
+        *,
+        event_type: str,
+        actor_agent_id: str | None = None,
+    ) -> None:
+        self._require_store().write_tx(
+            lambda conn: _write_task_update(conn, task, event_type, actor_agent_id=actor_agent_id)
+        )
+
+    def _update_row(self, task_id: str, **values: Any) -> bool:
+        task = self._require_store().read_tx(
+            lambda conn: conn.execute(
+                sa.select(tables.scheduled_tasks).where(tables.scheduled_tasks.c.task_id == task_id)
+            ).fetchone()
+        )
+        if task is None:
+            return False
+        loaded = _row_to_task(task)
+        if "status" in values:
+            loaded.status = CronTaskStatus(values["status"])
+        if "next_fire_at" in values:
+            loaded.next_fire_at = values["next_fire_at"]
+        self._replace_task(loaded, event_type="schedule.deleted")
+        return True
+
+    def _import_legacy_yaml_once(self) -> None:
+        if self._home is None:
+            return
+        path = self._home / "config" / "schedules.yaml"
+        if not path.exists():
+            return
+        source_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+        marker_key = "legacy.schedule_yaml"
+        marker = self._require_store().get_resource(marker_key)
+        if marker is not None:
+            marker_payload = orjson.loads(marker.payload_json)
+            if marker_payload.get("source_hash") != source_hash:
+                self.legacy_import_warnings.append(
+                    "legacy schedules.yaml drift ignored; ResourceStore is durable truth"
+                )
+            return
+        existing = self._require_store().read_tx(
+            lambda conn: conn.execute(
+                sa.select(sa.func.count()).select_from(tables.scheduled_tasks)
+            ).fetchone()[0]
+        )
+        if existing:
+            self._require_store().cas_put_resource(
+                marker_key,
+                _json({"source_hash": source_hash, "imported": False, "reason": "db_not_empty"}),
+                actor="system",
+            )
+            return
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        tasks = raw.get("tasks") if isinstance(raw, dict) else None
+        if not isinstance(tasks, list):
+            tasks = []
+        for item in tasks:
+            if not isinstance(item, dict):
+                continue
+            task = _task_from_legacy(item)
+
+            def _write_legacy(conn: Any, legacy_task: CronTask = task) -> None:
+                conn.execute(
+                    tables.scheduled_tasks.insert().values(
+                        task_id=legacy_task.id,
+                        owner_agent_id=legacy_task.owner_agent_id,
+                        title=legacy_task.description or legacy_task.prompt[:80],
+                        schedule_json=_json(_schedule_payload(legacy_task)),
+                        target_json=_json(_target_payload(legacy_task)),
+                        status=legacy_task.status.value,
+                        revision=1,
+                        created_at=str(legacy_task.created_at),
+                        updated_at=_now_iso(),
+                        updated_by_agent_id="legacy-import",
+                    )
+                )
+                _insert_event(conn, legacy_task, "schedule.legacy_imported", revision=1)
+
+            self._require_store().write_tx(_write_legacy)
+        self._require_store().cas_put_resource(
+            marker_key,
+            _json({"source_hash": source_hash, "imported": True, "count": len(tasks)}),
+            actor="system",
+        )
+
+    def _require_store(self) -> ResourceStore:
+        if self._store is None:
+            raise RuntimeError("CronStore not started")
+        return self._store
 
 
-# ---------------------------------------------------------------------------
-# Row ↔ CronTask mapping
-# ---------------------------------------------------------------------------
+def _write_task_update(
+    conn: Any,
+    task: CronTask,
+    event_type: str,
+    *,
+    actor_agent_id: str | None = None,
+) -> int:
+    current = conn.execute(
+        sa.select(tables.scheduled_tasks.c.revision).where(
+            tables.scheduled_tasks.c.task_id == task.id
+        )
+    ).fetchone()
+    if current is None:
+        return 0
+    revision = int(current["revision"]) + 1
+    conn.execute(
+        tables.scheduled_tasks.update()
+        .where(tables.scheduled_tasks.c.task_id == task.id)
+        .values(
+            owner_agent_id=task.owner_agent_id,
+            title=task.description or task.prompt[:80],
+            schedule_json=_json(_schedule_payload(task)),
+            target_json=_json(_target_payload(task)),
+            status=task.status.value,
+            revision=revision,
+            updated_at=_now_iso(),
+            updated_by_agent_id=actor_agent_id or task.owner_agent_id,
+        )
+    )
+    _insert_event(conn, task, event_type, revision=revision, actor_agent_id=actor_agent_id)
+    return 1
 
 
-def _task_to_row(t: CronTask) -> tuple[Any, ...]:
-    """Flatten a CronTask to a positional row for INSERT."""
-    fa = t.failure_alert
-    return (
-        t.id,
-        t.schedule.kind.value,
-        t.schedule.expr,
-        t.schedule.interval_seconds,
-        t.schedule.run_at,
-        t.prompt,
-        t.description,
-        int(t.recurring),
-        int(t.durable),
-        orjson.dumps(t.skills).decode(),
-        t.model,
-        t.timeout_seconds,
-        t.inactivity_timeout_seconds,
-        t.delivery.target,
-        int(t.delivery.on_failure),
-        t.delivery.silent_pattern,
-        t.session_id,
-        t.project_dir,
-        t.created_at,
-        t.last_fired_at,
-        t.next_fire_at,
-        t.status.value,
-        t.fire_count,
-        t.consecutive_failures,
-        t.max_age_seconds,
-        t.repeat.max_count,
-        t.repeat.max_duration_seconds,
-        t.repeat.until,
-        fa.after if fa else None,
-        fa.cooldown_seconds if fa else None,
-        fa.target if fa else None,
-        t.last_failure_alert_at,
-        t.running_by,
-        t.running_heartbeat,
+def _insert_event(
+    conn: Any,
+    task: CronTask,
+    event_type: str,
+    *,
+    revision: int,
+    actor_agent_id: str | None = None,
+) -> None:
+    payload = _json({"status": task.status.value, "event_type": event_type})
+    conn.execute(
+        tables.scheduled_task_events.insert().values(
+            task_id=task.id,
+            event_type=event_type,
+            revision=revision,
+            actor_agent_id=actor_agent_id or task.owner_agent_id,
+            owner_agent_id=task.owner_agent_id,
+            created_at=_now_iso(),
+            payload_hash=hashlib.sha256(payload.encode()).hexdigest(),
+        )
     )
 
 
-def _row_to_task(row: aiosqlite.Row) -> CronTask:
-    """Reconstruct a CronTask from a database row."""
-    fa_after = row["failure_alert_after"]
-    failure_alert = (
-        FailureAlertConfig(
-            after=fa_after,
-            cooldown_seconds=row["failure_alert_cooldown"] or 3600,
-            target=row["failure_alert_target"] or "session",
-        )
-        if fa_after is not None
-        else None
-    )
+def _task_from_legacy(item: dict[str, Any]) -> CronTask:
+    schedule_data = item.get("schedule")
+    if not isinstance(schedule_data, dict):
+        schedule_data = {"kind": "every", "interval_seconds": item.get("interval_seconds", 60)}
     return CronTask(
-        id=row["id"],
+        id=str(item.get("id") or item.get("task_id")),
+        owner_agent_id=str(item.get("owner_agent_id") or "primary"),
         schedule=Schedule(
-            kind=ScheduleKind(row["schedule_kind"]),
-            expr=row["schedule_expr"],
-            interval_seconds=row["schedule_interval"],
-            run_at=row["schedule_run_at"],
+            kind=ScheduleKind(str(schedule_data.get("kind", "every"))),
+            expr=str(schedule_data.get("expr") or ""),
+            interval_seconds=float(schedule_data.get("interval_seconds") or 0),
+            run_at=float(schedule_data.get("run_at") or 0),
         ),
-        prompt=row["prompt"],
-        description=row["description"],
-        recurring=bool(row["recurring"]),
-        durable=bool(row["durable"]),
-        skills=orjson.loads(row["skills"]),
-        model=row["model"],
-        timeout_seconds=row["timeout_seconds"],
-        inactivity_timeout_seconds=row["inactivity_timeout"],
+        prompt=str(item.get("prompt") or ""),
+        description=str(item.get("description") or ""),
+        recurring=bool(item.get("recurring", True)),
+        durable=True,
+        session_id=item.get("session_id"),
+        project_dir=item.get("project_dir"),
+        created_at=float(item.get("created_at") or time.time()),
+        next_fire_at=item.get("next_fire_at"),
+        status=CronTaskStatus(str(item.get("status") or CronTaskStatus.active.value)),
+    )
+
+
+def _schedule_payload(task: CronTask) -> dict[str, Any]:
+    failure_alert = task.failure_alert
+    return {
+        "kind": task.schedule.kind.value,
+        "expr": task.schedule.expr,
+        "interval_seconds": task.schedule.interval_seconds,
+        "run_at": task.schedule.run_at,
+        "recurring": task.recurring,
+        "last_fired_at": task.last_fired_at,
+        "next_fire_at": task.next_fire_at,
+        "fire_count": task.fire_count,
+        "consecutive_failures": task.consecutive_failures,
+        "repeat": {
+            "max_count": task.repeat.max_count,
+            "max_duration_seconds": task.repeat.max_duration_seconds,
+            "until": task.repeat.until,
+        },
+        "failure_alert": (
+            {
+                "after": failure_alert.after,
+                "cooldown_seconds": failure_alert.cooldown_seconds,
+                "target": failure_alert.target,
+            }
+            if failure_alert
+            else None
+        ),
+        "last_failure_alert_at": task.last_failure_alert_at,
+        "running_by": task.running_by,
+        "running_heartbeat": task.running_heartbeat,
+    }
+
+
+def _target_payload(task: CronTask) -> dict[str, Any]:
+    return {
+        "prompt": task.prompt,
+        "description": task.description,
+        "durable": task.durable,
+        "skills": task.skills,
+        "model": task.model,
+        "timeout_seconds": task.timeout_seconds,
+        "inactivity_timeout_seconds": task.inactivity_timeout_seconds,
+        "delivery": {
+            "target": task.delivery.target,
+            "on_failure": task.delivery.on_failure,
+            "silent_pattern": task.delivery.silent_pattern,
+        },
+        "session_id": task.session_id,
+        "project_dir": task.project_dir,
+        "max_age_seconds": task.max_age_seconds,
+    }
+
+
+def _row_to_task(row: Any) -> CronTask:
+    schedule_data = orjson.loads(row["schedule_json"])
+    target_data = orjson.loads(row["target_json"])
+    repeat_data = schedule_data.get("repeat") or {}
+    failure_alert_data = schedule_data.get("failure_alert")
+    delivery_data = target_data.get("delivery") or {}
+    return CronTask(
+        id=str(row["task_id"]),
+        owner_agent_id=str(row["owner_agent_id"]),
+        schedule=Schedule(
+            kind=ScheduleKind(schedule_data["kind"]),
+            expr=str(schedule_data.get("expr") or ""),
+            interval_seconds=float(schedule_data.get("interval_seconds") or 0),
+            run_at=float(schedule_data.get("run_at") or 0),
+        ),
+        prompt=str(target_data.get("prompt") or ""),
+        description=str(target_data.get("description") or ""),
+        recurring=bool(schedule_data.get("recurring", True)),
+        durable=bool(target_data.get("durable", True)),
+        skills=list(target_data.get("skills") or []),
+        model=target_data.get("model"),
+        timeout_seconds=float(target_data.get("timeout_seconds") or 1800),
+        inactivity_timeout_seconds=float(target_data.get("inactivity_timeout_seconds") or 600),
         delivery=DeliveryConfig(
-            target=row["delivery_target"],
-            on_failure=bool(row["delivery_on_failure"]),
-            silent_pattern=row["delivery_silent_pattern"],
+            target=str(delivery_data.get("target") or "session,acp"),
+            on_failure=bool(delivery_data.get("on_failure", True)),
+            silent_pattern=str(delivery_data.get("silent_pattern") or ""),
         ),
-        session_id=row["session_id"],
-        project_dir=row["project_dir"],
-        created_at=row["created_at"],
-        last_fired_at=row["last_fired_at"],
-        next_fire_at=row["next_fire_at"],
-        status=CronTaskStatus(row["status"]),
-        fire_count=row["fire_count"],
-        consecutive_failures=row["consecutive_failures"],
-        max_age_seconds=row["max_age_seconds"],
+        session_id=target_data.get("session_id"),
+        project_dir=target_data.get("project_dir"),
+        created_at=float(row["created_at"]),
+        last_fired_at=schedule_data.get("last_fired_at"),
+        next_fire_at=schedule_data.get("next_fire_at"),
+        status=CronTaskStatus(str(row["status"])),
+        fire_count=int(schedule_data.get("fire_count") or 0),
+        consecutive_failures=int(schedule_data.get("consecutive_failures") or 0),
         repeat=RepeatConfig(
-            max_count=row["repeat_max_count"],
-            max_duration_seconds=row["repeat_max_duration"],
-            until=row["repeat_until"],
+            max_count=repeat_data.get("max_count"),
+            max_duration_seconds=repeat_data.get("max_duration_seconds"),
+            until=repeat_data.get("until"),
         ),
-        failure_alert=failure_alert,
-        last_failure_alert_at=row["last_failure_alert_at"],
-        running_by=row["running_by"],
-        running_heartbeat=row["running_heartbeat"],
+        max_age_seconds=float(target_data.get("max_age_seconds") or 604800),
+        failure_alert=(
+            FailureAlertConfig(
+                after=int(failure_alert_data.get("after") or 3),
+                cooldown_seconds=float(failure_alert_data.get("cooldown_seconds") or 3600),
+                target=str(failure_alert_data.get("target") or "session"),
+            )
+            if isinstance(failure_alert_data, dict)
+            else None
+        ),
+        last_failure_alert_at=schedule_data.get("last_failure_alert_at"),
+        running_by=schedule_data.get("running_by"),
+        running_heartbeat=schedule_data.get("running_heartbeat"),
     )
 
 
-def _row_to_execution(row: aiosqlite.Row) -> CronExecution:
-    """Reconstruct a CronExecution from a database row."""
-    return CronExecution(
-        id=row["id"],
-        task_id=row["task_id"],
-        session_id=row["session_id"],
-        started_at=row["started_at"],
-        ended_at=row["ended_at"],
-        duration_ms=row["duration_ms"],
-        status=row["status"],
-        error=row["error"],
-        stop_reason=row["stop_reason"],
-        summary=row["summary"],
-        delivery_status=row["delivery_status"],
-        delivery_error=row["delivery_error"],
-    )
+def _json(payload: object) -> str:
+    return orjson.dumps(payload, option=orjson.OPT_SORT_KEYS).decode()
+
+
+def _now_iso() -> str:
+    return str(time.time())

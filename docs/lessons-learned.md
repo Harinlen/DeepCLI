@@ -30,6 +30,15 @@ wall twice.
 
 ## Async / Concurrency
 
+- **ASGI WebSocket apps cannot observe native pong in the current stack**:
+  Uvicorn 0.42 passes `ws_ping_interval` / `ws_ping_timeout` to the
+  `websockets` protocol, but Starlette applications only receive
+  `websocket.receive` and `websocket.disconnect` ASGI events. Native pong
+  keeps dead connections from lingering, but it is not an application-level
+  timestamp. Route freshness must therefore use observable runtime traffic
+  such as registration and successful runtime responses, while disconnect
+  unregisters the route.
+
 - **OpenAI-compatible SSE must not treat EOF as success unless `[DONE]` arrived**:
   a provider can close a chunked response mid-stream with an incomplete body,
   or end the SSE stream without the terminal marker.  Both are transport
@@ -83,7 +92,36 @@ wall twice.
   `--primary-token=<token>` / `--registration-token=<token>` for
   generated values.
 
+- **MCP stdio declarations need explicit normalization before SQLite
+  round-trip**: Claude Code-style stdio server entries may omit
+  `type`, but Mustang stores MCP declarations behind a Pydantic
+  discriminated union.  Normalize missing `type` to `stdio` at the
+  MCP schema boundary; otherwise legacy `mcp.yaml` imports can persist
+  fine but fail validation on the next ResourceStore startup.
+
+- **Config refresh does not imply subscriber signals.**  `ConfigManager
+  .refresh_from_resource_store()` updates already-materialized sections
+  from SQLite, but it is not the same path as owner `MutableSection.update()`
+  and does not emit `changed`.  Subsystems that cache parsed config, such
+  as ToolAuthorizer's `RuleStore`, need an explicit section revision check
+  before calls or they will keep stale policy after a ResourceStore refresh.
+
+- **Tool config must store stable secret refs, not compatibility names.**
+  WebFetch can keep legacy name lookup for operator ergonomics, but durable
+  config rows should persist the `secret:<uuid>` returned by SecretManager.
+  Otherwise rename-stable SecretStore semantics are bypassed even though
+  plaintext stays out of `config_sections`.
+
 ## Tool Contracts
+
+- **CLI slash dispatch stubs are not E2E evidence**: a CLI test that
+  replaces `managementRequest()` with an in-memory responder only proves
+  parser-to-method mapping.  It does not prove the real
+  `deepcli -> Access Router -> Runtime` route accepts that ACP method.
+  ResourceStore management commands owned by the Access Router
+  (`/agents`, `/gateways`, `/mcp`) need a Router `/session` WebSocket
+  probe that asserts the request is handled locally and does not leak
+  into the Runtime `agent.tools_request` fallback.
 
 - **CLI-visible runtime ACP methods must be tested through Agent Hub,
   not only Access-local dispatch**: the real supervised CLI path is
@@ -371,6 +409,109 @@ wall twice.
   but `Ctrl+T` can change old Thinking blocks split around tool calls.
   After mutating existing transcript components for a global visibility
   toggle, call `requestRender(true)` and cover it with a real PTY probe.
+
+- **Legacy global-resource import must be lazy from bootstrap managers.**
+  `apply_legacy_yaml_import()` imports Config/Flag SQLite backends, while
+  `ConfigManager` and `FlagManager` are exported from package
+  `__init__.py`.  Importing the legacy helper at manager module load time
+  creates a partial-initialization cycle during test collection.  Keep that
+  helper import inside `startup()` / `initialize()` or move the import
+  dependency out of the helper before making it eager.
+
+- **SecretStore migration cannot trust `user_version` alone.**  The legacy
+  sqlite3 `SecretManager` and the new UUID `SecretStore` both used schema
+  version 2 at one point, but their `secrets` table shapes are incompatible
+  (`name/value/type` versus `secret_id/name/value_ciphertext`).  Startup
+  must inspect the table columns, move the legacy DB aside, and import rows
+  into UUID records instead of assuming `PRAGMA user_version` proves schema
+  compatibility.
+
+- **Management ACP methods need both Access Router and Runtime routing.**
+  The Access-local `AcpSessionHandler` can dispatch Kernel-owned management
+  methods in tests, but real router mode forwards selected `_mustang.agent/*`
+  calls to the Primary Runtime.  Register new management methods in
+  `REQUEST_DISPATCH` and in the runtime `_deliver_router_acp` allowlist, or
+  the real subsystem path falls through to the wrong contract handler.
+
+- **Agent message management must stay at the Access Router boundary.**
+  Most management ACP methods can delegate to command services wherever their
+  owning subsystem lives, but `/agent send` needs the live `AccessRouter`
+  route table.  Do not route it through Agent Hub or a runtime-local manager;
+  tests/probes should assert `agent_hub_forward_count == 0` and that delivery
+  used `AccessRouter.deliver_turn()`.
+
+- **Agent state-dir cleanup must be narrowly owned.**  Agent definitions can
+  technically store any `state_dir`, but delete-time recursive cleanup is only
+  safe for the manager-owned path `AgentManager.home / "agents" / agent_id`.
+  External state dirs should leave `state_dir_deletion_status=pending` with a
+  cleanup error instead of deleting arbitrary user paths.
+
+- **Schedule ResourceStore migration must remove hidden direct-SQL paths.**
+  `CronScheduler` previously reached through `CronStore.db` for claims,
+  heartbeats, stale-claim cleanup, and old execution reaping.  Moving durable
+  schedule truth to `scheduled_tasks` is incomplete if scheduler code can still
+  write old `cron_tasks` tables directly.  Keep scheduler persistence behind
+  `CronStore` methods so ResourceStore remains the only task declaration truth.
+
+- **Aggregate probes must exercise non-empty ResourceStore revision paths.**
+  `/flags set` can pass against an empty ResourceStore row without an
+  `expectedRevision`, but the real management path usually mutates an existing
+  startup snapshot row.  Closure probes should include pre-existing rows and
+  pass the observed revision, so CAS conflicts are tested instead of hidden.
+
+- **CLI thin layers must not invent absent Kernel methods.**  The global
+  ResourceStore CLI bridge can parse slash commands and call existing ACP
+  methods, but `/gateways create/delete` had no Kernel ACP surface when the CLI
+  bridge landed.  Report those commands as unsupported until the Kernel owns
+  real create/delete semantics; do not emulate them with direct SQLite writes
+  or misleading enable/disable aliases.
+
+- **Gateway delete is routing metadata cleanup, not Agent cleanup.**  Access
+  Router gateway declarations live in `access_adapters`; gateway/channel routes
+  live in `access_channel_bindings`.  Deleting a gateway should remove the
+  adapter declaration, append an adapter event, and disable that gateway's
+  channel bindings.  It must not touch Agent definitions, workspaces, or the
+  reserved `agent_bindings` table.
+
+- **Skill declarations are not skill content.**  `parse_skill_manifest()` can
+  derive a missing description from the Markdown body, but ResourceStore global
+  skill declarations must persist only manifest/index metadata.  When importing
+  global skill declarations, avoid persisting body-derived text, `SKILL.md`
+  body content, supporting file contents, invoked-skill cache, or secret setup
+  defaults; the durable row should remain a revisioned index pointing at
+  filesystem content, not a copy of the skill.
+
+- **Hook declarations are trigger metadata, not handler state.**  ResourceStore
+  hook rows should contain manifest fields, trigger bindings, enabled state,
+  and handler path pointers only.  `handler.py` bodies are trusted runtime code
+  loaded from disk, and `HookEventCtx.messages` / execution output are runtime
+  state.  Persisting either as declaration truth leaks implementation details
+  and makes manifest drift semantics impossible to reason about.
+
+- **Memory declarations are policy, not memory.**  The durable global memory
+  declaration can own namespace enablement, disposition, retention policy, and
+  index policy.  Actual memory entries, markdown bodies, embeddings/vector
+  files, generated indexes, recall caches, summaries, runtime notes, and logs
+  are memory data or runtime state.  Keeping those out of `config_sections`
+  prevents ResourceStore exports from becoming hidden memory dumps.
+
+- **Prompt declarations are indexes, not prompt text.**  The durable prompt
+  declaration should track prompt ids, source paths, enabled state, routing
+  metadata, and placeholders.  Prompt bodies, rendered prompt text, session
+  prompt snapshots, and render caches must stay file/runtime data; otherwise a
+  ResourceStore export can leak prompt content or per-session secrets.
+
+- **MCP management writes declarations, not live sessions.**  Global MCP
+  create/update/delete should mutate only the ResourceStore declaration row and
+  report after-restart semantics.  Runtime connection/session state remains
+  owned by `MCPManager`; trying to make the management surface hot-edit live
+  connections risks mixing durable config with transient transport state.
+
+- **Final migration closure should orchestrate existing probes.**  When a plan
+  already has source-backed subsystem probes, the final monolithic target should
+  run those probes as subprocesses and assert their public markers instead of
+  copying their setup logic.  That keeps one acceptance command while avoiding
+  a second, drifting implementation of the same closure seams.
 
 ---
 

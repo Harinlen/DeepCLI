@@ -55,4 +55,18 @@ class GlobalImportResponse(AcpModel):
     conflicts: list[str]
     errors: list[str]
     warnings: list[str]
+    unavailable: bool = False
     meta: dict[str, Any] | None = None
+
+
+class GlobalRestoreRequest(AcpModel):
+    actor_agent_id: str = "primary"
+    backup_id_or_path: str
+    confirm: bool = False
+
+
+class GlobalRestoreResponse(AcpModel):
+    restored: bool = False
+    restarted_required: bool = False
+    unavailable: bool = True
+    message: str

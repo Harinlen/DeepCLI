@@ -5,16 +5,23 @@ from __future__ import annotations
 import asyncio
 import os
 import secrets
+import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
+import kernel
 from kernel.access_router.router import AccessRouter, RouteUnavailable
-from kernel.access_router.schemas import DeliverTurnRequest, RuntimeAcpRequest, RuntimePing, RuntimeRegisterRequest
+from kernel.access_router.schemas import (
+    DeliverTurnRequest,
+    RuntimeAcpRequest,
+    RuntimeRegisterRequest,
+)
 
-_RUNTIME_HEARTBEAT_INTERVAL_SECONDS = 5.0
+_BOOT_TIME = time.time()
+_LOCAL_MANAGEMENT_TARGETS = {"agents", "gateways", "mcp"}
 
 
 def create_app(router: AccessRouter | None = None, *, resource_home: str | None = None) -> FastAPI:
@@ -22,14 +29,21 @@ def create_app(router: AccessRouter | None = None, *, resource_home: str | None 
     app = FastAPI(title="DeepCLI Access Router")
     token = os.environ.get("MUSTANG_ACCESS_ROUTER_TOKEN") or secrets.token_urlsafe(32)
     session_token = os.environ.get("MUSTANG_ACCESS_ROUTER_SESSION_TOKEN")
+    resource_home_path = Path(resource_home) if resource_home else None
     app.state.router = router or AccessRouter(
         auth_token=token,
-        resource_home=Path(resource_home) if resource_home else None,
+        resource_home=resource_home_path,
     )
+    app.state.resource_home = resource_home_path
 
     @app.get("/health")
     async def health() -> dict[str, object]:
-        return {"ok": True}
+        return {
+            "ok": True,
+            "name": "deepcli-access-router",
+            "version": kernel.__version__,
+            "boot_time": _BOOT_TIME,
+        }
 
     @app.get("/ready")
     async def ready() -> dict[str, object]:
@@ -53,12 +67,7 @@ def create_app(router: AccessRouter | None = None, *, resource_home: str | None 
 
     @app.get("/registered_agents")
     async def registered_agents() -> dict[str, object]:
-        return {
-            "agents": [
-                agent.model_dump()
-                for agent in app.state.router.registered_agents()
-            ]
-        }
+        return {"agents": [agent.model_dump() for agent in app.state.router.registered_agents()]}
 
     @app.get("/route_status/{agent_id}")
     async def route_status(agent_id: str) -> dict[str, object]:
@@ -82,39 +91,53 @@ def create_app(router: AccessRouter | None = None, *, resource_home: str | None 
                     result = await _route_session_payload(app.state.router, payload, ws)
                     if method == "initialize":
                         initialized = True
-                    await ws.send_json({"jsonrpc": "2.0", "id": request_id, "result": result})
+                    if not await _send_json_or_closed(
+                        ws,
+                        {"jsonrpc": "2.0", "id": request_id, "result": result},
+                    ):
+                        return
                 except RouteUnavailable as exc:
-                    await ws.send_json(
+                    if not await _send_json_or_closed(
+                        ws,
                         {
                             "jsonrpc": "2.0",
                             "id": request_id,
                             "error": {"code": "route_unavailable", "message": str(exc)},
-                        }
-                    )
+                        },
+                    ):
+                        return
                 except MethodNotFound as exc:
-                    await ws.send_json(
+                    if not await _send_json_or_closed(
+                        ws,
                         {
                             "jsonrpc": "2.0",
                             "id": request_id,
                             "error": {"code": -32601, "message": f"Method not found: {exc}"},
-                        }
-                    )
+                        },
+                    ):
+                        return
                 except ProtocolNotInitialized as exc:
-                    await ws.send_json(
+                    if not await _send_json_or_closed(
+                        ws,
                         {
                             "jsonrpc": "2.0",
                             "id": request_id,
                             "error": {"code": -32600, "message": str(exc)},
-                        }
-                    )
+                        },
+                    ):
+                        return
+                except WebSocketDisconnect:
+                    raise
                 except Exception as exc:
-                    await ws.send_json(
+                    if not await _send_json_or_closed(
+                        ws,
                         {
                             "jsonrpc": "2.0",
                             "id": request_id,
                             "error": {"code": type(exc).__name__, "message": str(exc)},
-                        }
-                    )
+                        },
+                    ):
+                        return
         except WebSocketDisconnect:
             return
 
@@ -133,37 +156,18 @@ def create_app(router: AccessRouter | None = None, *, resource_home: str | None 
                 connection.deliver_turn,
                 connection.deliver_acp,
             )
-            await ws.send_json({"ok": True, "result": result.model_dump()})
-            heartbeat = asyncio.create_task(
-                _heartbeat_runtime(app.state.router, connection, result.connection_id)
+            connection.set_activity_callback(
+                lambda: app.state.router.touch_runtime(result.connection_id)
             )
+            await ws.send_json({"ok": True, "result": result.model_dump()})
             try:
                 await connection.wait_closed()
             finally:
-                heartbeat.cancel()
-                try:
-                    await heartbeat
-                except asyncio.CancelledError:
-                    pass
+                app.state.router.unregister_runtime(result.connection_id)
         except WebSocketDisconnect:
             return
 
     return app
-
-
-async def _heartbeat_runtime(
-    router: AccessRouter,
-    connection: "_RuntimeWebSocketClient",
-    connection_id: str,
-) -> None:
-    while True:
-        await asyncio.sleep(_RUNTIME_HEARTBEAT_INTERVAL_SECONDS)
-        try:
-            await connection.ping()
-            router.ping(RuntimePing(connection_id=connection_id))
-        except Exception:
-            connection.mark_closed()
-            return
 
 
 async def _route_session_payload(
@@ -178,19 +182,77 @@ async def _route_session_payload(
     if method in {None, "_mustang.client/turn"}:
         request = DeliverTurnRequest.model_validate(params)
         return await router.deliver_turn(request, _client_request_proxy(client_ws))
+    resource_home = getattr(client_ws.app.state, "resource_home", None)
+    if isinstance(method, str) and resource_home is not None:
+        local_result = await _route_local_management_payload(
+            router=router,
+            resource_home=resource_home,
+            method=method,
+            params=params,
+        )
+        if local_result is not None:
+            return local_result
     acp_request = RuntimeAcpRequest(
         agent_id=str(params.get("agent_id") or params.get("agentId") or "primary"),
         method=str(method),
         params={
-            str(key): value
-            for key, value in params.items()
-            if key not in {"agent_id", "agentId"}
+            str(key): value for key, value in params.items() if key not in {"agent_id", "agentId"}
         },
         session_id=str(params["session_id"]) if "session_id" in params else None,
         request_id=payload.get("id"),
         idempotency_key=_idempotency_key(params),
     )
     return await router.deliver_acp(acp_request, _client_request_proxy(client_ws))
+
+
+async def _route_local_management_payload(
+    *,
+    router: AccessRouter,
+    resource_home: Path,
+    method: str,
+    params: dict[str, Any],
+) -> dict[str, object] | None:
+    """Handle ResourceStore management methods owned by the Access Router."""
+    from kernel.access_router.gateway_commands import GatewayCommandService
+    from kernel.access_router.repository import AccessRouterRepository
+    from kernel.agent_hub.manager.command_surface import AgentCommandService
+    from kernel.agent_hub.manager.manager import AgentManager
+    from kernel.agents.mustang.mcp.command_surface import MCPCommandService
+    from kernel.core.protocol.acp.routing import REQUEST_DISPATCH
+
+    spec = REQUEST_DISPATCH.get(method)
+    if spec is None or spec.target not in _LOCAL_MANAGEMENT_TARGETS:
+        return None
+
+    repo: AccessRouterRepository | None = None
+    manager: AgentManager | None = None
+    try:
+        handler: object
+        if spec.target == "mcp":
+            handler = MCPCommandService(resource_home)
+        else:
+            repo = AccessRouterRepository.open(resource_home)
+            if spec.target == "gateways":
+                handler = GatewayCommandService(repo)
+            else:
+                manager = AgentManager(
+                    home=resource_home,
+                    route_status_reader=router.route_status,
+                )
+                manager.startup()
+                handler = AgentCommandService(
+                    manager=manager,
+                    gateway_repository=repo,
+                    router=router,
+                )
+        request_params = spec.params_type.model_validate(params)
+        result = await spec.handler(handler, None, request_params)  # type: ignore[arg-type]
+        return result.model_dump(by_alias=True)
+    finally:
+        if manager is not None:
+            manager.close()
+        if repo is not None:
+            repo.close()
 
 
 def _idempotency_key(params: dict[str, Any]) -> str | None:
@@ -210,24 +272,28 @@ def _client_request_proxy(
     async def _proxy(method: str, params: dict[str, object]) -> dict[str, Any]:
         nonlocal request_counter
         if method.startswith("__notify__:"):
-            await client_ws.send_json(
+            if not await _send_json_or_closed(
+                client_ws,
                 {
                     "jsonrpc": "2.0",
                     "method": method.removeprefix("__notify__:"),
                     "params": params,
-                }
-            )
+                },
+            ):
+                raise RuntimeError("client websocket closed")
             return {}
         request_counter += 1
         request_id = request_counter
-        await client_ws.send_json(
+        if not await _send_json_or_closed(
+            client_ws,
             {
                 "jsonrpc": "2.0",
                 "id": request_id,
                 "method": method,
                 "params": params,
-            }
-        )
+            },
+        ):
+            raise RuntimeError("client websocket closed")
         response: dict[str, Any] = await client_ws.receive_json()
         if response.get("id") != request_id:
             raise RuntimeError("client request response id mismatch")
@@ -237,6 +303,19 @@ def _client_request_proxy(
         return result if isinstance(result, dict) else {}
 
     return _proxy
+
+
+async def _send_json_or_closed(ws: WebSocket, payload: dict[str, Any]) -> bool:
+    """Send a JSON payload unless the peer has already closed the websocket."""
+    try:
+        await ws.send_json(payload)
+        return True
+    except WebSocketDisconnect:
+        return False
+    except RuntimeError as exc:
+        if "close message has been sent" in str(exc):
+            return False
+        raise
 
 
 def _session_token_matches(ws: WebSocket, token: str) -> bool:
@@ -255,11 +334,17 @@ class _RuntimeWebSocketClient:
         self._lock = asyncio.Lock()
         self._counter = 0
         self._closed = asyncio.Event()
+        self._on_activity: Callable[[], None] | None = None
+
+    def set_activity_callback(self, callback: Callable[[], None]) -> None:
+        """Record a callback for application-observable runtime traffic."""
+        self._on_activity = callback
 
     async def deliver_turn(
         self,
         request: DeliverTurnRequest,
-        client_request_proxy: Callable[[str, dict[str, object]], Awaitable[dict[str, Any]]] | None = None,
+        client_request_proxy: Callable[[str, dict[str, object]], Awaitable[dict[str, Any]]]
+        | None = None,
     ) -> dict[str, object]:
         async with self._lock:
             self._counter += 1
@@ -277,7 +362,8 @@ class _RuntimeWebSocketClient:
     async def deliver_acp(
         self,
         request: RuntimeAcpRequest,
-        client_request_proxy: Callable[[str, dict[str, object]], Awaitable[dict[str, Any]]] | None = None,
+        client_request_proxy: Callable[[str, dict[str, object]], Awaitable[dict[str, Any]]]
+        | None = None,
     ) -> dict[str, object]:
         async with self._lock:
             self._counter += 1
@@ -299,6 +385,7 @@ class _RuntimeWebSocketClient:
     ) -> dict[str, object]:
         while True:
             response: dict[str, Any] = await self._ws.receive_json()
+            self._touch_activity()
             if response.get("id") == request_id:
                 if "error" in response:
                     error = response["error"]
@@ -337,28 +424,28 @@ class _RuntimeWebSocketClient:
                 )
 
     async def wait_closed(self) -> None:
-        await self._closed.wait()
+        while not self._closed.is_set():
+            async with self._lock:
+                try:
+                    await asyncio.wait_for(self._ws.receive_json(), timeout=0.1)
+                    self._touch_activity()
+                except TimeoutError:
+                    pass
+                except WebSocketDisconnect:
+                    self.mark_closed()
+                except RuntimeError as exc:
+                    if "disconnect" in str(exc).lower() or "closed" in str(exc).lower():
+                        self.mark_closed()
+                    else:
+                        raise
+            await asyncio.sleep(0)
 
     def mark_closed(self) -> None:
         self._closed.set()
 
-    async def ping(self) -> None:
-        async with self._lock:
-            self._counter += 1
-            request_id = f"ping-{self._counter}"
-            await self._ws.send_json(
-                {
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "method": "_mustang.runtime/ping",
-                    "params": {},
-                }
-            )
-            response: dict[str, Any] = await self._ws.receive_json()
-            if response.get("id") != request_id:
-                raise RuntimeError("runtime ping response id mismatch")
-            if "error" in response:
-                raise RuntimeError(str(response["error"]))
+    def _touch_activity(self) -> None:
+        if self._on_activity is not None:
+            self._on_activity()
 
 
 class MethodNotFound(RuntimeError):

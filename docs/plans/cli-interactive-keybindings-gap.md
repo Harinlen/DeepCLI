@@ -178,3 +178,19 @@ Phase D0.5 — CLI Input Contract and Keybinding Parity
   - `src/cli/tests/test_autocomplete_sort.ts`
   - `src/cli/tests/test_input_controller_r4.ts`
   - `src/cli/tests/test_agent_session_adapter.ts`
+
+## 2026-05-18 更新记录
+
+- 修复 fallback raw key parser：现在覆盖 legacy Alt sequences、CSI-u modified
+  keys、modified cursor keys。真实终端发出的 `Alt+P`、`Alt+Shift+P`、
+  `Ctrl+Enter`、`Shift+Ctrl+P`、`Alt+Up`、`Shift+Tab` 等序列会匹配
+  已配置的 app keybindings。
+- 补 `src/cli/tests/test_cli_shortcuts_matrix.ts`，直接用 raw terminal
+  sequences 覆盖 hotkeys 面板中的 app shortcuts、custom shortcut handlers
+  和 `Ctrl+D` 非空输入保护。
+- 修复 startup 无 active session 时 `!` / `$` 本地执行只渲染 UI、不发送
+  ACP execute 的问题。Bash/Python execution 现在和 prompt 一样会创建
+  pending session，并复用该 session 发送 `_mustang.agent/session/execute_*`。
+- `probe_phase_b_pty.ts` 已重新验证真实 PTY 键盘路径：`!`、`$`、`Ctrl+O`、
+  `Ctrl+T`、permission overlay、session selector、model editor 均通过 fake
+  ACP kernel 端到端观测。

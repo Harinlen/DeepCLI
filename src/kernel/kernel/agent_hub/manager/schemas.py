@@ -66,6 +66,8 @@ class RuntimeStatus(BaseModel):
     route_status: str | None = None
     pid: int | None = None
     process_running: bool = False
+    runtime_heartbeat_fresh: bool | None = None
+    heartbeat_age_seconds: float | None = None
     healthy: bool = False
 
 
@@ -75,6 +77,10 @@ class AgentHealth(BaseModel):
     agent_id: str
     healthy: bool
     reason: str
+    process_running: bool = False
+    route_status: str | None = None
+    runtime_heartbeat_fresh: bool | None = None
+    heartbeat_age_seconds: float | None = None
 
 
 class ManagementGrant(BaseModel):
@@ -99,6 +105,8 @@ class DeleteAgentResult(BaseModel):
     agent_id: str
     deleted: bool
     workspace_deleted: bool = False
+    state_dir_deletion_status: str | None = None
+    state_dir_cleanup_error: str | None = None
 
 
 class AgentDirectorySnapshot(BaseModel):

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import orjson
 import sqlalchemy as sa
+import shutil
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -69,6 +70,7 @@ class AgentManager:
         """Open ResourceStore and bootstrap the primary Agent definition."""
         self.home.mkdir(parents=True, exist_ok=True)
         self._store = ResourceStore.open(self.home)
+        self._retry_pending_state_dir_cleanup()
         if self.get("primary") is None:
             self.create(
                 CreateAgentSpec(
@@ -226,7 +228,7 @@ class AgentManager:
         """Soft-delete a durable Agent definition."""
         if not confirm:
             raise PermissionError("delete requires --confirm")
-        self._require_active(agent_id)
+        definition = self._require_active(agent_id)
 
         def _write(conn: Any) -> DeleteAgentResult:
             current = conn.execute(
@@ -242,16 +244,91 @@ class AgentManager:
                 .values(
                     status="deleted",
                     deleted_at=_now_iso(),
+                    state_dir_deletion_status="pending",
                     revision=expected_revision + 1,
                     updated_at=_now_iso(),
                     updated_by_agent_id=actor_agent_id,
                 )
             )
+            conn.execute(
+                tables.access_channel_bindings.update()
+                .where(
+                    tables.access_channel_bindings.c.target_agent_id == agent_id,
+                    tables.access_channel_bindings.c.enabled == 1,
+                )
+                .values(
+                    enabled=0,
+                    revision=tables.access_channel_bindings.c.revision + 1,
+                    updated_at=_now_iso(),
+                    updated_by_agent_id=actor_agent_id,
+                )
+            )
+            conn.execute(
+                tables.management_grants.update()
+                .where(
+                    tables.management_grants.c.subject_agent_id == agent_id,
+                    tables.management_grants.c.revoked_at.is_(None),
+                )
+                .values(revoked_at=_now_iso())
+            )
+            schedule_rows = conn.execute(
+                sa.select(
+                    tables.scheduled_tasks.c.task_id,
+                    tables.scheduled_tasks.c.revision,
+                    tables.scheduled_tasks.c.schedule_json,
+                ).where(
+                    tables.scheduled_tasks.c.owner_agent_id == agent_id,
+                    tables.scheduled_tasks.c.status == "active",
+                )
+            ).fetchall()
+            for row in schedule_rows:
+                revision = int(row["revision"]) + 1
+                schedule_json = orjson.loads(row["schedule_json"])
+                if isinstance(schedule_json, dict):
+                    schedule_json["next_fire_at"] = None
+                conn.execute(
+                    tables.scheduled_tasks.update()
+                    .where(tables.scheduled_tasks.c.task_id == row["task_id"])
+                    .values(
+                        status="paused",
+                        schedule_json=_json(schedule_json),
+                        revision=revision,
+                        updated_at=_now_iso(),
+                        updated_by_agent_id=actor_agent_id,
+                    )
+                )
+                conn.execute(
+                    tables.scheduled_task_events.insert().values(
+                        task_id=row["task_id"],
+                        event_type="schedule.disabled_for_agent",
+                        revision=revision,
+                        actor_agent_id=actor_agent_id,
+                        owner_agent_id=agent_id,
+                        created_at=_now_iso(),
+                        payload_hash=None,
+                    )
+                )
             _bump_directory_revision(conn)
-            return DeleteAgentResult(agent_id=agent_id, deleted=True)
+            return DeleteAgentResult(
+                agent_id=agent_id,
+                deleted=True,
+                state_dir_deletion_status="pending",
+            )
 
         self.stop(agent_id, actor_agent_id=actor_agent_id, missing_ok=True)
-        return self._require_store().write_tx(_write)
+        result = self._require_store().write_tx(_write)
+        cleanup_error = self._cleanup_state_dir_for_deleted_agent(
+            agent_id=agent_id,
+            state_dir=Path(definition.state_dir),
+        )
+        if cleanup_error is None:
+            self._mark_state_dir_deletion_status(
+                agent_id,
+                "deleted",
+                actor_agent_id=actor_agent_id,
+            )
+            return result.model_copy(update={"state_dir_deletion_status": "deleted"})
+        return result.model_copy(update={"state_dir_cleanup_error": cleanup_error})
 
     def routing_snapshot(self) -> AgentDirectorySnapshot:
         """Return current routing directory revision and active agents."""
@@ -277,7 +354,8 @@ class AgentManager:
             )
             process = spawn_runtime(launch)
             self._processes[agent_id] = process
-        route_status = self._route_status(agent_id)
+        route_health = self._route_health(agent_id)
+        route_status = route_health["status"]
         self._write_runtime_status(
             agent_id,
             desired_state="running",
@@ -293,7 +371,11 @@ class AgentManager:
             route_status=route_status,
             pid=process.pid,
             process_running=process_running,
-            healthy=process_running and route_status == "registered",
+            runtime_heartbeat_fresh=route_health["fresh"],
+            heartbeat_age_seconds=route_health["age"],
+            healthy=process_running
+            and route_status == "registered"
+            and route_health["fresh"] is not False,
         )
 
     def stop(
@@ -304,7 +386,8 @@ class AgentManager:
         missing_ok: bool = False,
     ) -> RuntimeStatus:
         """Stop one Agent Runtime process owned by this Manager."""
-        if self.get(agent_id) is None:
+        definition = self.get(agent_id)
+        if definition is None:
             if missing_ok:
                 return RuntimeStatus(
                     agent_id=agent_id,
@@ -312,6 +395,15 @@ class AgentManager:
                     observed_state="missing",
                 )
             raise KeyError(f"Unknown agent: {agent_id}")
+        if definition.deleted_at is not None:
+            self._processes.pop(agent_id, None)
+            return RuntimeStatus(
+                agent_id=agent_id,
+                desired_state="stopped",
+                observed_state="deleted",
+                process_running=False,
+                healthy=False,
+            )
         process = self._processes.pop(agent_id, None)
         if process is not None and process.poll() is None:
             process.terminate()
@@ -339,16 +431,70 @@ class AgentManager:
     def health(self, agent_id: str) -> AgentHealth:
         """Combine process state and Access Router route status."""
         definition = self.get(agent_id)
-        if definition is None or definition.deleted_at is not None:
+        if definition is None:
             raise KeyError(f"Unknown agent: {agent_id}")
+        if definition.deleted_at is not None:
+            return AgentHealth(
+                agent_id=agent_id,
+                healthy=False,
+                reason="deleted",
+                process_running=False,
+                route_status="deleted",
+                runtime_heartbeat_fresh=False,
+            )
         process = self._processes.get(agent_id)
         process_running = process is not None and process.poll() is None
-        route_status = self._route_status(agent_id)
+        route_health = self._route_health(agent_id)
+        route_status = route_health["status"]
         if not process_running:
-            return AgentHealth(agent_id=agent_id, healthy=False, reason="process_not_running")
+            return AgentHealth(
+                agent_id=agent_id,
+                healthy=False,
+                reason="process_not_running",
+                process_running=False,
+                route_status=route_status,
+                runtime_heartbeat_fresh=route_health["fresh"],
+                heartbeat_age_seconds=route_health["age"],
+            )
+        if route_status in {None, "unavailable"}:
+            return AgentHealth(
+                agent_id=agent_id,
+                healthy=False,
+                reason="route_unavailable",
+                process_running=True,
+                route_status=route_status,
+                runtime_heartbeat_fresh=False,
+                heartbeat_age_seconds=route_health["age"],
+            )
+        if route_status == "stale" or route_health["fresh"] is False:
+            return AgentHealth(
+                agent_id=agent_id,
+                healthy=False,
+                reason="heartbeat_stale",
+                process_running=True,
+                route_status=route_status,
+                runtime_heartbeat_fresh=False,
+                heartbeat_age_seconds=route_health["age"],
+            )
         if route_status != "registered":
-            return AgentHealth(agent_id=agent_id, healthy=False, reason="route_not_registered")
-        return AgentHealth(agent_id=agent_id, healthy=True, reason="ok")
+            return AgentHealth(
+                agent_id=agent_id,
+                healthy=False,
+                reason="route_not_registered",
+                process_running=True,
+                route_status=route_status,
+                runtime_heartbeat_fresh=route_health["fresh"],
+                heartbeat_age_seconds=route_health["age"],
+            )
+        return AgentHealth(
+            agent_id=agent_id,
+            healthy=True,
+            reason="ok",
+            process_running=True,
+            route_status=route_status,
+            runtime_heartbeat_fresh=True,
+            heartbeat_age_seconds=route_health["age"],
+        )
 
     def set_route_status(self, agent_id: str, route_status: str) -> None:
         """Record route status observed from Access Router."""
@@ -363,6 +509,7 @@ class AgentManager:
 
     def list_grants(self, agent_id: str | None = None) -> tuple[ManagementGrant, ...]:
         """List non-revoked management grants."""
+
         def _read(conn: Any) -> list[Any]:
             stmt = sa.select(tables.management_grants).where(
                 tables.management_grants.c.revoked_at.is_(None)
@@ -511,8 +658,11 @@ class AgentManager:
         return int(row["value"]) if row is not None else 0
 
     def _route_status(self, agent_id: str) -> str | None:
+        return self._route_health(agent_id)["status"]
+
+    def _route_health(self, agent_id: str) -> dict[str, Any]:
         if self._route_status_reader is not None:
-            return self._route_status_reader(agent_id)
+            return _normalise_route_status(self._route_status_reader(agent_id))
         row = self._require_store().read_tx(
             lambda conn: conn.execute(
                 sa.select(tables.agent_runtime_status.c.route_status).where(
@@ -520,7 +670,8 @@ class AgentManager:
                 )
             ).fetchone()
         )
-        return str(row["route_status"]) if row is not None and row["route_status"] else None
+        status = str(row["route_status"]) if row is not None and row["route_status"] else None
+        return _normalise_route_status(status)
 
     def _write_runtime_status(
         self,
@@ -559,6 +710,69 @@ class AgentManager:
 
         self._require_store().write_tx(_write)
 
+    def _retry_pending_state_dir_cleanup(self) -> None:
+        """Retry cleanup for deleted Agents left pending by a previous run."""
+        rows = self._require_store().read_tx(
+            lambda conn: conn.execute(
+                sa.select(
+                    tables.agent_definitions.c.agent_id,
+                    tables.agent_definitions.c.state_dir,
+                ).where(
+                    tables.agent_definitions.c.status == "deleted",
+                    tables.agent_definitions.c.state_dir_deletion_status == "pending",
+                )
+            ).fetchall()
+        )
+        for row in rows:
+            error = self._cleanup_state_dir_for_deleted_agent(
+                agent_id=str(row["agent_id"]),
+                state_dir=Path(str(row["state_dir"])),
+            )
+            if error is None:
+                self._mark_state_dir_deletion_status(
+                    str(row["agent_id"]),
+                    "deleted",
+                    actor_agent_id="system",
+                )
+
+    def _cleanup_state_dir_for_deleted_agent(self, *, agent_id: str, state_dir: Path) -> str | None:
+        """Remove only manager-owned Agent state directories."""
+        try:
+            resolved = state_dir.resolve()
+            expected = (self.home / "agents" / agent_id).resolve()
+            if resolved != expected:
+                return f"state_dir cleanup skipped outside manager-owned path: {state_dir}"
+            definition = self.get(agent_id)
+            workspace = definition.workspace if definition is not None else None
+            if workspace is not None and resolved == Path(workspace).resolve():
+                return "state_dir cleanup refused because it equals workspace"
+            if not resolved.exists():
+                return None
+            shutil.rmtree(resolved)
+            return None
+        except Exception as exc:
+            return str(exc)
+
+    def _mark_state_dir_deletion_status(
+        self,
+        agent_id: str,
+        status: str,
+        *,
+        actor_agent_id: str,
+    ) -> None:
+        now = _now_iso()
+        self._require_store().write_tx(
+            lambda conn: conn.execute(
+                tables.agent_definitions.update()
+                .where(tables.agent_definitions.c.agent_id == agent_id)
+                .values(
+                    state_dir_deletion_status=status,
+                    updated_at=now,
+                    updated_by_agent_id=actor_agent_id,
+                )
+            )
+        )
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -584,6 +798,34 @@ def _definition_from_row(row: Any) -> AgentDefinitionRecord:
 
 def _grant_from_row(row: Any) -> ManagementGrant:
     return ManagementGrant.model_validate(dict(row._mapping))
+
+
+def _normalise_route_status(value: Any) -> dict[str, Any]:
+    """Convert Access Router route projections into Manager health inputs."""
+    if value is None:
+        return {"status": None, "fresh": None, "age": None}
+    if isinstance(value, str):
+        return {
+            "status": value,
+            "fresh": True if value == "registered" else False,
+            "age": None,
+        }
+    if hasattr(value, "model_dump"):
+        value = value.model_dump()
+    if isinstance(value, dict):
+        status = value.get("status")
+        fresh = value.get("heartbeat_fresh")
+        if fresh is None:
+            fresh = value.get("runtime_heartbeat_fresh")
+        if fresh is None and status is not None:
+            fresh = status == "registered"
+        age = value.get("heartbeat_age_seconds")
+        return {
+            "status": str(status) if status is not None else None,
+            "fresh": bool(fresh) if fresh is not None else None,
+            "age": float(age) if isinstance(age, (int, float)) else None,
+        }
+    return {"status": str(value), "fresh": None, "age": None}
 
 
 def _bump_directory_revision(conn: Any) -> None:

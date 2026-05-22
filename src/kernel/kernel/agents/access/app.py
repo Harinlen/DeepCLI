@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import cast
@@ -92,7 +92,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     # --- 0. FlagManager (fatal on failure) ---
     # Without flags we cannot decide which optional subsystems to
     # load, so a failure here aborts kernel boot.
-    flags = FlagManager()
+    home = user_home()
+    flags = cast(FlagManager, _construct_with_resource_home(FlagManager, home))
     try:
         await flags.initialize()
     except Exception:
@@ -130,7 +131,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # --- 2. ConfigManager (fatal on failure) ---
     # Every regular subsystem reads its config from here.
-    config = ConfigManager(secret_resolver=secrets.get)
+    config = ConfigManager(secret_resolver=secrets.get, resource_home=home)
     try:
         await config.startup()
     except Exception:
@@ -147,7 +148,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     for _d in [user_path("prompts"), Path.cwd() / ".mustang" / "prompts"]:
         if _d.is_dir():
             _pm_user_dirs.append(_d)
-    prompts = PromptManager(user_dirs=_pm_user_dirs or None)
+    prompts = PromptManager(user_dirs=_pm_user_dirs or None, resource_home=home)
     try:
         prompts.load()
     except Exception:
@@ -185,7 +186,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.module_table = module_table
     primary_definition = default_primary_agent_definition(
-        home=user_home(),
+        home=home,
         workspace=str(Path.cwd()),
     )
     agent_hub = AgentHub(
@@ -245,6 +246,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         # ConfigManager persists section updates synchronously.  SecretManager
         # owns a SQLite handle and must always release it.
+        config.close()
+        flags.close()
         secrets.close()
 
 
@@ -268,3 +271,13 @@ def create_app() -> FastAPI:
     app.include_router(router)
 
     return app
+
+
+def _construct_with_resource_home(factory: Callable[..., object], home: Path) -> object:
+    """Construct bootstrap services while preserving test factory injection."""
+    try:
+        return factory(resource_home=home)
+    except TypeError as exc:
+        if "resource_home" not in str(exc):
+            raise
+        return factory()

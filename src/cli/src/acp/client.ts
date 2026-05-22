@@ -96,6 +96,7 @@ type DisconnectHandler = (error: KernelDisconnected) => void;
 type ReconnectHandler = () => void;
 export type KernelConnectionState = "connected" | "connecting" | "disconnected";
 type ConnectionStateHandler = (state: KernelConnectionState) => void;
+type TokenProvider = () => string;
 type PermissionHandler = (
   id: number,
   req: PermissionRequest,
@@ -122,6 +123,7 @@ export class AcpClient {
     private ws: WebSocket,
     private readonly url: string,
     private readonly token: string,
+    private readonly tokenProvider?: TokenProvider,
   ) {
     this.attachWebSocket(ws);
   }
@@ -180,9 +182,13 @@ export class AcpClient {
   // Connection
   // ------------------------------------------------------------------
 
-  static async connect(url: string, token: string): Promise<AcpClient> {
+  static async connect(
+    url: string,
+    token: string,
+    options: { tokenProvider?: TokenProvider } = {},
+  ): Promise<AcpClient> {
     const ws = await AcpClient.openWebSocket(url, token);
-    const client = new AcpClient(ws, url, token);
+    const client = new AcpClient(ws, url, token, options.tokenProvider);
 
     // Must initialize before any session/* calls
     await client.initialize();
@@ -522,7 +528,7 @@ export class AcpClient {
       await sleep(delayMs);
       if (this.closing) break;
       try {
-        const next = await AcpClient.openWebSocket(this.url, this.token);
+        const next = await AcpClient.openWebSocket(this.url, this.currentToken());
         this.ws = next;
         this.disconnected = undefined;
         this.attachWebSocket(next);
@@ -549,6 +555,10 @@ export class AcpClient {
     this.setConnectionState("connecting");
     for (const handler of this.disconnectHandlers) handler(error);
     void this.reconnect().catch(() => {});
+  }
+
+  private currentToken(): string {
+    return this.tokenProvider?.() ?? this.token;
   }
 
   private setConnectionState(state: KernelConnectionState): void {

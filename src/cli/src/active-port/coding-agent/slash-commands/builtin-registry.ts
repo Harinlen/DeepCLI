@@ -7,6 +7,7 @@ import {
 } from "../modes/theme/theme";
 import { Text } from "@/tui/index.js";
 import { formatWebFetchSetupFailure } from "@/webfetch/diagnostics.js";
+import { MustangMethod } from "@/acp/methods.js";
 
 export interface ParsedBuiltinSlashCommand {
 	name: string;
@@ -46,6 +47,20 @@ export async function executeBuiltinSlashCommand(
 				return await executeModelCommand(ctx, parsed.args ?? "");
 			case "webfetch":
 				return await executeWebFetchCommand(ctx, parsed.args ?? "");
+			case "global":
+				return await executeGlobalCommand(ctx, parsed.args ?? "");
+			case "flags":
+				return await executeFlagsCommand(ctx, parsed.args ?? "");
+			case "secrets":
+				return await executeSecretsCommand(ctx, parsed.args ?? "");
+			case "agents":
+				return await executeAgentsCommand(ctx, parsed.args ?? "");
+			case "agent":
+				return await executeAgentCommand(ctx, parsed.args ?? "");
+			case "gateways":
+				return await executeGatewaysCommand(ctx, parsed.args ?? "");
+			case "mcp":
+				return await executeMcpCommand(ctx, parsed.args ?? "");
 			case "theme":
 				return await executeThemeCommand(ctx, parsed.args ?? "");
 			case "clear":
@@ -66,6 +81,299 @@ export async function executeBuiltinSlashCommand(
 		ctx.showError?.(`/${parsed.name} failed: ${message}`);
 		return true;
 	}
+}
+
+async function executeGlobalCommand(ctx: any, argsText: string): Promise<boolean> {
+	const args = splitArgs(argsText);
+	const subcommand = args[0] ?? "backup";
+	if (subcommand === "backup") {
+		const result = await requestManagement(ctx, MustangMethod.globalBackup, optionalPathParam("outputDir", args[1]));
+		renderManagementResult(ctx, "Global backup", result);
+		return true;
+	}
+	if (subcommand === "backups") {
+		const result = await requestManagement(ctx, MustangMethod.globalBackups, optionalPathParam("backupDir", args[1]));
+		renderManagementResult(ctx, "Global backups", result);
+		return true;
+	}
+	if (subcommand === "export") {
+		const outputPath = args[1] && args[1] !== "--dry-run" ? args[1] : undefined;
+		const dryRun = args.includes("--dry-run");
+		const result = await requestManagement(ctx, MustangMethod.globalExport, { outputPath, dryRun });
+		renderManagementResult(ctx, "Global export", result);
+		return true;
+	}
+	if (subcommand === "import") {
+		const inputPath = args.find(arg => !arg.startsWith("--") && arg !== "import");
+		if (!inputPath) {
+			ctx.showWarning?.("Usage: /global import <path> --dry-run");
+			return true;
+		}
+		if (!args.includes("--dry-run")) {
+			ctx.showWarning?.("Only /global import <path> --dry-run is available from the CLI.");
+			return true;
+		}
+		const result = await requestManagement(ctx, MustangMethod.globalImport, { inputPath, dryRun: true });
+		renderManagementResult(ctx, "Global import dry-run", result);
+		return true;
+	}
+	ctx.showWarning?.("Usage: /global [backup|backups|export|import]");
+	return true;
+}
+
+async function executeFlagsCommand(ctx: any, argsText: string): Promise<boolean> {
+	const args = splitArgs(argsText);
+	const subcommand = args[0] ?? "list";
+	if (subcommand === "list") {
+		renderManagementResult(ctx, "Flags", await requestManagement(ctx, MustangMethod.flagsList, {}));
+		return true;
+	}
+	if (subcommand === "read") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /flags read <section>");
+			return true;
+		}
+		renderManagementResult(ctx, "Flag section", await requestManagement(ctx, MustangMethod.flagsRead, { section: args[1] }));
+		return true;
+	}
+	if (subcommand === "set") {
+		if (!args[1] || !args[2] || args.length < 4) {
+			ctx.showWarning?.("Usage: /flags set <section> <key> <value> [revision]");
+			return true;
+		}
+		const revision = parseOptionalRevision(args[4]);
+		const result = await requestManagement(ctx, MustangMethod.flagsSet, {
+			section: args[1],
+			key: args[2],
+			value: parseConfigValue(args[3]),
+			...(revision !== undefined ? { expectedRevision: revision } : {}),
+		});
+		renderManagementResult(ctx, "Flag staged", result);
+		return true;
+	}
+	if (subcommand === "reset") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /flags reset <section> [key] [revision]");
+			return true;
+		}
+		const revision = parseOptionalRevision(args[3]);
+		const result = await requestManagement(ctx, MustangMethod.flagsReset, {
+			section: args[1],
+			...(args[2] ? { key: args[2] } : {}),
+			...(revision !== undefined ? { expectedRevision: revision } : {}),
+		});
+		renderManagementResult(ctx, "Flag reset staged", result);
+		return true;
+	}
+	ctx.showWarning?.("Usage: /flags [list|read|set|reset]");
+	return true;
+}
+
+async function executeSecretsCommand(ctx: any, argsText: string): Promise<boolean> {
+	const args = splitArgs(argsText);
+	const subcommand = args[0] ?? "list";
+	if (subcommand === "list") {
+		renderManagementResult(ctx, "Secrets", await requestManagement(ctx, MustangMethod.secretsList, {}));
+		return true;
+	}
+	if (subcommand === "audit") {
+		renderManagementResult(ctx, "Secret audit", await requestManagement(ctx, MustangMethod.secretsAudit, optionalPathParam("secretId", args[1])));
+		return true;
+	}
+	if (subcommand === "rename") {
+		if (!args[1] || !args[2] || !args[3]) {
+			ctx.showWarning?.("Usage: /secrets rename <secret-id> <name> <revision>");
+			return true;
+		}
+		renderManagementResult(ctx, "Secret renamed", await requestManagement(ctx, MustangMethod.secretsRename, {
+			secretId: args[1],
+			name: args[2],
+			expectedRevision: Number(args[3]),
+		}));
+		return true;
+	}
+	if (subcommand === "delete") {
+		if (!args[1] || !args[2] || !args.includes("--confirm")) {
+			ctx.showWarning?.("Usage: /secrets delete <secret-id> <revision> --confirm");
+			return true;
+		}
+		renderManagementResult(ctx, "Secret deleted", await requestManagement(ctx, MustangMethod.secretsDelete, {
+			secretId: args[1],
+			expectedRevision: Number(args[2]),
+			confirm: true,
+		}));
+		return true;
+	}
+	ctx.showWarning?.("Usage: /secrets [list|audit|rename|delete]");
+	return true;
+}
+
+async function executeAgentsCommand(ctx: any, argsText: string): Promise<boolean> {
+	const args = splitArgs(argsText);
+	const subcommand = args[0] ?? "list";
+	if (subcommand === "list") {
+		renderManagementResult(ctx, "Agents", await requestManagement(ctx, MustangMethod.agentsList, { includeBindings: args.includes("--bindings") }));
+		return true;
+	}
+	if (subcommand === "read") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /agents read <agent-id>");
+			return true;
+		}
+		const result: any = await requestManagement(ctx, MustangMethod.agentsList, { includeBindings: true });
+		result.agents = (result.agents ?? []).filter((agent: any) => agent.agentId === args[1] || agent.agent_id === args[1]);
+		renderManagementResult(ctx, "Agent", result);
+		return true;
+	}
+	if (subcommand === "create" || subcommand === "add") {
+		if (!args[1] || !args[2]) {
+			ctx.showWarning?.("Usage: /agents create <agent-id> <workspace> [name]");
+			return true;
+		}
+		renderManagementResult(ctx, "Agent created", await requestManagement(ctx, MustangMethod.agentsAdd, {
+			agentId: args[1],
+			workspace: args[2],
+			...(args[3] ? { name: args.slice(3).join(" ") } : {}),
+		}));
+		return true;
+	}
+	if (subcommand === "delete") {
+		if (!args[1] || !args.includes("--confirm")) {
+			ctx.showWarning?.("Usage: /agents delete <agent-id> --confirm");
+			return true;
+		}
+		renderManagementResult(ctx, "Agent deleted", await requestManagement(ctx, MustangMethod.agentsDelete, {
+			agentId: args[1],
+			confirm: true,
+		}));
+		return true;
+	}
+	if (subcommand === "bind") {
+		if (!args[1] || !args[2]) {
+			ctx.showWarning?.("Usage: /agents bind <agent-id> <gateway:channel> [session-id]");
+			return true;
+		}
+		renderManagementResult(ctx, "Agent binding", await requestManagement(ctx, MustangMethod.agentsBind, {
+			agentId: args[1],
+			bind: args[2],
+			...(args[3] ? { sessionId: args[3] } : {}),
+		}));
+		return true;
+	}
+	ctx.showWarning?.("Usage: /agents [list|read|create|delete|bind]");
+	return true;
+}
+
+async function executeAgentCommand(ctx: any, argsText: string): Promise<boolean> {
+	const args = splitArgs(argsText);
+	if ((args[0] ?? "") !== "send" || !args[1] || args.length < 3) {
+		ctx.showWarning?.("Usage: /agent send <agent-id> <message>");
+		return true;
+	}
+	renderManagementResult(ctx, "Agent send", await requestManagement(ctx, MustangMethod.agentSend, {
+		agentId: args[1],
+		message: args.slice(2).join(" "),
+	}));
+	return true;
+}
+
+async function executeGatewaysCommand(ctx: any, argsText: string): Promise<boolean> {
+	const args = splitArgs(argsText);
+	const subcommand = args[0] ?? "list";
+	if (subcommand === "list") {
+		renderManagementResult(ctx, "Gateways", await requestManagement(ctx, MustangMethod.gatewaysList, {}));
+		return true;
+	}
+	if (subcommand === "read" || subcommand === "status") {
+		renderManagementResult(ctx, "Gateway status", await requestManagement(ctx, MustangMethod.gatewaysStatus, optionalPathParam("gatewayId", args[1])));
+		return true;
+	}
+	if (subcommand === "create") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /gateways create <gateway-id> [type] [json-config]");
+			return true;
+		}
+		renderManagementResult(ctx, "Gateway created", await requestManagement(ctx, MustangMethod.gatewaysCreate, {
+			gatewayId: args[1],
+			gatewayType: args[2] ?? "test",
+			config: parseJsonObject(args.slice(3).join(" ")),
+			enabled: true,
+		}));
+		return true;
+	}
+	if (subcommand === "delete") {
+		if (!args[1] || !args.includes("--confirm")) {
+			ctx.showWarning?.("Usage: /gateways delete <gateway-id> --confirm");
+			return true;
+		}
+		renderManagementResult(ctx, "Gateway deleted", await requestManagement(ctx, MustangMethod.gatewaysDelete, {
+			gatewayId: args[1],
+			confirm: true,
+		}));
+		return true;
+	}
+	if (subcommand === "bind") {
+		if (!args[1] || !args[2] || !args[3]) {
+			ctx.showWarning?.("Usage: /gateways bind <gateway-id> <channel-key> <agent-id> [session-id]");
+			return true;
+		}
+		renderManagementResult(ctx, "Gateway binding", await requestManagement(ctx, MustangMethod.gatewaysBind, {
+			gatewayId: args[1],
+			channelKey: args[2],
+			agentId: args[3],
+			...(args[4] ? { sessionId: args[4] } : {}),
+		}));
+		return true;
+	}
+	ctx.showWarning?.("Usage: /gateways [list|read|bind]");
+	return true;
+}
+
+async function executeMcpCommand(ctx: any, argsText: string): Promise<boolean> {
+	const args = splitArgs(argsText);
+	const subcommand = args[0] ?? "list";
+	if (subcommand === "list") {
+		renderManagementResult(ctx, "MCP servers", await requestManagement(ctx, MustangMethod.mcpList, {}));
+		return true;
+	}
+	if (subcommand === "read") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /mcp read <name>");
+			return true;
+		}
+		renderManagementResult(ctx, "MCP server", await requestManagement(ctx, MustangMethod.mcpRead, { name: args[1] }));
+		return true;
+	}
+	if (subcommand === "create" || subcommand === "update") {
+		if (!args[1] || args.length < 3) {
+			ctx.showWarning?.(`Usage: /mcp ${subcommand} <name> <json-config> [revision]`);
+			return true;
+		}
+		const revision = parseOptionalRevision(args[args.length - 1]);
+		const jsonArgs = revision === undefined ? args.slice(2) : args.slice(2, -1);
+		const method = subcommand === "create" ? MustangMethod.mcpCreate : MustangMethod.mcpUpdate;
+		const result = await requestManagement(ctx, method, {
+			name: args[1],
+			config: parseJsonObject(jsonArgs.join(" ")),
+			...(revision !== undefined ? { expectedRevision: revision } : {}),
+		});
+		renderManagementResult(ctx, subcommand === "create" ? "MCP server created" : "MCP server updated", result);
+		return true;
+	}
+	if (subcommand === "delete") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /mcp delete <name> [revision]");
+			return true;
+		}
+		const revision = parseOptionalRevision(args[2]);
+		renderManagementResult(ctx, "MCP server deleted", await requestManagement(ctx, MustangMethod.mcpDelete, {
+			name: args[1],
+			...(revision !== undefined ? { expectedRevision: revision } : {}),
+		}));
+		return true;
+	}
+	ctx.showWarning?.("Usage: /mcp [list|read|create|update|delete]");
+	return true;
 }
 
 async function executePlanCommand(ctx: any, argsText: string): Promise<boolean | string> {
@@ -460,6 +768,44 @@ function parseConfigValue(value: string): unknown {
 	if (trimmed === "false") return false;
 	if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
 	return trimmed;
+}
+
+async function requestManagement(ctx: any, method: string, params: Record<string, unknown>): Promise<unknown> {
+	if (!ctx.session?.managementRequest) {
+		throw new Error("Kernel management request path is not available");
+	}
+	return await ctx.session.managementRequest(method, params);
+}
+
+function renderManagementResult(ctx: any, title: string, result: unknown): void {
+	const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
+	if (ctx.chatContainer?.addChild) {
+		ctx.chatContainer.addChild(new Text(theme.fg("accent", title), 1, 0));
+		ctx.chatContainer.addChild(new Text(text ?? "", 1, 0));
+		ctx.ui?.requestRender?.();
+		return;
+	}
+	ctx.showStatus?.(`${title}: ${text}`);
+}
+
+function optionalPathParam(key: string, value: string | undefined): Record<string, unknown> {
+	return value ? { [key]: value } : {};
+}
+
+function parseOptionalRevision(value: string | undefined): number | undefined {
+	if (!value) return undefined;
+	const revision = Number(value);
+	return Number.isFinite(revision) ? revision : undefined;
+}
+
+function parseJsonObject(value: string): Record<string, unknown> {
+	const trimmed = value.trim();
+	if (!trimmed) return {};
+	const parsed = JSON.parse(trimmed);
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+		throw new Error("Config must be a JSON object");
+	}
+	return parsed as Record<string, unknown>;
 }
 
 function parseModelRef(value: string | undefined): { provider: string; model: string } | undefined {

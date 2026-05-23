@@ -190,6 +190,8 @@ class _AccessRouterRuntimePeer:
     def __init__(self, ws: Any) -> None:
         self._ws = ws
         self._counter = 0
+        self._send_lock = asyncio.Lock()
+        self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
 
     async def request_client(
         self,
@@ -200,38 +202,54 @@ class _AccessRouterRuntimePeer:
     ) -> dict[str, Any]:
         self._counter += 1
         request_id = f"runtime-client-{self._counter}"
-        await self._ws.send(
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "method": method,
-                    "params": params,
-                }
-            )
+        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
+        self._pending[request_id] = future
+        await self.send_payload(
+            {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": method,
+                "params": params,
+            }
         )
-        if timeout is None:
-            raw = await self._ws.recv()
-        else:
-            raw = await asyncio.wait_for(self._ws.recv(), timeout=timeout)
-        response = json.loads(raw)
-        if response.get("id") != request_id:
-            raise RuntimeError("client request response id mismatch")
-        if "error" in response:
-            raise RuntimeError(str(response["error"]))
-        result = response.get("result")
-        return result if isinstance(result, dict) else {}
+        try:
+            if timeout is None:
+                return await future
+            return await asyncio.wait_for(future, timeout=timeout)
+        finally:
+            self._pending.pop(request_id, None)
 
     async def notify_client(self, *, method: str, params: dict[str, Any]) -> None:
-        await self._ws.send(
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "method": method,
-                    "params": params,
-                }
-            )
+        await self.send_payload(
+            {
+                "jsonrpc": "2.0",
+                "method": method,
+                "params": params,
+            }
         )
+
+    async def send_payload(self, payload: dict[str, Any]) -> None:
+        async with self._send_lock:
+            await self._ws.send(json.dumps(payload))
+
+    def handle_client_response(self, response: dict[str, Any]) -> bool:
+        response_id = response.get("id")
+        if not isinstance(response_id, str) or response_id not in self._pending:
+            return False
+        future = self._pending[response_id]
+        if future.done():
+            return True
+        if "error" in response:
+            future.set_exception(RuntimeError(str(response["error"])))
+            return True
+        result = response.get("result")
+        future.set_result(result if isinstance(result, dict) else {})
+        return True
+
+    def fail_pending(self, exc: BaseException) -> None:
+        for future in tuple(self._pending.values()):
+            if not future.done():
+                future.set_exception(exc)
 
 
 async def _run_access_router_client(
@@ -281,36 +299,48 @@ async def _run_access_router_client(
                     },
                 )
                 peer = _AccessRouterRuntimePeer(ws)
-                heartbeat_task = asyncio.create_task(_send_router_heartbeats(ws, connection_id))
+                heartbeat_task = asyncio.create_task(_send_router_heartbeats(peer, connection_id))
+                dispatch_tasks: set[asyncio.Task[None]] = set()
+
+                async def _dispatch_one(request: dict[str, Any]) -> None:
+                    request_id = request.get("id")
+                    try:
+                        if request.get("method") == "_mustang.runtime/request":
+                            acp = RuntimeAcpRequest.model_validate(request.get("params", {}))
+                            result = await _deliver_router_acp(acp, session_service, peer)
+                        else:
+                            result = {"ok": False, "error": "unknown_runtime_method"}
+                        await peer.send_payload(
+                            {"jsonrpc": "2.0", "id": request_id, "result": result}
+                        )
+                    except Exception as exc:
+                        code: str | int = (
+                            -32601 if isinstance(exc, ValueError) else type(exc).__name__
+                        )
+                        await peer.send_payload(
+                            {
+                                "jsonrpc": "2.0",
+                                "id": request_id,
+                                "error": {"code": code, "message": str(exc)},
+                            }
+                        )
+
                 try:
                     async for raw in ws:
                         request = json.loads(raw)
-                        request_id = request.get("id")
-                        try:
-                            if request.get("method") == "_mustang.runtime/request":
-                                acp = RuntimeAcpRequest.model_validate(request.get("params", {}))
-                                result = await _deliver_router_acp(acp, session_service, peer)
-                            else:
-                                result = {"ok": False, "error": "unknown_runtime_method"}
-                            await ws.send(
-                                json.dumps({"jsonrpc": "2.0", "id": request_id, "result": result})
-                            )
-                        except Exception as exc:
-                            code: str | int = (
-                                -32601 if isinstance(exc, ValueError) else type(exc).__name__
-                            )
-                            await ws.send(
-                                json.dumps(
-                                    {
-                                        "jsonrpc": "2.0",
-                                        "id": request_id,
-                                        "error": {"code": code, "message": str(exc)},
-                                    }
-                                )
-                            )
+                        if peer.handle_client_response(request):
+                            continue
+                        task = asyncio.create_task(_dispatch_one(request))
+                        dispatch_tasks.add(task)
+                        task.add_done_callback(dispatch_tasks.discard)
                 finally:
                     heartbeat_task.cancel()
+                    for task in dispatch_tasks:
+                        task.cancel()
                     await asyncio.gather(heartbeat_task, return_exceptions=True)
+                    if dispatch_tasks:
+                        await asyncio.gather(*dispatch_tasks, return_exceptions=True)
+                    peer.fail_pending(RuntimeError("runtime websocket closed"))
         except (OSError, websockets.ConnectionClosed):
             await asyncio.sleep(0.2)
 
@@ -326,21 +356,19 @@ def _access_router_connection_id(ack: dict[str, Any]) -> str:
 
 
 async def _send_router_heartbeats(
-    ws: Any,
+    peer: _AccessRouterRuntimePeer,
     connection_id: str,
     *,
     interval_seconds: float = 5.0,
 ) -> None:
     while True:
         await asyncio.sleep(interval_seconds)
-        await ws.send(
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "method": "_mustang.router/ping",
-                    "params": {"connection_id": connection_id},
-                }
-            )
+        await peer.send_payload(
+            {
+                "jsonrpc": "2.0",
+                "method": "_mustang.router/ping",
+                "params": {"connection_id": connection_id},
+            }
         )
 
 
@@ -403,7 +431,13 @@ async def _deliver_router_acp(
             raise RuntimeError("runtime peer is required for session/prompt")
         return await session_service.prompt(PromptRequest.model_validate(params), client_peer=peer)  # type: ignore[arg-type]
     if method == "session/set_mode":
-        return await session_service.set_mode(SetSessionModeRequest.model_validate(params))
+        result = await session_service.set_mode(SetSessionModeRequest.model_validate(params))
+        for update in result.get("updates", []):
+            if isinstance(update, dict):
+                if peer is None:
+                    raise RuntimeError("runtime peer is required for session/set_mode updates")
+                await peer.notify_client(method="session/update", params=update)
+        return result
     if method == "_mustang.agent/session/activate_skill":
         if peer is None:
             raise RuntimeError("runtime peer is required for session/activate_skill")
@@ -459,6 +493,10 @@ async def _deliver_router_acp(
         or method.startswith("_mustang.agent/secrets/")
         or method.startswith("_mustang.agent/flags/")
         or method.startswith("_mustang.agent/global/")
+        or method.startswith("_mustang.agent/web_fetch/")
+        or method.startswith("_mustang.agent/web_bridge/")
+        or method.startswith("_mustang.agent/cron/")
+        or method.startswith("_mustang.agent/memory/")
     ):
         from kernel.core.protocol.acp.routing import REQUEST_DISPATCH
         from kernel.core.storage.global_commands import GlobalResourceCommandService
@@ -471,6 +509,18 @@ async def _deliver_router_acp(
             handler = GlobalResourceCommandService(session_service.resource_home)
         elif spec.target == "flags":
             handler = session_service.module_table.flags
+        elif spec.target == "schedule":
+            from kernel.agents.mustang.schedule import ScheduleManager
+
+            handler = session_service.module_table.get(ScheduleManager)
+        elif spec.target == "memory":
+            from kernel.agents.mustang.memory import MemoryManager
+
+            handler = session_service.module_table.get(MemoryManager)
+        elif spec.target == "tools":
+            from kernel.agents.mustang.tools import ToolManager
+
+            handler = session_service.module_table.get(ToolManager)
         else:
             handler = session_service.module_table.secrets
         request_params = spec.params_type.model_validate(params)

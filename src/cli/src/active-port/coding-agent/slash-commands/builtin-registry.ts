@@ -35,8 +35,9 @@ export async function executeBuiltinSlashCommand(
 				await ctx.handleUsageCommand?.();
 				return true;
 			case "memory":
-				await ctx.handleMemoryCommand?.(`/memory ${parsed.args ?? ""}`.trim());
-				return true;
+				return await executeMemoryCommand(ctx, parsed.args ?? "");
+			case "cron":
+				return await executeCronCommand(ctx, parsed.args ?? "");
 			case "kernel":
 				return await executeKernelCommand(ctx, parsed.args ?? "");
 			case "plan":
@@ -111,6 +112,63 @@ async function executeSkillsCommand(ctx: any, argsText: string): Promise<boolean
 	return true;
 }
 
+async function executeCronCommand(ctx: any, argsText: string): Promise<boolean> {
+	const args = splitArgs(argsText);
+	const subcommand = args[0] ?? "list";
+	if (subcommand === "list") {
+		renderManagementResult(ctx, "Cron jobs", await requestManagement(ctx, MustangMethod.cronList, { includeCompleted: args.includes("--all") }));
+		return true;
+	}
+	if (subcommand === "create") {
+		if (!args[1] || args.length < 3) {
+			ctx.showWarning?.("Usage: /cron create <schedule> <prompt>");
+			return true;
+		}
+		renderManagementResult(ctx, "Cron job created", await requestManagement(ctx, MustangMethod.cronCreate, {
+			schedule: args[1],
+			prompt: args.slice(2).join(" "),
+		}));
+		return true;
+	}
+	if (subcommand === "delete") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /cron delete <job-id>");
+			return true;
+		}
+		renderManagementResult(ctx, "Cron job deleted", await requestManagement(ctx, MustangMethod.cronDelete, { id: args[1] }));
+		return true;
+	}
+	ctx.showWarning?.("Usage: /cron [list|create|delete]");
+	return true;
+}
+
+async function executeMemoryCommand(ctx: any, argsText: string): Promise<boolean> {
+	const args = splitArgs(argsText);
+	const subcommand = args[0] ?? "list";
+	if (subcommand === "list") {
+		renderManagementResult(ctx, "Memory", await requestManagement(ctx, MustangMethod.memoryList, optionalPathParam("category", args[1])));
+		return true;
+	}
+	if (subcommand === "show") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /memory show <name>");
+			return true;
+		}
+		renderManagementResult(ctx, "Memory", await requestManagement(ctx, MustangMethod.memoryShow, { name: args[1] }));
+		return true;
+	}
+	if (subcommand === "delete") {
+		if (!args[1] || !args.includes("--confirm")) {
+			ctx.showWarning?.("Usage: /memory delete <name> --confirm");
+			return true;
+		}
+		renderManagementResult(ctx, "Memory deleted", await requestManagement(ctx, MustangMethod.memoryDelete, { name: args[1], confirm: true }));
+		return true;
+	}
+	ctx.showWarning?.("Usage: /memory [list|show|delete]");
+	return true;
+}
+
 async function executeGlobalCommand(ctx: any, argsText: string): Promise<boolean> {
 	const args = splitArgs(argsText);
 	const subcommand = args[0] ?? "backup";
@@ -145,7 +203,19 @@ async function executeGlobalCommand(ctx: any, argsText: string): Promise<boolean
 		renderManagementResult(ctx, "Global import dry-run", result);
 		return true;
 	}
-	ctx.showWarning?.("Usage: /global [backup|backups|export|import]");
+	if (subcommand === "restore") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /global restore <backup-id-or-path> --confirm");
+			return true;
+		}
+		const result = await requestManagement(ctx, MustangMethod.globalRestore, {
+			backupIdOrPath: args[1],
+			confirm: args.includes("--confirm"),
+		});
+		renderManagementResult(ctx, "Global restore", result);
+		return true;
+	}
+	ctx.showWarning?.("Usage: /global [backup|backups|export|import|restore]");
 	return true;
 }
 
@@ -362,6 +432,23 @@ async function executeAgentsCommand(ctx: any, argsText: string): Promise<boolean
 		}));
 		return true;
 	}
+	if (subcommand === "set-identity") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /agents set-identity <agent-id> [name] [json-patch]");
+			return true;
+		}
+		const patch = args.length > 3 ? parseJsonObject(args.slice(3).join(" ")) : undefined;
+		renderManagementResult(ctx, "Agent identity", await requestManagement(ctx, MustangMethod.agentsSetIdentity, {
+			agentId: args[1],
+			...(args[2] ? { name: args[2] } : {}),
+			...(patch ? { identityPatch: patch } : {}),
+		}));
+		return true;
+	}
+	if (subcommand === "bindings") {
+		renderManagementResult(ctx, "Agent bindings", await requestManagement(ctx, MustangMethod.agentsBindings, optionalPathParam("agentId", args[1])));
+		return true;
+	}
 	if (subcommand === "delete") {
 		if (!args[1] || !args.includes("--confirm")) {
 			ctx.showWarning?.("Usage: /agents delete <agent-id> --confirm");
@@ -385,7 +472,58 @@ async function executeAgentsCommand(ctx: any, argsText: string): Promise<boolean
 		}));
 		return true;
 	}
-	ctx.showWarning?.("Usage: /agents [list|read|create|delete|bind]");
+	if (subcommand === "unbind") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /agents unbind <agent-id> [gateway:channel|--all]");
+			return true;
+		}
+		renderManagementResult(ctx, "Agent unbind", await requestManagement(ctx, MustangMethod.agentsUnbind, {
+			agentId: args[1],
+			...(args.includes("--all") ? { all: true } : { bind: args[2] }),
+		}));
+		return true;
+	}
+	if (["start", "stop", "restart", "health"].includes(subcommand)) {
+		if (!args[1]) {
+			ctx.showWarning?.(`Usage: /agents ${subcommand} <agent-id>`);
+			return true;
+		}
+		const method = subcommand === "start"
+			? MustangMethod.agentsStart
+			: subcommand === "stop"
+				? MustangMethod.agentsStop
+				: subcommand === "restart"
+					? MustangMethod.agentsRestart
+					: MustangMethod.agentsHealth;
+		renderManagementResult(ctx, `Agent ${subcommand}`, await requestManagement(ctx, method, { agentId: args[1] }));
+		return true;
+	}
+	if (subcommand === "grants") {
+		renderManagementResult(ctx, "Agent grants", await requestManagement(ctx, MustangMethod.agentsGrants, optionalPathParam("agentId", args[1])));
+		return true;
+	}
+	if (subcommand === "grant") {
+		if (!args[1] || !args[2]) {
+			ctx.showWarning?.("Usage: /agents grant <agent-id> <capability> [scope] [resource]");
+			return true;
+		}
+		renderManagementResult(ctx, "Agent grant", await requestManagement(ctx, MustangMethod.agentsGrant, {
+			agentId: args[1],
+			capability: args[2],
+			...(args[3] ? { scope: args[3] } : {}),
+			...(args[4] ? { resource: args[4] } : {}),
+		}));
+		return true;
+	}
+	if (subcommand === "revoke-grant") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /agents revoke-grant <grant-id>");
+			return true;
+		}
+		renderManagementResult(ctx, "Agent grant revoked", await requestManagement(ctx, MustangMethod.agentsRevokeGrant, { grantId: args[1] }));
+		return true;
+	}
+	ctx.showWarning?.("Usage: /agents [list|read|create|add|set-identity|delete|bindings|bind|unbind|start|stop|restart|health|grants|grant|revoke-grant]");
 	return true;
 }
 
@@ -437,6 +575,33 @@ async function executeGatewaysCommand(ctx: any, argsText: string): Promise<boole
 		}));
 		return true;
 	}
+	if (subcommand === "enable" || subcommand === "disable") {
+		if (!args[1]) {
+			ctx.showWarning?.(`Usage: /gateways ${subcommand} <gateway-id>`);
+			return true;
+		}
+		renderManagementResult(ctx, `Gateway ${subcommand}d`, await requestManagement(ctx, subcommand === "enable" ? MustangMethod.gatewaysEnable : MustangMethod.gatewaysDisable, {
+			gatewayId: args[1],
+		}));
+		return true;
+	}
+	if (subcommand === "reload") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /gateways reload <gateway-id> [--fail]");
+			return true;
+		}
+		renderManagementResult(ctx, "Gateway reloaded", await requestManagement(ctx, MustangMethod.gatewaysReload, {
+			gatewayId: args[1],
+			fail: args.includes("--fail"),
+		}));
+		return true;
+	}
+	if (subcommand === "bindings") {
+		renderManagementResult(ctx, "Gateway bindings", await requestManagement(ctx, MustangMethod.gatewaysBindings, {
+			...(args[1] ? { gatewayId: args[1] } : {}),
+		}));
+		return true;
+	}
 	if (subcommand === "bind") {
 		if (!args[1] || !args[2] || !args[3]) {
 			ctx.showWarning?.("Usage: /gateways bind <gateway-id> <channel-key> <agent-id> [session-id]");
@@ -450,7 +615,17 @@ async function executeGatewaysCommand(ctx: any, argsText: string): Promise<boole
 		}));
 		return true;
 	}
-	ctx.showWarning?.("Usage: /gateways [list|read|bind]");
+	if (subcommand === "unbind") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /gateways unbind <binding-id>");
+			return true;
+		}
+		renderManagementResult(ctx, "Gateway unbound", await requestManagement(ctx, MustangMethod.gatewaysUnbind, {
+			bindingId: args[1],
+		}));
+		return true;
+	}
+	ctx.showWarning?.("Usage: /gateways [list|read|status|create|delete|enable|disable|reload|bindings|bind|unbind]");
 	return true;
 }
 
@@ -620,7 +795,8 @@ async function executeSessionCommand(ctx: any, argsText: string): Promise<boolea
 			return true;
 		}
 		case "switch":
-		case "load": {
+		case "load":
+		case "resume": {
 			const target = await resolveSessionTarget(ctx, args[1]);
 			if (!target) {
 				ctx.showWarning?.(`Usage: /session ${subcommand} <session-id>`);
@@ -732,6 +908,9 @@ async function defaultModelSubcommand(ctx: any): Promise<"list" | "add"> {
 async function executeWebFetchCommand(ctx: any, argsText: string): Promise<boolean> {
 	const args = splitArgs(argsText);
 	const subcommand = args[0] ?? "backend";
+	if (subcommand === "browser") {
+		return await executeWebBridgeCommand(ctx, args[1] ?? "install");
+	}
 	if (subcommand === "backend") {
 		const backend = args[1];
 		if (!backend) {
@@ -852,8 +1031,55 @@ async function executeWebFetchCommand(ctx: any, argsText: string): Promise<boole
 		renderWebFetchConfig(ctx, config);
 		return true;
 	}
-	ctx.showWarning?.("Usage: /webfetch [backend [name] | config [backend.key value]]");
+	ctx.showWarning?.("Usage: /webfetch [backend [name] | browser [install|status|pair|reset] | config [backend.key value]]");
 	return true;
+}
+
+async function executeWebBridgeCommand(ctx: any, action: string): Promise<boolean> {
+	if (action === "install") {
+		const status = await ctx.session?.webBridgePairStart?.();
+		const url = status?.installUrl;
+		if (!url) {
+			ctx.showError?.(status?.message ?? "WebBridge install URL is unavailable.");
+			return true;
+		}
+		ctx.openInBrowser?.(url);
+		ctx.showStatus?.(`Opened WebBridge installer: ${url}`);
+		return true;
+	}
+	if (action === "pair") {
+		const status = await ctx.session?.webBridgePairStart?.();
+		renderWebBridgeStatus(ctx, status);
+		return true;
+	}
+	if (action === "reset") {
+		const status = await ctx.session?.webBridgePairReset?.();
+		renderWebBridgeStatus(ctx, status);
+		return true;
+	}
+	if (action === "status") {
+		const status = await ctx.session?.webBridgeStatus?.(true);
+		renderWebBridgeStatus(ctx, status);
+		return true;
+	}
+	ctx.showWarning?.("Usage: /webfetch browser [install|status|pair|reset]");
+	return true;
+}
+
+function renderWebBridgeStatus(ctx: any, status: any): void {
+	if (!status) {
+		ctx.showError?.("WebBridge status is unavailable.");
+		return;
+	}
+	ctx.chatContainer?.addChild?.(new Text(theme.fg("accent", "WebBridge"), 1, 0));
+	ctx.chatContainer?.addChild?.(new Text(`status: ${status.status ?? "unknown"}`, 1, 0));
+	ctx.chatContainer?.addChild?.(new Text(`paired: ${Boolean(status.paired)}`, 1, 0));
+	ctx.chatContainer?.addChild?.(new Text(`connected: ${Boolean(status.connected)}`, 1, 0));
+	if (status.installUrl) ctx.chatContainer?.addChild?.(new Text(`install: ${status.installUrl}`, 1, 0));
+	if (status.bridgeWsUrl) ctx.chatContainer?.addChild?.(new Text(`bridge: ${status.bridgeWsUrl}`, 1, 0));
+	if (status.pairingToken) ctx.chatContainer?.addChild?.(new Text(`pairing token: ${status.pairingToken}`, 1, 0));
+	if (status.unpackedPath) ctx.chatContainer?.addChild?.(new Text(`unpacked: ${status.unpackedPath}`, 1, 0));
+	if (status.message) ctx.showStatus?.(status.message);
 }
 
 function renderWebFetchConfig(ctx: any, config: any): void {

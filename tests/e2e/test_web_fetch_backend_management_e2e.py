@@ -26,13 +26,14 @@ def test_webfetch_backend_management_probe(kernel: tuple[int, str]) -> None:
             commands = await client._request("_mustang.agent/commands/list", {})
             webfetch = [cmd for cmd in commands.get("commands", []) if cmd.get("name") == "webfetch"]
             assert webfetch, "commands/list must expose /webfetch to the CLI"
-            assert webfetch[0].get("subcommands") == ["backend", "config"]
+            assert webfetch[0].get("subcommands") == ["backend", "browser", "config"]
 
             options = await client._request("_mustang.agent/web_fetch/backend_options", {})
             ids = [item["id"] for item in options["options"]]
             assert "auto" in ids
             assert "httpx" in ids
             assert "crawl4ai" in ids
+            assert "browser" in ids
             assert "readability" not in ids
             assert "playwright" not in ids
 

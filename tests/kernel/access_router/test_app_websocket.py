@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 from fastapi import WebSocketDisconnect
 
+from kernel.access_router.schemas import RuntimeAcpRequest
 from kernel.access_router.app import _RuntimeWebSocketClient, _send_json_or_closed
 
 pytestmark = pytest.mark.anyio
@@ -48,6 +49,32 @@ async def test_runtime_websocket_consumes_router_ping_during_delivery() -> None:
     assert websocket.sent == []
 
 
+async def test_runtime_websocket_allows_control_request_while_prompt_is_pending() -> None:
+    websocket = _ConcurrentWebSocket()
+    connection = _RuntimeWebSocketClient(websocket)
+
+    prompt_task = asyncio.create_task(
+        connection.deliver_acp(RuntimeAcpRequest(agent_id="primary", method="session/prompt", params={}))
+    )
+    mode_task = asyncio.create_task(
+        connection.deliver_acp(
+            RuntimeAcpRequest(
+                agent_id="primary",
+                method="session/set_mode",
+                params={"sessionId": "s-1", "modeId": "bypass"},
+            )
+        )
+    )
+
+    assert await asyncio.wait_for(mode_task, timeout=1) == {"ok": True, "mode": "bypass"}
+    websocket.release_prompt()
+    assert await asyncio.wait_for(prompt_task, timeout=1) == {"ok": True, "stopReason": "end_turn"}
+    assert [payload["method"] for payload in websocket.sent] == [
+        "_mustang.runtime/request",
+        "_mustang.runtime/request",
+    ]
+
+
 class _ClosedWebSocket:
     def __init__(self) -> None:
         self.payloads: list[dict[str, Any]] = []
@@ -75,3 +102,35 @@ class _QueuedWebSocket:
 
     async def send_json(self, payload: dict[str, Any]) -> None:
         self.sent.append(payload)
+
+
+class _ConcurrentWebSocket:
+    def __init__(self) -> None:
+        self.sent: list[dict[str, Any]] = []
+        self._prompt_release = asyncio.Event()
+        self._returned_mode = False
+        self._returned_prompt = False
+
+    async def send_json(self, payload: dict[str, Any]) -> None:
+        self.sent.append(payload)
+
+    async def receive_json(self) -> dict[str, Any]:
+        while len(self.sent) < 2:
+            await asyncio.sleep(0)
+        if not self._returned_mode:
+            self._returned_mode = True
+            mode_id = self.sent[1]["id"]
+            return {"jsonrpc": "2.0", "id": mode_id, "result": {"ok": True, "mode": "bypass"}}
+        await self._prompt_release.wait()
+        if not self._returned_prompt:
+            self._returned_prompt = True
+            prompt_id = self.sent[0]["id"]
+            return {
+                "jsonrpc": "2.0",
+                "id": prompt_id,
+                "result": {"ok": True, "stopReason": "end_turn"},
+            }
+        raise WebSocketDisconnect(code=1001)
+
+    def release_prompt(self) -> None:
+        self._prompt_release.set()

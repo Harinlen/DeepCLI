@@ -221,7 +221,7 @@ export class MustangSession {
     await this.client.request(AcpMethod.sessionSetMode, {
       sessionId: this.sessionId,
       modeId: mode,
-    });
+    }, { timeoutMs: 0 });
   }
 
   async getUsage(): Promise<CostUsageReport> {

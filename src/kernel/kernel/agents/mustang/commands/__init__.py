@@ -91,10 +91,10 @@ _BUILTIN_COMMANDS: list[CommandDef] = [
     ),
     CommandDef(
         name="webfetch",
-        description="Manage WebFetch backend and backend config",
-        usage="/webfetch [backend | config]",
+        description="Manage WebFetch backend, WebBridge, and backend config",
+        usage="/webfetch [backend | browser | config]",
         acp_method=MustangMethod.WEB_FETCH_BACKEND_OPTIONS,
-        subcommands=["backend", "config"],
+        subcommands=["backend", "browser", "config"],
     ),
     CommandDef(
         name="global",

@@ -40,6 +40,14 @@ from kernel.core.protocol.acp.schemas.commands import (
     ListCommandsRequest,
     ListCommandsResponse,
 )
+from kernel.core.protocol.acp.schemas.cron import (
+    CronCreateRequest,
+    CronCreateResponse,
+    CronDeleteRequest,
+    CronDeleteResponse,
+    CronListRequest,
+    CronListResponse,
+)
 from kernel.core.protocol.acp.schemas.skills import (
     SkillCommandEntry,
     SkillInspectEntry,
@@ -129,6 +137,14 @@ from kernel.core.protocol.acp.schemas.mcp import (
     MCPWriteRequest,
     MCPWriteResponse,
 )
+from kernel.core.protocol.acp.schemas.memory import (
+    MemoryDeleteRequest,
+    MemoryDeleteResponse,
+    MemoryListRequest,
+    MemoryListResponse,
+    MemoryShowRequest,
+    MemoryShowResponse,
+)
 from kernel.core.protocol.acp.schemas.model import (
     AcpProfileEntry,
     AcpProviderEntry,
@@ -204,6 +220,10 @@ from kernel.core.protocol.acp.schemas.web_fetch import (
     SetWebFetchBackendResponse,
     SetWebFetchConfigRequest,
     SetWebFetchConfigResponse,
+    WebBridgePairResetRequest,
+    WebBridgePairStartRequest,
+    WebBridgeStatusRequest,
+    WebBridgeStatusResponse,
     WebFetchBackendOptionsRequest,
     WebFetchBackendOptionsResponse,
     WebFetchConfigRequest,
@@ -298,6 +318,8 @@ HandlerTarget = Literal[
     "agents",
     "gateways",
     "mcp",
+    "schedule",
+    "memory",
 ]
 
 
@@ -1296,6 +1318,84 @@ async def _handle_agent_send(service: Any, ctx: HandlerContext, p: AgentSendRequ
 
 
 # ---------------------------------------------------------------------------
+# cron/* handler wrappers
+# ---------------------------------------------------------------------------
+
+
+async def _handle_cron_list(service: Any, ctx: HandlerContext, p: CronListRequest) -> BaseModel:
+    del ctx
+    tasks = await service.list_tasks(include_completed=p.include_completed)
+    return CronListResponse(jobs=[_cron_task_to_wire(task) for task in tasks])
+
+
+async def _handle_cron_create(service: Any, ctx: HandlerContext, p: CronCreateRequest) -> BaseModel:
+    del ctx
+    try:
+        task = await service.create_task(
+            schedule_expr=p.schedule,
+            prompt=p.prompt,
+            description=p.description or "",
+            recurring=p.recurring,
+        )
+    except ValueError as exc:
+        raise _invalid_management_error(exc)
+    return CronCreateResponse(job=_cron_task_to_wire(task))
+
+
+async def _handle_cron_delete(service: Any, ctx: HandlerContext, p: CronDeleteRequest) -> BaseModel:
+    del ctx
+    deleted = await service.delete_task(p.id)
+    return CronDeleteResponse(id=p.id, deleted=deleted)
+
+
+def _cron_task_to_wire(task: Any) -> dict[str, Any]:
+    schedule = task.schedule
+    return {
+        "id": task.id,
+        "ownerAgentId": task.owner_agent_id,
+        "schedule": getattr(schedule, "expr", "") or getattr(schedule, "kind", ""),
+        "scheduleKind": getattr(getattr(schedule, "kind", ""), "value", getattr(schedule, "kind", "")),
+        "prompt": task.prompt,
+        "description": task.description,
+        "recurring": task.recurring,
+        "durable": task.durable,
+        "status": getattr(task.status, "value", task.status),
+        "fireCount": task.fire_count,
+        "createdAt": task.created_at,
+        "lastFiredAt": task.last_fired_at,
+        "nextFireAt": task.next_fire_at,
+    }
+
+
+# ---------------------------------------------------------------------------
+# memory/* handler wrappers
+# ---------------------------------------------------------------------------
+
+
+async def _handle_memory_list(service: Any, ctx: HandlerContext, p: MemoryListRequest) -> BaseModel:
+    del ctx
+    return MemoryListResponse(memories=_camelise(service.list_records(category=p.category)))
+
+
+async def _handle_memory_show(service: Any, ctx: HandlerContext, p: MemoryShowRequest) -> BaseModel:
+    del ctx
+    try:
+        memory = service.read_record(p.name)
+    except KeyError as exc:
+        raise _invalid_management_error(exc)
+    return MemoryShowResponse(memory=_camelise(memory))
+
+
+async def _handle_memory_delete(service: Any, ctx: HandlerContext, p: MemoryDeleteRequest) -> BaseModel:
+    del ctx
+    try:
+        result = service.delete_record(p.name, confirm=p.confirm)
+    except (KeyError, PermissionError) as exc:
+        raise _invalid_management_error(exc)
+    return MemoryDeleteResponse.model_validate(_camelise(result))
+
+
+# ---------------------------------------------------------------------------
 # gateways/* handler wrappers
 # ---------------------------------------------------------------------------
 
@@ -1600,6 +1700,35 @@ async def _handle_web_fetch_set_config(
     return SetWebFetchConfigResponse.model_validate(result)
 
 
+async def _handle_web_bridge_status(
+    tm: Any,
+    ctx: HandlerContext,
+    p: WebBridgeStatusRequest,
+) -> BaseModel:
+    del ctx
+    return WebBridgeStatusResponse.model_validate(
+        tm.web_bridge_status(include_pairing_token=p.include_pairing_token)
+    )
+
+
+async def _handle_web_bridge_pair_start(
+    tm: Any,
+    ctx: HandlerContext,
+    p: WebBridgePairStartRequest,
+) -> BaseModel:
+    del ctx, p
+    return WebBridgeStatusResponse.model_validate(tm.web_bridge_pair_start())
+
+
+async def _handle_web_bridge_pair_reset(
+    tm: Any,
+    ctx: HandlerContext,
+    p: WebBridgePairResetRequest,
+) -> BaseModel:
+    del ctx, p
+    return WebBridgeStatusResponse.model_validate(await tm.web_bridge_pair_reset())
+
+
 # ---------------------------------------------------------------------------
 # Dispatch tables
 # ---------------------------------------------------------------------------
@@ -1718,6 +1847,42 @@ REQUEST_DISPATCH: dict[str, RequestSpec] = {
         params_type=AgentSendRequest,
         result_type=AgentSendResponse,
         target="agents",
+    ),
+    MustangMethod.CRON_LIST: RequestSpec(
+        handler=_handle_cron_list,
+        params_type=CronListRequest,
+        result_type=CronListResponse,
+        target="schedule",
+    ),
+    MustangMethod.CRON_CREATE: RequestSpec(
+        handler=_handle_cron_create,
+        params_type=CronCreateRequest,
+        result_type=CronCreateResponse,
+        target="schedule",
+    ),
+    MustangMethod.CRON_DELETE: RequestSpec(
+        handler=_handle_cron_delete,
+        params_type=CronDeleteRequest,
+        result_type=CronDeleteResponse,
+        target="schedule",
+    ),
+    MustangMethod.MEMORY_LIST: RequestSpec(
+        handler=_handle_memory_list,
+        params_type=MemoryListRequest,
+        result_type=MemoryListResponse,
+        target="memory",
+    ),
+    MustangMethod.MEMORY_SHOW: RequestSpec(
+        handler=_handle_memory_show,
+        params_type=MemoryShowRequest,
+        result_type=MemoryShowResponse,
+        target="memory",
+    ),
+    MustangMethod.MEMORY_DELETE: RequestSpec(
+        handler=_handle_memory_delete,
+        params_type=MemoryDeleteRequest,
+        result_type=MemoryDeleteResponse,
+        target="memory",
     ),
     MustangMethod.GATEWAYS_LIST: RequestSpec(
         handler=_handle_gateways_list,
@@ -1909,6 +2074,24 @@ REQUEST_DISPATCH: dict[str, RequestSpec] = {
         handler=_handle_web_fetch_set_config,
         params_type=SetWebFetchConfigRequest,
         result_type=SetWebFetchConfigResponse,
+        target="tools",
+    ),
+    MustangMethod.WEB_BRIDGE_STATUS: RequestSpec(
+        handler=_handle_web_bridge_status,
+        params_type=WebBridgeStatusRequest,
+        result_type=WebBridgeStatusResponse,
+        target="tools",
+    ),
+    MustangMethod.WEB_BRIDGE_PAIR_START: RequestSpec(
+        handler=_handle_web_bridge_pair_start,
+        params_type=WebBridgePairStartRequest,
+        result_type=WebBridgeStatusResponse,
+        target="tools",
+    ),
+    MustangMethod.WEB_BRIDGE_PAIR_RESET: RequestSpec(
+        handler=_handle_web_bridge_pair_reset,
+        params_type=WebBridgePairResetRequest,
+        result_type=WebBridgeStatusResponse,
         target="tools",
     ),
     # session/* -- routed to SessionHandler (SessionManager)

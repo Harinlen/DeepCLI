@@ -84,6 +84,7 @@ class ToolManager(Subsystem):
         super().__init__(module_table)
         self._flags: ToolFlags | None = None
         self._web_fetch_config: Any = None
+        self._web_bridge: Any = None
         self._registry = ToolRegistry()
         self._file_state = FileStateCache()
 
@@ -104,6 +105,7 @@ class ToolManager(Subsystem):
             flags = cast(ToolFlags, flag_manager.get_section("tools"))
         self._flags = flags
         self._bind_web_fetch_config()
+        await self._start_web_bridge()
 
         prompts = self._module_table.prompts
         self._registry._prompt_manager = prompts
@@ -222,6 +224,13 @@ class ToolManager(Subsystem):
         """
         if self._mcp_disconnect is not None:
             self._mcp_disconnect()
+        if self._web_bridge is not None:
+            await self._web_bridge.shutdown()
+            from kernel.agents.mustang.tools.web.fetch_backends.browser import (
+                set_web_bridge_manager,
+            )
+
+            set_web_bridge_manager(None)
         for tool, _layer in self._registry.all_tools():
             shutdown = getattr(tool, "shutdown", None)
             if shutdown is not None:
@@ -346,9 +355,96 @@ class ToolManager(Subsystem):
             "backends": public_backends,
         }
 
+    async def _start_web_bridge(self) -> None:
+        """Start the process-local WebBridge manager."""
+        from kernel.agents.mustang.tools.web.fetch_backends.browser import set_web_bridge_manager
+        from kernel.agents.mustang.tools.web.web_bridge import WebBridgeManager
+
+        async def _persist_pairing(extension_id: str, secret: str) -> None:
+            secrets = self._module_table.secrets
+            if secrets is None:
+                raise ValueError("SecretManager is not available")
+            secret_ref = secrets.set(
+                "web_bridge.extension.secret",
+                secret,
+                kind="web_bridge",
+                metadata={"scope": "web_bridge", "extension_id": extension_id},
+            )
+            current = self.web_fetch_config_model()
+            browser_config = dict(current.backends.get("browser", {}))
+            browser_config.update(
+                {
+                    "extension_id": extension_id,
+                    "secret_ref": secret_ref.ref,
+                    "protocol_version": "web-bridge.v1",
+                }
+            )
+            backends = dict(current.backends)
+            backends["browser"] = browser_config
+            await self._update_web_fetch_config(current.model_copy(update={"backends": backends}))
+
+        def _read_secret() -> str | None:
+            secrets = self._module_table.secrets
+            if secrets is None:
+                return None
+            browser_config = self.web_fetch_config_model().backends.get("browser", {})
+            secret_ref = browser_config.get("secret_ref")
+            if not isinstance(secret_ref, str) or not secret_ref:
+                return None
+            return secrets.get(secret_ref)
+
+        async def _reset_pairing() -> None:
+            current = self.web_fetch_config_model()
+            browser_config = dict(current.backends.get("browser", {}))
+            secret_ref = browser_config.get("secret_ref")
+            if isinstance(secret_ref, str) and secret_ref:
+                secrets = self._module_table.secrets
+                if secrets is not None:
+                    secrets.delete(secret_ref)
+            for key in ("extension_id", "secret_ref", "protocol_version"):
+                browser_config.pop(key, None)
+            backends = dict(current.backends)
+            backends["browser"] = browser_config
+            await self._update_web_fetch_config(current.model_copy(update={"backends": backends}))
+
+        access_port = int(
+            os.getenv("MUSTANG_ACCESS_PORT", os.getenv("MUSTANG_ACCESS_ROUTER_PORT", "8200"))
+        )
+        self._web_bridge = WebBridgeManager(
+            access_port=access_port,
+            persist_pairing=_persist_pairing,
+            reset_pairing=_reset_pairing,
+            read_secret=_read_secret,
+        )
+        await self._web_bridge.startup()
+        set_web_bridge_manager(self._web_bridge)
+
     def web_fetch_backend_options(self) -> dict[str, Any]:
         self._hydrate_web_fetch_env_from_secrets()
         return build_backend_options(self.web_fetch_config_model())
+
+    def web_bridge_status(self, *, include_pairing_token: bool = False) -> dict[str, Any]:
+        if self._web_bridge is None:
+            return {
+                "status": "unavailable",
+                "paired": False,
+                "connected": False,
+                "installUrl": "",
+                "bridgeWsUrl": "",
+                "protocolVersion": "web-bridge.v1",
+                "message": "WebBridge is not running.",
+            }
+        return self._web_bridge.status(include_pairing_token=include_pairing_token)
+
+    def web_bridge_pair_start(self) -> dict[str, Any]:
+        if self._web_bridge is None:
+            raise ValueError("WebBridge is not running")
+        return self._web_bridge.pair_start()
+
+    async def web_bridge_pair_reset(self) -> dict[str, Any]:
+        if self._web_bridge is None:
+            raise ValueError("WebBridge is not running")
+        return await self._web_bridge.pair_reset()
 
     async def set_web_fetch_backend(
         self,
@@ -438,7 +534,7 @@ class ToolManager(Subsystem):
                     return {
                         "backend": backend,
                         "changed": False,
-                        "message": f"{definition.label} is not available. Check dependencies or API credentials.",
+                        "message": self._format_web_fetch_unavailable(definition),
                     }
 
         latest = self.web_fetch_config_model()
@@ -478,6 +574,24 @@ class ToolManager(Subsystem):
         if len(details) > 1200:
             details = f"...{details[-1200:]}"
         return f"{definition.label} setup failed while running `{command}` (exit {exit_code}): {details}"
+
+    def _format_web_fetch_unavailable(self, definition: Any) -> str:
+        if getattr(definition, "id", "") == "browser":
+            status = self.web_bridge_status(include_pairing_token=False)
+            install_url = status.get("installUrl") or "/webfetch browser install"
+            if not status.get("paired"):
+                return (
+                    "Browser backend needs WebBridge pairing first. "
+                    f"Run /webfetch browser install or open {install_url}."
+                )
+            if not status.get("connected"):
+                return (
+                    "Browser backend is paired but the WebBridge extension is offline. "
+                    "Open Chrome, make sure the DeepCLI WebBridge extension is enabled, "
+                    "then run /webfetch browser status."
+                )
+            return "Browser backend is not available even though WebBridge reports connected."
+        return f"{definition.label} is not available. Check dependencies or API credentials."
 
     async def set_web_fetch_config_value(self, path: str, value: Any) -> dict[str, Any]:
         parts = [part for part in path.split(".") if part]

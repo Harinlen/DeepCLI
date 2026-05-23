@@ -30,10 +30,11 @@ try {
 	await initTheme(false, "unicode", false, "dark", "dark");
 	fakeLlm = await startFakeOpenAIServer();
 	writeKernelConfig(fakeLlm.baseUrl);
+	writeMemoryFixture();
 	kernel = startKernel();
 	await waitReady(port);
 	client = await AcpClient.connect(url, readToken());
-	const session = new MustangSession(client, "real-slash-probe");
+	const session = await MustangSession.create(client, workspace);
 	const sessionFacade = makeSessionFacade(client, session);
 	const errors: string[] = [];
 	const warnings: string[] = [];
@@ -50,7 +51,10 @@ try {
 		},
 		ui: { requestRender: () => undefined },
 		handleCompactCommand: async () => statuses.push("compact"),
-		handleUsageCommand: async () => statuses.push("cost"),
+		handleUsageCommand: async () => {
+			const report = await sessionFacade.getUsage();
+			rendered.push(`Usage ${report.sessionId} total=${report.tokens.total}`);
+		},
 		handleMemoryCommand: async (command: string) => statuses.push(command),
 		handleClearCommand: async () => statuses.push("clear"),
 		handleHotkeysCommand: async () => statuses.push("help"),
@@ -73,6 +77,8 @@ try {
 		showModelAdd: () => statuses.push("model-add"),
 		showWebFetchBackendSelector: () => statuses.push("webfetch-backend-selector"),
 		showWebFetchConfigSelector: () => statuses.push("webfetch-config-selector"),
+		showHookConfirm: async () => true,
+		openInBrowser: () => statuses.push("open-browser"),
 		showThemeSelector: () => statuses.push("theme-selector"),
 		enableThemeWatcher: false,
 	};
@@ -91,6 +97,10 @@ try {
 	assert(
 		rendered.some(line => line.includes("Kernel runtime")),
 		"/kernel status should render supervisor runtime status",
+	);
+	assert(
+		rendered.some(line => line.includes("Usage") && line.includes("total=")),
+		"/cost should fetch usage through the real session/get_usage path",
 	);
 	assert(
 		rendered.some(line => line.includes("skill-installer")),
@@ -193,11 +203,17 @@ async function smokeCommands(
 ): Promise<string[]> {
 	const exportPath = join(tempRoot, "global-export.json");
 	const secret = await seedSecretFixture(client);
+	const grant = await seedAgentGrantFixture(client, workspace);
 	return [
 		"/clear",
 		"/compact",
 		"/cost",
 		"/memory list",
+		"/memory show probe-memory",
+		"/memory delete probe-memory --confirm",
+		"/cron list",
+		"/cron create 1h check scheduling",
+		"/cron delete missing-cron-job",
 		"/help",
 		"/theme current",
 		"/theme list",
@@ -212,6 +228,7 @@ async function smokeCommands(
 		"/session new",
 		"/session switch 1",
 		"/session load 1",
+		"/session resume 1",
 		"/session rename Probe Session",
 		"/session archive",
 		"/session unarchive",
@@ -221,13 +238,18 @@ async function smokeCommands(
 		"/model use real_slash_fake/real-slash-model",
 		"/webfetch backend",
 		"/webfetch backend auto",
+		"/webfetch browser install",
+		"/webfetch browser status",
+		"/webfetch browser pair",
+		"/webfetch browser reset",
 		"/webfetch config",
-		"/webfetch config httpx.timeout 10",
+		"/webfetch install httpx",
 		"/kernel status",
 		"/global backup",
 		"/global backups",
 		`/global export ${exportPath}`,
 		`/global import ${exportPath} --dry-run`,
+		`/global restore ${exportPath} --confirm`,
 		"/flag list",
 		"/flag read kernel.memory",
 		"/flag set kernel.memory false",
@@ -239,12 +261,30 @@ async function smokeCommands(
 		`/agents create worker ${workspace} Worker`,
 		"/agents list",
 		"/agents read worker",
+		"/agents add worker2 /tmp Worker2",
+		"/agents set-identity worker WorkerRenamed",
+		"/agents bindings",
+		"/agents health worker",
+		"/agents grants",
+		"/agents grants worker",
+		"/agents grant worker agent_control global",
+		`/agents revoke-grant ${grant.grantId}`,
+		"/agents start worker",
+		"/agents stop worker",
+		"/agents restart worker",
 		"/gateways create testgw test {}",
 		"/gateways list",
 		"/gateways read testgw",
 		"/gateways status testgw",
+		"/gateways enable testgw",
+		"/gateways reload testgw",
+		"/gateways bindings",
 		"/gateways bind testgw chan1 worker",
+		"/gateways bindings testgw",
+		"/gateways unbind testgw:chan1",
 		"/agents bind worker testgw:chan2",
+		"/agents unbind worker testgw:chan2",
+		"/gateways disable testgw",
 		"/agent send primary hello",
 		"/mcp create remote {\"type\":\"http\",\"url\":\"https://mcp.example.test\",\"headers\":{\"Authorization\":\"secret:abc\"}}",
 		"/mcp list",
@@ -262,12 +302,36 @@ async function smokeCommands(
 		"/skills audit",
 		"/skills uninstall skill-installer",
 		"/agents delete worker --confirm",
+		"/agents delete worker2 --confirm",
+		`/agents delete ${grant.agentId} --confirm`,
 		"/gateways delete testgw --confirm",
 		"/session delete confirm",
 		"/kernel restart",
 		"/quit",
 		"/exit",
 	];
+}
+
+function writeMemoryFixture(): void {
+	for (const root of [tempRoot, stateDir, join(tempRoot, "agents", "primary")]) {
+		const memoryDir = join(root, "memory", "semantic");
+		mkdirSync(memoryDir, { recursive: true });
+		writeFileSync(
+			join(memoryDir, "probe-memory.md"),
+			[
+				"---",
+				"name: probe-memory",
+				"description: Probe memory used by real slash command closure.",
+				"category: semantic",
+				"source: user",
+				"---",
+				"",
+				"Probe memory body.",
+				"",
+			].join("\n"),
+			"utf8",
+		);
+	}
 }
 
 async function seedSecretFixture(client: AcpClient): Promise<{ secretId: string; revision: number }> {
@@ -287,6 +351,26 @@ async function seedSecretFixture(client: AcpClient): Promise<{ secretId: string;
 	assert(secretId !== undefined && secretId.length > 0, "secret fixture should include a secret id");
 	assert(Number.isInteger(secret.revision), "secret fixture should include a revision");
 	return { secretId, revision: secret.revision ?? 1 };
+}
+
+async function seedAgentGrantFixture(client: AcpClient, workspace: string): Promise<{ agentId: string; grantId: string }> {
+	const agentId = "grantworker";
+	await client.request(MustangMethod.agentsAdd, {
+		agentId,
+		workspace,
+		name: "Grant Worker",
+	});
+	const result = await client.request<{ grant?: { grantId?: string; grant_id?: string } }>(
+		MustangMethod.agentsGrant,
+		{
+			agentId,
+			capability: "agent_control",
+			scope: "global",
+		},
+	);
+	const grantId = result.grant?.grantId ?? result.grant?.grant_id;
+	assert(grantId !== undefined && grantId.length > 0, "agent grant fixture should include a grant id");
+	return { agentId, grantId };
 }
 
 function assertBuiltinSlashCoverage(commands: string[]): void {
@@ -373,6 +457,15 @@ function makeSessionFacade(client: AcpClient, session: MustangSession): any {
 		),
 		setWebFetchConfig: async (path: string, value: unknown) => (
 			await client.request(MustangMethod.webFetchSetConfig, { path, value })
+		),
+		webBridgeStatus: async (includePairingToken = false) => (
+			await client.request(MustangMethod.webBridgeStatus, { includePairingToken })
+		),
+		webBridgePairStart: async () => (
+			await client.request(MustangMethod.webBridgePairStart, {})
+		),
+		webBridgePairReset: async () => (
+			await client.request(MustangMethod.webBridgePairReset, {})
 		),
 	});
 }

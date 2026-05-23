@@ -233,6 +233,72 @@ class MemoryManager(Subsystem):
 
         return entries
 
+    def list_records(self, category: str | None = None) -> list[dict[str, Any]]:
+        """Return memory metadata for slash-command management."""
+        self._index.invalidate()
+        headers = (
+            self._index.get_headers_by_category(category)
+            if category
+            else self._index.get_all_headers()
+        )
+        return [
+            {
+                "name": header.name,
+                "filename": header.filename,
+                "category": header.category,
+                "source": header.source,
+                "scope": header.scope,
+                "description": header.description,
+                "access_count": header.access_count,
+                "age_days": header.age_days,
+                "locked": header.locked,
+                "rel_path": header.rel_path,
+            }
+            for header in sorted(headers, key=lambda h: (h.category, h.name))
+        ]
+
+    def read_record(self, name: str) -> dict[str, Any]:
+        """Return one memory entry by name or filename."""
+        self._index.invalidate()
+        header = self._index.get_header(name)
+        if header is None:
+            raise KeyError(f"memory not found: {name}")
+        root = self._root_for_scope(header.scope)
+        if root is None:
+            raise KeyError(f"memory scope unavailable: {header.scope}")
+        entry = store.read_memory(root / header.rel_path)
+        return {
+            "name": entry.header.name,
+            "filename": entry.header.filename,
+            "category": entry.header.category,
+            "source": entry.header.source,
+            "scope": header.scope,
+            "description": entry.header.description,
+            "content": entry.content,
+            "rel_path": header.rel_path,
+        }
+
+    def delete_record(self, name: str, *, confirm: bool = False) -> dict[str, Any]:
+        """Delete one memory entry by name or filename."""
+        if not confirm:
+            raise PermissionError("memory delete requires --confirm")
+        self._index.invalidate()
+        header = self._index.get_header(name)
+        if header is None:
+            raise KeyError(f"memory not found: {name}")
+        root = self._root_for_scope(header.scope)
+        if root is None:
+            raise KeyError(f"memory scope unavailable: {header.scope}")
+        store.delete_memory(root, header.category, header.filename)
+        store.write_log(root, "memory_delete", header.filename)
+        self._index.invalidate()
+        return {"name": header.name, "filename": header.filename, "deleted": True}
+
+    def _root_for_scope(self, scope: str) -> Path | None:
+        if scope == "project":
+            return self._project_root
+        return self._global_root
+
     def get_strategy_text(self) -> str:
         """Return memory usage strategy text for Channel C."""
         return self._strategy_text

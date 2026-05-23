@@ -80,6 +80,7 @@ def get_available_backends() -> list[FetchBackend]:
 
 def get_backend_by_name(name: str) -> FetchBackend | None:
     """Return a backend instance by user-selectable backend id."""
+    from kernel.agents.mustang.tools.web.fetch_backends.browser import BrowserFetchBackend
     from kernel.agents.mustang.tools.web.fetch_backends.crawl4ai_be import Crawl4AIFetchBackend
     from kernel.agents.mustang.tools.web.fetch_backends.exa import ExaFetchBackend
     from kernel.agents.mustang.tools.web.fetch_backends.firecrawl import FirecrawlFetchBackend
@@ -90,6 +91,7 @@ def get_backend_by_name(name: str) -> FetchBackend | None:
     mapping: dict[str, type[FetchBackend]] = {
         "httpx": HttpxFetchBackend,
         "crawl4ai": Crawl4AIFetchBackend,
+        "browser": BrowserFetchBackend,
         "firecrawl": FirecrawlFetchBackend,
         "parallel": ParallelFetchBackend,
         "exa": ExaFetchBackend,

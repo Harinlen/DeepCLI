@@ -104,6 +104,11 @@ def _start_primary_runtime(
     ]
     env = os.environ.copy()
     env["MUSTANG_AGENT_ID"] = agent_id
+    if access_router_endpoint:
+        try:
+            env["MUSTANG_ACCESS_PORT"] = access_router_endpoint.rsplit(":", 1)[1]
+        except IndexError:
+            pass
     return subprocess.Popen(command, env=env)  # nosec B603
 
 

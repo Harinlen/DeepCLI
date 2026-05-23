@@ -32,20 +32,25 @@ Every implementation step follows these phases in order, no skipping.
    - `docs/kernel/` (module boundaries, data flow)
    - `docs/kernel/` subsystem docs (interfaces, contracts)
    - Docstrings / inline references to design docs
+8. If this implementation changes shipped behavior, increment
+   `kernel.__version__` in `src/kernel/kernel/__init__.py` during the
+   same workstream.  Do not leave version bumping to a later cleanup;
+   probes and user reports need the version that actually contains
+   the implementation under test.
 
 ## Phase 3 — Unit tests
 
-8. **Does it run?** — no import/syntax errors, kernel starts cleanly.
+9. **Does it run?** — no import/syntax errors, kernel starts cleanly.
    Debug until it does.
-9. **Boundary defence** — unit-test edge cases: bad input, missing
+10. **Boundary defence** — unit-test edge cases: bad input, missing
    files, network failure, empty collections, concurrent access.
    Each boundary has a test that asserts the correct behaviour rather
    than a crash.
-10. **Every plan module has a test file.**  Cross-check your plan's
+11. **Every plan module has a test file.**  Cross-check your plan's
     module list against `tests/`.  If the plan says "new file X",
     there must be a corresponding `test_X.py`.  Missing test files
     mean missing coverage — not "tested elsewhere".
-11. **Every public function's return type is asserted.**  If a
+12. **Every public function's return type is asserted.**  If a
     function returns a dataclass / dict / object, the test must
     construct a real call and assert the returned fields — not just
     that it "doesn't crash".  This catches missing constructor
@@ -54,7 +59,7 @@ Every implementation step follows these phases in order, no skipping.
 
 ## Phase 4 — End-to-end verify (**mandatory, do not skip**)
 
-12. **Feature correctness** — for every requirement in the plan, trace
+13. **Feature correctness** — for every requirement in the plan, trace
     the full path: given a concrete input, does the system produce the
     expected output?  Verify against the actual running code, not just
     a reading of it.
@@ -205,7 +210,8 @@ the first time they ran.
 
 ## Phase 6 — Report
 
-15. Update `docs/plans/progress.md` with completed step + any new
+15. Update `docs/plans/progress.md` with completed step, new kernel
+    version, and any new
     findings.  Route gotchas to `docs/lessons-learned.md`.
 16. **Ensure design doc is in its final location.**  The feature's
     design doc should live in `docs/kernel/subsystems/<name>.md`.

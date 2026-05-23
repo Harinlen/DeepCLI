@@ -72,6 +72,15 @@ class MustangMethod:
     WEB_FETCH_SET_BACKEND = "_mustang.agent/web_fetch/set_backend"
     WEB_FETCH_GET_CONFIG = "_mustang.agent/web_fetch/get_config"
     WEB_FETCH_SET_CONFIG = "_mustang.agent/web_fetch/set_config"
+    WEB_BRIDGE_STATUS = "_mustang.agent/web_bridge/status"
+    WEB_BRIDGE_PAIR_START = "_mustang.agent/web_bridge/pair_start"
+    WEB_BRIDGE_PAIR_RESET = "_mustang.agent/web_bridge/pair_reset"
+    CRON_LIST = "_mustang.agent/cron/list"
+    CRON_CREATE = "_mustang.agent/cron/create"
+    CRON_DELETE = "_mustang.agent/cron/delete"
+    MEMORY_LIST = "_mustang.agent/memory/list"
+    MEMORY_SHOW = "_mustang.agent/memory/show"
+    MEMORY_DELETE = "_mustang.agent/memory/delete"
     SECRETS_AUTH = "_mustang.agent/secrets/auth"
     GLOBAL_BACKUP = "_mustang.agent/global/backup"
     GLOBAL_BACKUPS = "_mustang.agent/global/backups"
@@ -148,6 +157,12 @@ MUSTANG_EXTENSION_METHODS = frozenset(
         MustangMethod.WEB_FETCH_SET_BACKEND,
         MustangMethod.WEB_FETCH_GET_CONFIG,
         MustangMethod.WEB_FETCH_SET_CONFIG,
+        MustangMethod.CRON_LIST,
+        MustangMethod.CRON_CREATE,
+        MustangMethod.CRON_DELETE,
+        MustangMethod.MEMORY_LIST,
+        MustangMethod.MEMORY_SHOW,
+        MustangMethod.MEMORY_DELETE,
         MustangMethod.SECRETS_AUTH,
         MustangMethod.GLOBAL_BACKUP,
         MustangMethod.GLOBAL_BACKUPS,

@@ -37,9 +37,11 @@ assert(
 );
 
 const modeCalls: string[] = [];
+const modeTimeouts: Array<number | undefined> = [];
 const modeClient = {
-  async request(method: string, params: { modeId?: string }) {
+  async request(method: string, params: { modeId?: string }, opts?: { timeoutMs?: number }) {
     modeCalls.push(params.modeId ? `${method}:${params.modeId}` : method);
+    modeTimeouts.push(opts?.timeoutMs);
     if (method === AcpMethod.sessionResume) {
       return { modes: { currentModeId: "default" } };
     }
@@ -67,6 +69,10 @@ await modeSession.prompt("hello", () => {}, { mode: "bypass" });
 assert(
   modeCalls.join("|") === `${AcpMethod.sessionResume}|${AcpMethod.sessionSetMode}:bypass|${AcpMethod.sessionPrompt}`,
   `prompt should sync requested mode after resume and before send, got ${modeCalls.join("|")}`,
+);
+assert(
+  modeTimeouts[1] === 0,
+  "session/set_mode should not inherit the generic 30s RPC timeout because prompt turns can be waiting on user interaction",
 );
 
 console.log("PASS: session prompt resumes before send");

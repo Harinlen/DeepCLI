@@ -358,3 +358,115 @@ def test_access_router_proxies_runtime_client_permission_request() -> None:
     assert response["id"] == "prompt-1"
     assert response["result"]["permission"]["outcome"]["optionId"] == "reject"
     assert router.agent_hub_forward_count == 0
+
+
+def test_access_router_set_mode_completes_while_prompt_waits_on_permission() -> None:
+    router = AccessRouter(auth_token="secret")
+    mode_changes: list[str] = []
+
+    async def primary_runtime(
+        _request: DeliverTurnRequest,
+        _client_request_proxy: ClientRequestProxy | None = None,
+    ) -> dict[str, object]:
+        return {"text": "unused"}
+
+    async def primary_acp_runtime(
+        request: RuntimeAcpRequest,
+        client_request_proxy: ClientRequestProxy | None = None,
+    ) -> dict[str, object]:
+        if request.method == "initialize":
+            return {"protocolVersion": 1, "agentInfo": {"name": "mustang-agent-runtime"}}
+        if request.method == "session/set_mode":
+            mode = str(request.params["modeId"])
+            mode_changes.append(mode)
+            return {
+                "ok": True,
+                "updates": [
+                    {
+                        "sessionId": request.params["sessionId"],
+                        "update": {"sessionUpdate": "current_mode_update", "modeId": mode},
+                    }
+                ],
+            }
+        if request.method == "session/prompt":
+            assert client_request_proxy is not None
+            permission = await client_request_proxy(
+                "session/request_permission",
+                {
+                    "sessionId": "s-e2e",
+                    "toolCall": {"toolCallId": "tool-1", "title": "WebFetch"},
+                    "options": [
+                        {"optionId": "allow", "name": "Allow once", "kind": "allow_once"},
+                        {"optionId": "reject", "name": "Reject", "kind": "reject_once"},
+                    ],
+                },
+            )
+            return {"ok": True, "permission": permission}
+        raise AssertionError(f"unexpected method {request.method}")
+
+    router.register_runtime(
+        RuntimeRegisterRequest(
+            process_id="runtime-primary",
+            pid=123,
+            agent_id="primary",
+            protocol_version=1,
+            capabilities=("session", "acp"),
+            auth_token="secret",
+        ),
+        primary_runtime,
+        primary_acp_runtime,
+    )
+
+    app = create_app(router)
+    with TestClient(app) as client:
+        with client.websocket_connect("/session") as websocket:
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "init-1",
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": 1,
+                        "clientCapabilities": {},
+                        "clientInfo": {"name": "probe", "version": "1.0.0"},
+                    },
+                }
+            )
+            assert websocket.receive_json()["id"] == "init-1"
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "prompt-1",
+                    "method": "session/prompt",
+                    "params": {
+                        "agent_id": "primary",
+                        "sessionId": "s-e2e",
+                        "prompt": [{"type": "text", "text": "needs permission"}],
+                    },
+                }
+            )
+            permission_request = websocket.receive_json()
+            assert permission_request["method"] == "session/request_permission"
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "mode-1",
+                    "method": "session/set_mode",
+                    "params": {"sessionId": "s-e2e", "modeId": "bypass"},
+                }
+            )
+            mode_response = websocket.receive_json()
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": permission_request["id"],
+                    "result": {
+                        "outcome": {"outcome": "selected", "optionId": "allow"}
+                    },
+                }
+            )
+            prompt_response = websocket.receive_json()
+
+    assert mode_response["id"] == "mode-1"
+    assert mode_changes == ["bypass"]
+    assert prompt_response["id"] == "prompt-1"

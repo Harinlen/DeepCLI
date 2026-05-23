@@ -8,7 +8,13 @@ import { MustangSession, type CostUsageReport, type PermissionMode } from "@/ses
 import { SessionService } from "@/sessions/service.js";
 import type { CliSessionInfo } from "@/sessions/types.js";
 import { Box, Text } from "@/tui/index.js";
-import { WebFetchService, type SetWebFetchBackendResult, type WebFetchBackendState, type WebFetchConfigState } from "@/webfetch/service.js";
+import {
+	WebFetchService,
+	type SetWebFetchBackendResult,
+	type WebBridgeStatus,
+	type WebFetchBackendState,
+	type WebFetchConfigState,
+} from "@/webfetch/service.js";
 
 type Listener = (event: AgentSessionEvent) => void | Promise<void>;
 
@@ -227,7 +233,7 @@ export class MustangAgentSessionAdapter {
 	}
 
 	async fetchCostReport(): Promise<CostUsageReport> {
-		const session = this.#requireSession("Run a chat prompt or /session new before using /cost.");
+		const session = await this.#ensureSessionForPrompt();
 		const report = await session.getUsage();
 		const contextWindow = this.model.contextWindow;
 		if ((!report.context.contextWindow || report.context.contextWindow <= 0) && contextWindow && contextWindow > 0) {
@@ -436,6 +442,18 @@ export class MustangAgentSessionAdapter {
 		return this.webFetchService.setConfig(path, value);
 	}
 
+	async webBridgeStatus(includePairingToken = false): Promise<WebBridgeStatus> {
+		return this.webFetchService.webBridgeStatus(includePairingToken);
+	}
+
+	async webBridgePairStart(): Promise<WebBridgeStatus> {
+		return this.webFetchService.webBridgePairStart();
+	}
+
+	async webBridgePairReset(): Promise<WebBridgeStatus> {
+		return this.webFetchService.webBridgePairReset();
+	}
+
 	async setCurrentModelFromItem(item: ProviderModelItem, role = "default"): Promise<boolean> {
 		return this.setCurrentModelRole(role, item.providerName, item.modelId);
 	}
@@ -464,6 +482,7 @@ export class MustangAgentSessionAdapter {
 			await this.options.session.setMode(mode);
 		}
 		this.currentPermissionMode = mode;
+		this.#emit({ type: "current_mode_update", mode });
 	}
 
 	listSessions(limit = 20, cwd?: string): Promise<CliSessionInfo[]> {

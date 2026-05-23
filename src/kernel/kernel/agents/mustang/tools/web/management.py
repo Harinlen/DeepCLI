@@ -29,6 +29,7 @@ class BackendDefinition:
     python_paths: tuple[str, ...] = ()
     setup_commands: tuple[tuple[str, ...], ...] = ()
     setup_env: dict[str, str] | None = None
+    requires_pairing: bool = False
 
 
 def _deepcli_home() -> Path:
@@ -182,6 +183,14 @@ BACKEND_DEFINITIONS: tuple[BackendDefinition, ...] = (
         requires_api_key=True,
         env_keys=("TAVILY_API_KEY",),
     ),
+    BackendDefinition(
+        id="browser",
+        label="Browser",
+        category="web-bridge",
+        cost="free, local browser",
+        role="Use the paired WebBridge Chrome extension via a managed tab",
+        requires_pairing=True,
+    ),
 )
 
 _DEFINITIONS_BY_ID = {definition.id: definition for definition in BACKEND_DEFINITIONS}
@@ -237,6 +246,10 @@ def credential_request(definition: BackendDefinition) -> dict[str, Any] | None:
 def backend_is_available(definition: BackendDefinition) -> bool:
     if definition.id in {"auto", "httpx"}:
         return True
+    if definition.id == "browser":
+        from kernel.agents.mustang.tools.web.fetch_backends.browser import BrowserFetchBackend
+
+        return BrowserFetchBackend().is_available()
     return backend_is_installed(definition) and backend_has_credentials(definition)
 
 
@@ -245,9 +258,15 @@ def build_backend_options(config: WebFetchConfig) -> dict[str, Any]:
     for definition in BACKEND_DEFINITIONS:
         installed = backend_is_installed(definition)
         credentials = backend_has_credentials(definition)
+        bridge_status: dict[str, Any] = {}
+        if definition.id == "browser":
+            bridge_status = _web_bridge_status()
+            installed = bool(bridge_status.get("unpackedPath"))
         setup_required = bool(definition.setup_commands) and not installed
         if config.backend == definition.id:
             status = "current"
+        elif definition.id == "browser" and bridge_status:
+            status = str(bridge_status.get("status") or "setup_needed")
         elif setup_required:
             status = "setup_needed"
         elif definition.requires_api_key and not credentials:
@@ -277,12 +296,26 @@ def build_backend_options(config: WebFetchConfig) -> dict[str, Any]:
                 if definition.requires_api_key and not credentials
                 else None,
                 "current": config.backend == definition.id,
+                "installUrl": bridge_status.get("installUrl"),
+                "connected": bool(bridge_status.get("connected")),
+                "paired": bool(bridge_status.get("paired")),
             }
         )
     return {
         "current": config.backend,
         "options": options,
     }
+
+
+def _web_bridge_status() -> dict[str, Any]:
+    try:
+        from kernel.agents.mustang.tools.web.fetch_backends.browser import _MANAGER
+
+        if _MANAGER is None:
+            return {}
+        return dict(_MANAGER.status())  # type: ignore[attr-defined]
+    except Exception:
+        return {}
 
 
 def build_setup_plan(definition: BackendDefinition) -> dict[str, Any] | None:

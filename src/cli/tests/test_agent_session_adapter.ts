@@ -177,6 +177,34 @@ assert(recentAfterCreate[0]?.id === "new-session", "welcome recents should inclu
 assert(recentAfterCreate[0]?.title === "Untitled session", "welcome recents should label empty active sessions");
 assert(recentAfterCreate.some(session => session.id === "old-session"), "welcome recents should still include kernel-listed sessions");
 
+const emptyCostAdapter = new MustangAgentSessionAdapter({
+	client: {} as never,
+	sessionService: {
+		create: async () => ({ sessionId: "empty-session", modes: { currentModeId: "default" } }),
+		list: fakeSessionService.list,
+		clientForSession: () => ({
+			request: async (method: string, params: Record<string, unknown>) => {
+				assert(method === "_mustang.agent/session/get_usage", "empty /cost should call session/get_usage");
+				assert(params.sessionId === "empty-session", "empty /cost should fetch usage for the created session");
+				return {
+					sessionId: "empty-session",
+					cwd: "/tmp",
+					kernelVersion: "1.0.0",
+					tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					context: { totalTokens: 0, contextWindow: 64_000, percent: 0, sections: [] },
+					history: { messages: 0, turns: 0, toolCalls: 0, compactions: 0, queuedTurns: 0, inFlight: false },
+					memory: { loaded: 0, writableScopes: 0 },
+					environment: { lspServers: [], mcpServers: [] },
+				};
+			},
+		}),
+	} as never,
+	modelProfiles: [{ name: "deepseek/deepseek-chat", providerName: "deepseek", providerType: "deepseek", modelId: "deepseek-chat", isDefault: true, contextWindow: 64_000 }],
+});
+const emptyCostReport = await emptyCostAdapter.fetchCostReport();
+assert(emptyCostAdapter.sessionId === "empty-session", "empty /cost should create a session before fetching usage");
+assert(emptyCostReport.tokens.total === 0, "empty /cost should render a zero-token usage report instead of failing");
+
 const subagentUpdates = [
 	{ sessionUpdate: "tool_call", toolCallId: "agent-1", title: "Agent", rawInput: "{\"description\":\"Check weather\",\"prompt\":\"Look up weather\"}" },
 	{ sessionUpdate: "tool_call_update", toolCallId: "agent-1", status: "in_progress", meta: { "mustang.agent/agentStart": { agent_id: "a1" } } },
@@ -384,6 +412,34 @@ assert(modeAdapter.currentPermissionMode === "auto", "ambient current_mode_updat
 await modeAdapter.cyclePermissionMode();
 assert(modeAdapter.currentPermissionMode === "bypass", "cycle should follow Auto -> Bypass");
 assert(modeCalls.some(call => call.params.modeId === "bypass"), "cycle should call session/set_mode with next mode");
+
+let releaseOptimisticMode!: () => void;
+const optimisticModeSync = new Promise<void>(resolve => {
+	releaseOptimisticMode = resolve;
+});
+const optimisticAdapter = new MustangAgentSessionAdapter({
+	client: { onUpdate: () => () => {} } as never,
+	session: {
+		sessionId: "optimistic-mode-session",
+		setMode: async () => {
+			await optimisticModeSync;
+		},
+		cancel() {},
+		cancelExecution() {},
+	} as never,
+	sessionService: fakeSessionService as never,
+});
+const optimisticCycle = optimisticAdapter.cyclePermissionMode();
+assert(
+	optimisticAdapter.currentPermissionMode === "default",
+	"mode cycle should not claim a new permission mode before kernel session/set_mode resolves",
+);
+releaseOptimisticMode();
+await optimisticCycle;
+assert(
+	optimisticAdapter.currentPermissionMode === "accept_edits",
+	"mode cycle should update adapter state after kernel session/set_mode resolves",
+);
 
 const promptModeOrder: string[] = [];
 const promptModeAdapter = new MustangAgentSessionAdapter({

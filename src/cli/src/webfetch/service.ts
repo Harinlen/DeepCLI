@@ -22,6 +22,9 @@ export interface WebFetchBackendOption {
     prompt?: string;
   } | null;
   current: boolean;
+  installUrl?: string | null;
+  paired?: boolean;
+  connected?: boolean;
 }
 
 export interface WebFetchBackendState {
@@ -50,6 +53,20 @@ export interface SetWebFetchBackendResult {
 export interface WebFetchConfigState {
   backend: string;
   backends: Record<string, Record<string, unknown>>;
+}
+
+export interface WebBridgeStatus {
+  status: string;
+  installUrl?: string | null;
+  bridgeWsUrl?: string | null;
+  paired: boolean;
+  connected: boolean;
+  protocolVersion?: string;
+  message?: string | null;
+  pairingToken?: string | null;
+  unpackedPath?: string | null;
+  zipUrl?: string | null;
+  browser?: Record<string, unknown> | null;
 }
 
 export interface WebFetchServiceClient {
@@ -98,6 +115,30 @@ export class WebFetchService {
       { timeoutMs: 120_000 },
     );
   }
+
+  async webBridgeStatus(includePairingToken = false): Promise<WebBridgeStatus> {
+    return await this.client.request<WebBridgeStatus>(
+      MustangMethod.webBridgeStatus,
+      { includePairingToken },
+      { timeoutMs: 10_000 },
+    );
+  }
+
+  async webBridgePairStart(): Promise<WebBridgeStatus> {
+    return await this.client.request<WebBridgeStatus>(
+      MustangMethod.webBridgePairStart,
+      {},
+      { timeoutMs: 10_000 },
+    );
+  }
+
+  async webBridgePairReset(): Promise<WebBridgeStatus> {
+    return await this.client.request<WebBridgeStatus>(
+      MustangMethod.webBridgePairReset,
+      {},
+      { timeoutMs: 10_000 },
+    );
+  }
 }
 
 function mapBackendOption(raw: any): WebFetchBackendOption {
@@ -116,5 +157,8 @@ function mapBackendOption(raw: any): WebFetchBackendOption {
     credentialRequired: Boolean(raw.credentialRequired ?? raw.credential_required),
     credentialRequest: raw.credentialRequest ?? raw.credential_request ?? null,
     current: Boolean(raw.current),
+    installUrl: raw.installUrl ?? raw.install_url ?? null,
+    paired: raw.paired === undefined ? undefined : Boolean(raw.paired),
+    connected: raw.connected === undefined ? undefined : Boolean(raw.connected),
   };
 }

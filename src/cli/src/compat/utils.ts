@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 export const APP_NAME = "DeepCLI";
 export const CONFIG_DIR_NAME = ".mustang";
 export const VERSION = "1.0.0";
-export const TUI_VERSION = "1.0.3";
+export const TUI_VERSION = "1.0.5";
 
 export const $env = new Proxy({}, { get: (_target, prop) => process.env[String(prop)] }) as Record<string, string | undefined>;
 export function $flag(name: string): boolean { return process.argv.includes(`--${name}`); }

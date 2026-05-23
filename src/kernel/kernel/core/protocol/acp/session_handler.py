@@ -1196,6 +1196,10 @@ class AcpSessionHandler:
             return self._get_gateways_handler()
         if target == "mcp":
             return self._get_mcp_handler()
+        if target == "schedule":
+            return self._get_schedule_handler()
+        if target == "memory":
+            return self._get_memory_handler()
         raise InternalError(f"Unknown routing target: {target!r}")
 
     def _get_session_handler(self) -> SessionHandler:
@@ -1304,6 +1308,24 @@ class AcpSessionHandler:
             raise InternalError("Kernel state directory is not available")
         home = state_dir.parent if getattr(state_dir, "name", "") == "state" else state_dir
         return MCPCommandService(home, config_manager=getattr(self._module_table, "config", None))
+
+    def _get_schedule_handler(self) -> Any:
+        """Retrieve the ScheduleManager cron command provider."""
+        try:
+            from kernel.agents.mustang.schedule import ScheduleManager
+
+            return self._module_table.get(ScheduleManager)
+        except KeyError:
+            raise InternalError("ScheduleManager subsystem is not available")
+
+    def _get_memory_handler(self) -> Any:
+        """Retrieve the MemoryManager command provider."""
+        try:
+            from kernel.agents.mustang.memory import MemoryManager
+
+            return self._module_table.get(MemoryManager)
+        except KeyError:
+            raise InternalError("MemoryManager subsystem is not available")
 
     def _make_error_response(self, req_id: str | int, exc: Exception) -> AcpOutboundError:
         code = getattr(exc, "code", INTERNAL_ERROR)

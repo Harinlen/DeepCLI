@@ -24,6 +24,7 @@ def main() -> None:
 
     if args.dev:
         os.environ["_MUSTANG_DEV"] = "1"
+    os.environ["MUSTANG_ACCESS_PORT"] = str(args.port)
 
     uvicorn.run(
         "kernel.agents.access.app:create_app",

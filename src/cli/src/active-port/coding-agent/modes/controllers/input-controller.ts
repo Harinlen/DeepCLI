@@ -637,7 +637,15 @@ export class InputController {
 
 	async cyclePermissionMode(): Promise<void> {
 		try {
+			this.ctx.showStatus("Switching permission mode...", { dim: true });
 			const mode = await this.ctx.session.cyclePermissionMode();
+			await this.#applyPermissionModeUi(mode);
+		} catch (error) {
+			this.ctx.showError(error instanceof Error ? error.message : String(error));
+		}
+	}
+
+	async #applyPermissionModeUi(mode: string): Promise<void> {
 			await this.ctx.syncPlanModeWithPermissionMode(mode);
 			this.ctx.statusLine.invalidate();
 			this.ctx.updateEditorBorderColor();
@@ -646,9 +654,6 @@ export class InputController {
 				`Switch mode to ${theme.bold(colorPermissionModeText(display.color, display.title))} - ${display.description}`,
 				{ dim: false },
 			);
-		} catch (error) {
-			this.ctx.showError(error instanceof Error ? error.message : String(error));
-		}
 	}
 
 	async cycleRoleModel(options?: { temporary?: boolean }): Promise<void> {

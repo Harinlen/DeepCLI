@@ -65,6 +65,149 @@ surface superseded by
 [`agent-tool-openclaw-tools-separation-plan.md`](agent-tool-openclaw-tools-separation-plan.md)
 为准。
 
+## Implementation Driver
+
+按当前 Kernel 状态，这个计划可以指导实现的前提是：**先做 agent-visible
+Agent Network 工具闭环，再做外部 ACP runtime 和完整 Platform Adapter。**
+不要从最终拓扑图倒推一次性大重构；当前已有 `/agents`、`/agent send`、
+`/gateways` 管理面，应复用这些已经验过的 seams。
+
+### Source of Truth
+
+| 领域 | 当前真相 | 新实现必须复用 |
+|---|---|---|
+| Durable agent 管理 | `AgentCommandService` + `AgentManager` | 不从 tool 直接写 ResourceStore；创建/删除/bind 仍走管理面。 |
+| Durable message hot path | `AccessRouter.deliver_turn()` | `AgentMessage(agentId=...)` 必须复用这个 hot path 或它的服务封装。 |
+| Gateway/channel binding | `AccessRouterRepository.access_channel_bindings` | `agent_bindings` 继续 reserved/deferred，不启用、不双写。 |
+| Session runtime | `AgentSessionRuntimeService` + `SessionManager` | spawned session 执行仍由目标 runtime/session queue 拥有。 |
+| Local subtask compatibility | `AgentTool` + `TaskRegistry` | 只在 `AgentSession(runtime="local")` 显式使用，不能作为 durable fallback。 |
+
+当前 `multi_agent.py` 和 `OrchestratorDeps.route_agent_message` 只适合作为历史
+compatibility seam：它们通过 `module_table.agent_hub.router.route_message()` 返回
+route result，并不等同于已经 E2E 证明的 `AccessRouter.deliver_turn()` hot path。
+新的 `AgentMessage` 主路径不能以这个旧 closure 为验收依据。
+
+### Implementation Slices
+
+#### Slice 1 — Agent Network service and tool names
+
+目标：把 agent-visible 工具名、服务边界和默认 tool snapshot 立住，但只覆盖当前
+Kernel 已有能力。
+
+改动：
+
+- 新增 `kernel/agents/mustang/runtime/agent_network_service.py`，集中实现：
+  `list_visible_agents()`、`send_message()`、`spawn_session()`、`list_runs()`、
+  `stop_run()`、`steer_run()`。
+- 重写或替换 `kernel/agents/mustang/tools/builtin/multi_agent.py`，主类改为
+  `AgentDirectoryTool`、`AgentMessageTool`、`AgentSessionTool`。
+- `BUILTIN_TOOLS` 注册 `AgentDirectory`、`AgentMessage`、`AgentSession`；
+  旧 `agents_list` / `sessions_send` / `sessions_spawn` / `subagents` 若保留，
+  只能作为 deprecated wrappers，不出现在推荐 prompt/tool description 主路径。
+- `AgentDirectory` 第一版只返回 policy 允许的 durable agents 和 route status；
+  不返回 operator-only grants、secret-like config。
+- `AgentMessage(agentId=...)` 调服务层，服务层复用
+  `AccessRouter.deliver_turn()` / 等价 Access Router seam；无 route 或 stale route
+  返回 typed unavailable。
+- `AgentSession(runtime="acp")` 在 backend 未实现时返回 typed unsupported；
+  `runtime="agent"` 在 durable spawned session 未实现前也必须返回 typed
+  unsupported，不能偷偷调用 `AgentTool`。
+- `AgentSession(runtime="local")` 才允许投影/调用 `AgentTool`，并在结果中标记
+  `compatibility=true`。
+
+验收：
+
+- `BUILTIN_TOOLS` 同时包含 `Agent` 和 `AgentDirectory` / `AgentMessage` /
+  `AgentSession`，名称不冲突。
+- 旧 snake_case 名字不是默认推荐主路径。
+- policy deny 时 `AgentDirectory` 不显示目标，`AgentMessage` 拒绝发送。
+- `AgentSession(runtime="agent"|"acp")` 未实现 backend 时 typed unsupported，
+  不 fallback 到 `AgentTool`。
+- 真实 probe `tests/probe/probe_agent_network_tools.py` 至少证明 tool snapshot、
+  `AgentDirectory`、policy deny、`AgentMessage(agentId)` 走真实 Access Router
+  hot path、`agent_bindings=0`。
+
+#### Slice 2 — Spawned run registry and durable AgentSession
+
+目标：让 `AgentSession(runtime="agent")` 创建 caller-owned durable spawned run，
+并能 list/status/stop/steer。
+
+改动：
+
+- 新增 ResourceStore-backed spawned run registry，记录 `run_id`、
+  `parent_session_id`、`requester_agent_id`、`target_agent_id`、`runtime`、`mode`、
+  `session_id`、`status`、timestamps。
+- `AgentSession(action="spawn", runtime="agent")` 创建目标 session/run metadata；
+  发送首条 prompt 仍通过 Access Router / target runtime seam。
+- `AgentMessage(sessionId|runId)` 投递到已有 spawned session；不创建新 session。
+- `AgentSession(action="list"|"status"|"stop"|"steer")` 只能操作 caller-owned runs。
+
+验收：
+
+- 创建两个 durable agents 后，caller 只能看到 policy 允许目标。
+- `AgentSession(runtime="agent", mode="session")` 返回 `runId/sessionId`。
+- `AgentMessage(runId|sessionId)` 可继续投递到该 spawned session。
+- stop/steer 权限按 owner 检查。
+- 真实 probe 覆盖 spawn -> message -> list -> stop。
+
+#### Slice 3 — External ACP runtime backend
+
+目标：Codex / Claude Code 等 ACP harness 变成可管理 runtime，而不是普通 tool call。
+
+改动：
+
+- 新增 `kernel/agent_hub/manager/runtime_backends/base.py`、`mustang.py`、`acp.py`
+  或等价 controller 层。
+- 将现有 `ExternalAcpRuntimeAdapter` 作为底层 stdio client 种子，上移到 Hub
+  runtime backend 或由 backend 包装。
+- `AgentSession(runtime="acp")` 通过 `AcpRuntimeController` 创建 / resume /
+  prompt / cancel / close。
+- ACP runtime-initiated `session/request_permission` 通过 Runtime -> Hub -> Access
+  tunnel 回 CLI/Platform；`fs/*`、`terminal/*` 默认 fail closed。
+
+验收：
+
+- fake ACP runtime probe：initialize/new/prompt/cancel/close/status。
+- process crash 返回 typed failed/unavailable，不污染 run registry。
+- permission request round trip 走真实 Access path。
+
+#### Slice 4 — Platform Adapter inbound and bindings
+
+目标：外部平台消息也走同一 Agent Network route truth。
+
+改动：
+
+- 在 `kernel/agents/access/platforms/` 或当前 `access_router` adapter 体系下补齐
+  fake platform adapter。
+- inbound envelope 根据 `access_channel_bindings` route 到 target agent/session；
+  most-specific binding 和 idempotency 必须可测。
+- 出站 reply sink 从 runtime result/update 回平台 adapter，不直连 SessionManager。
+
+验收：
+
+- fake inbound -> bound agent -> reply sink E2E。
+- duplicate platform message id 不重复 prompt。
+- missing binding 返回 typed unavailable。
+
+#### Slice 5 — Main/primary naming and per-agent resources
+
+目标：把单 `primary` 兼容路径收窄为默认 `main` 的别名，并为多 Mustang runtime
+实例准备资源边界。
+
+改动：
+
+- 对外文档、command output、AgentDirectory 默认展示 `main`；内部 `primary`
+  只作为兼容 alias。
+- Agent creation/startup 拒绝复用 `agentDir` 或 session store。
+- 每个 agent 的 workspace、agentDir、session DB/transcript、prompt/bootstrap
+  scope 明确落到 `AgentResources`。
+
+验收：
+
+- `primary` alias 仍兼容已有 runtime path。
+- 新 agent 资源目录不串线。
+- layout/import tests 证明 Mustang runtime 多实例不共享 mutable singleton。
+
 ## 结论
 
 DeepCLI 要实现的是 OpenClaw 的核心模型，不是照搬 `acpx`：
@@ -192,9 +335,10 @@ OpenClaw 对齐。完成态必须支持：
 
 ## 术语
 
-本计划的外部概念和 agent 可见工具名复用 OpenClaw 术语。DeepCLI 内部已有
-`primary` / `AgentTool` / `external_acp` 等兼容名可以保留为实现细节，但文档、
-配置和 prompt 要尽量使用下表。
+本计划复用 OpenClaw 的长期 agent / session / binding 概念，但 agent-visible
+工具名采用 DeepCLI-native `AgentDirectory` / `AgentMessage` / `AgentSession`。
+DeepCLI 内部已有 `primary` / `AgentTool` / `external_acp` 等兼容名可以保留为
+实现细节，但当前文档、配置和 prompt 要尽量使用下表。
 
 | 术语 | 定义 |
 |---|---|
@@ -771,7 +915,7 @@ Agent 不应该靠猜名字或广播来找目标。选择目标必须走这条�
 
 行为：
 
-- 通过 Hub Router 投递 `AGENT_MESSAGE`
+- 通过 Access Router / Hub-owned route truth 投递 agent message
 - 默认不直接对用户发消息
 - 如果需要用户可见结果，返回目标 agent 的最新 assistant reply 或 accepted 状态
 
@@ -782,7 +926,7 @@ Agent 不应该靠猜名字或广播来找目标。选择目标必须走这条�
 输入：
 
 - `agentId?`
-- `runtime`: `subagent | acp`
+- `runtime`: `agent | acp | local`
 - `task`
 - `workspace`
 - `mode`: `run | session`
@@ -937,10 +1081,11 @@ tools:
 - 何时过期
 - 是否允许当前 conversation 继续发消息给目标 agent
 
-## 一次性对齐交付范围
+## Final Acceptance Scope
 
-这不是分阶段 MVP。实现完成时，下面这些能力必须同时成立；允许工程上拆 PR，
-但不能把任一项定义成“以后再说”的产品缺口。
+Implementation Driver 里的 slices 是推荐实施顺序；本节是最终完成态验收清单。
+实现可以按 slice 分 PR 交付，但不能在最终声明完成时把下面任一项定义成
+“以后再说”的产品缺口。
 
 ### Agent 与 Session Scope
 

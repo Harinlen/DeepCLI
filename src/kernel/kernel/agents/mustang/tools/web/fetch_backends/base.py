@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +26,7 @@ class FetchResult:
     truncated: bool = False
     raw_length: int = 0
     cached: bool = False
+    metadata: dict[str, Any] | None = None
 
 
 class FetchBackend(ABC):

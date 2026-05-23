@@ -2,7 +2,7 @@
 
 **父计划**: CLI plan retired; current CLI design facts live in [`../cli/design.md`](../cli/design.md)
 **范围**: `src/cli/` interactive TUI 输入行为
-**状态**: active remediation — 2026-05-11
+**状态**: active remediation — 2026-05-24
 
 ## 摘要
 
@@ -39,6 +39,41 @@ DeepCLI 当前相关文件：
 - `src/cli/src/active-port/coding-agent/modes/components/tool-execution.ts`
 - `src/cli/src/active-port/tui/components/editor.ts`
 - `src/cli/src/active-port/tui/autocomplete.ts`
+
+## 2026-05-24 Drift closure update
+
+对照 oh-my-pi 后确认：selector / permission overlay 抢占 focus 本身不是 bug；
+OMP 也是通过 `editorContainer.clear(); addChild(selector); ui.setFocus(selector)`
+把当前 bottom interaction 切给 selector。DeepCLI 的契约应写成：同一时刻只有一个
+active bottom component，所有可交互组件必须共享 cancel / exit keybinding 语义。
+
+已关闭的漂移：
+
+- selector-local cancel 现在有 regression 覆盖：默认 `Esc` 取消
+  `HookSelectorComponent` 和 `SessionSelectorComponent`，自定义
+  `tui.select.cancel` 时新绑定替代默认 `Esc`。
+- `Ctrl+C` 的 session selector exit path 仍保留，避免把 cancel 修成退出回归。
+- `session/set_mode` 属于 prompt path 的 mode sync，不再继承通用 30s ACP timeout；
+  mode restore / Shift+Tab 不应在用户仍在选择或 prompt 仍 pending 时虚假超时。
+- Shift+Tab mode cycle 现在先显示 mode switch in progress，等
+  `session/set_mode` 确认到达 Runtime 后才更新本地 permission mode UI；Working 状态下
+  runtime 控制通道必须能并发处理 set_mode，避免 UI 声称 Bypass 但 tool authz 仍按旧
+  mode 询问权限。
+- 用户可见 TUI 行为已 bump 到 `TUI_VERSION=1.0.5`，golden 首屏断言同步更新。
+
+验证命令：
+
+```bash
+bun run tests/test_keybindings_escape_components.ts
+bun run tests/test_session_resume_before_prompt.ts
+bun run tests/test_cli_shortcuts_matrix.ts
+bun run tests/test_input_controller_r4.ts
+bun run tests/test_ui_golden_r5.ts
+uv run --project src/kernel pytest -q tests/e2e/test_access_router_local_path_e2e.py::test_access_router_set_mode_completes_while_prompt_waits_on_permission -m e2e
+```
+
+剩余漂移不是当前 Esc/keybinding 问题，而是 CLI active-port type drift；记录在
+[`../cli/design.md#current-active-port-type-drift`](../cli/design.md#current-active-port-type-drift)。
 
 ## 输入契约
 

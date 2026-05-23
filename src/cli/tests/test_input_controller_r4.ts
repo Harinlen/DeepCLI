@@ -339,6 +339,27 @@ await controller.cyclePermissionMode();
 assert(calls.includes("sync-plan:accept_edits"), "permission mode cycling should reconcile local plan UI state from kernel mode");
 assert(ctx.planModeEnabled === false, "leaving plan mode through permission cycle should clear local plan state");
 
+let releaseModeSync!: () => void;
+const slowModeSync = new Promise<string>(resolve => {
+	releaseModeSync = () => resolve("plan");
+});
+calls.length = 0;
+ctx.session.currentPermissionMode = "accept_edits";
+ctx.loadingAnimation = { stop: () => calls.push("loader-stop") };
+ctx.session.cyclePermissionMode = () => {
+	calls.push("cycle-mode-start");
+	ctx.session.currentPermissionMode = "plan";
+	return slowModeSync;
+};
+const workingModeCycle = controller.cyclePermissionMode();
+await Promise.resolve();
+assert(calls.includes("status:Switching permission mode..."), "Shift+Tab during Working should immediately acknowledge mode switching");
+assert(!calls.includes("sync-plan:plan"), "mode UI should not claim Plan before kernel mode sync resolves");
+releaseModeSync();
+await workingModeCycle;
+assert(calls.includes("sync-plan:plan"), "Shift+Tab during Working should update mode UI after kernel mode sync resolves");
+ctx.loadingAnimation = undefined;
+
 ctx.session.isBashRunning = true;
 editor.onEscape?.();
 assert(calls.includes("abort-bash"), "Escape should cancel running bash command");

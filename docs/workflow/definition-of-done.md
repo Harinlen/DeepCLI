@@ -11,7 +11,7 @@ checklist is the last line of defence.
 
 ---
 
-## The five gates
+## The six gates
 
 An implementation is **complete** when and only when:
 
@@ -50,7 +50,14 @@ An implementation is **complete** when and only when:
    the **same** commit — `docs/plans/progress.md`, subsystem docs,
    any design docs referenced from code comments.
 
-If ANY of these five is missing, the change is not complete.  Reporting
+6. **Kernel version is bumped.**  Every shipped implementation version
+   increments `kernel.__version__` in `src/kernel/kernel/__init__.py`
+   and records the new version in `docs/plans/progress.md`.  This is
+   required even for local pre-release work so probes, browser
+   installs, session records, and user reports can identify exactly
+   which implementation is being tested.
+
+If ANY of these six is missing, the change is not complete.  Reporting
 it as complete is a bug.
 
 ---
@@ -128,8 +135,10 @@ When wrapping up an implementation:
 3. If the feature is CLI-visible, confirm whether the real path is
    router-backed.  For router-backed methods, run the Hub contract
    tests and a router-path E2E/probe.
-4. Post the probe output verbatim in the report
-5. Only then say "done"
+4. Bump `kernel.__version__` and update `docs/plans/progress.md`
+   with the new version and verification output.
+5. Post the probe output verbatim in the report
+6. Only then say "done"
 ```
 
 If you catch yourself about to skip step 2 because "the mock test

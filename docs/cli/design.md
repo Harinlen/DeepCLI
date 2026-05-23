@@ -47,7 +47,7 @@ DeepCLI CLI 是纯 UI 层，不运行任何 LLM 调用。
 |----|------|------|
 | 运行时 | Bun | 与 oh-my-pi 相同，TypeScript 原生，无需构建步骤 |
 | 语言 | TypeScript | 与 oh-my-pi TUI 库类型兼容 |
-| TUI 库 | `@oh-my-pi/pi-tui`（直接引用本地路径） | 移植源，无需重写 |
+| TUI 库 | `src/cli/src/active-port/tui/**` copied surface | 以 oh-my-pi 为源，但在本仓库内受 manifest 管控 |
 | ACP 客户端 | `@agentclientprotocol/sdk` | oh-my-pi 已验证用法（`acp-mode.ts`） |
 | 包管理 | bun workspaces | 与 oh-my-pi 同方案 |
 
@@ -88,6 +88,30 @@ slash-command UI 路径或 TUI 首屏诊断能力时，必须把 `TUI_VERSION` �
 第三段版本号加 1，并更新对应 golden / PTY / slash probe 断言。
 仅修改 kernel、非交互 CLI 输出、文档或测试夹具时不需要 bump。
 
+### Current active-port type drift
+
+截至 2026-05-24，CLI 的运行时回归门是 targeted Bun tests、PTY/golden/probe
+证据和 `git diff --check`。完整 TypeScript 编译门：
+
+```bash
+bunx tsc --noEmit --pretty false
+```
+
+当前**不应被报告为通过**。失败原因是 pre-existing active-port copy/shim type
+drift，而不是 kernel ACP 契约：
+
+- `src/active-port/coding-agent/modes/components/bash-execution.ts` 和
+  `python-execution.ts` 仍按旧的 output metadata surface 引用
+  `TruncationMeta` / 旧调用形状。
+- `status-line/*` 仍按 OMP `AgentSession` 和 settings schema 类型读取字段，
+  DeepCLI shim 目前没有完整导出这些类型 / 字段。
+- `modes/types.ts` 仍引用 pruned active-port surface 中不存在的 extension UI
+  和 MCP manager 类型。
+
+这段漂移是文档化的待清理状态，不是新的可接受模式。任何完成报告如果运行
+`tsc`，必须给出真实结果；若仍失败，必须引用本节并列出剩余错误。修改上述
+区域时，应优先消除 drift，而不是继续扩展 shim 假象。
+
 ---
 
 ## 仓库位置
@@ -102,7 +126,8 @@ deepcli/
     │   ├── acp/
     │   │   └── client.ts       WebSocket JSON-RPC client（request / notify / subscribe）
     │   ├── session.ts          session 操作封装（new/load/prompt/cancel）
-    │   ├── tui/                vendored from @oh-my-pi/pi-tui（直接复制源码）
+    │   ├── active-port/        copied OMP TUI/coding-agent surface（manifest 管控）
+    │   ├── tui/                local facades / compatibility entrypoints
     │   ├── modes/
     │   │   ├── interactive.ts  主 TUI 循环
     │   │   └── print.ts        非交互输出模式

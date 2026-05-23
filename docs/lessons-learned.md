@@ -52,6 +52,27 @@ wall twice.
   contracts must wait for turn completion and be covered by a
   real Supervisor + CLI/Probe check.
 
+- **CLI mode sync is part of the prompt path, not an ordinary 30s RPC**:
+  `session/set_mode` can be issued immediately before `session/prompt`
+  to restore the user's selected permission mode.  If a previous turn is
+  still unwinding or waiting on user interaction, a generic client timeout
+  reports a false failure while the UI is doing the right thing.  Mode
+  sync must not inherit `AcpClient.request()`'s default timeout, and the
+  test must assert `timeoutMs: 0`.  The TUI may acknowledge that a mode
+  switch is in progress, but it must not display the new permission mode
+  until `session/set_mode` has actually reached the Runtime and returned;
+  otherwise the UI can claim `Bypass` while tool authorization still runs
+  under the old mode.
+
+- **Runtime control and client-request responses must be multiplexed, not
+  read inline.**  A prompt can be waiting on `session/request_permission`
+  while the user sends `session/set_mode`.  If either Access Router or
+  Runtime handles websocket frames with a single serial receive loop, or if a
+  permission proxy directly calls `receive_json()`, the mode switch is stuck
+  behind the prompt and the permission response can be consumed by the wrong
+  reader.  Use per-connection brokers keyed by JSON-RPC id: one reader,
+  many pending futures, and outbound sends behind a send lock.
+
 - **`asyncio.gather(return_exceptions=True)` swallows `CancelledError`**:
   `CancelledError` is a `BaseException`, not an `Exception`.  With
   `return_exceptions=True`, it lands in the results list instead of
@@ -548,6 +569,21 @@ wall twice.
   `skill:<name>`, the real CLI-to-kernel probe should fetch `commands/list`,
   filter `source=skill`, and activate each returned command through the same
   CLI path users run.
+
+- **Command catalog is not command completion.**  CommandManager can advertise
+  slash commands that the active CLI has not wired, or that only have a local
+  warning/stub path.  Every catalog entry intended for users needs three
+  matching pieces before it can be called complete: catalog entry, active CLI
+  execution path, and real-kernel closure probe.  If any piece is missing,
+  document it as command-surface drift instead of reporting the command as
+  tested.
+
+- **Slash-command closure needs subcommand coverage, not only top-level
+  coverage.**  A probe that hits `/agents` does not prove `/agents grant`, and
+  a probe that imports `BUILTIN_SLASH_COMMANDS` does not prove autocomplete or
+  CommandManager subcommand vocabularies.  Compare all three surfaces
+  mechanically: Kernel command catalog subcommands, CLI autocomplete actions,
+  and the real-kernel smoke command list.  Treat any mismatch as drift.
 
 - **Final migration closure should orchestrate existing probes.**  When a plan
   already has source-backed subsystem probes, the final monolithic target should

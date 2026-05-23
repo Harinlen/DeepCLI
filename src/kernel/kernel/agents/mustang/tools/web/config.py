@@ -14,6 +14,7 @@ WebFetchBackendName = Literal[
     "parallel",
     "exa",
     "tavily",
+    "browser",
 ]
 
 

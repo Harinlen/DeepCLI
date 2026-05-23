@@ -22,11 +22,16 @@ session truth 和本地执行。
 | [history/README.md](history/README.md) | 已实现阶段的历史记录 |
 | [history/plans/](history/plans/) | 已完成 CLI 计划/审计归档 |
 
+Known drift lives in
+[`design.md#current-active-port-type-drift`](design.md#current-active-port-type-drift):
+full `bunx tsc --noEmit --pretty false` is currently not green because copied
+active-port files still reference pruned OMP shim types.
+
 ## Pending Work
 
 | 文档 | 状态 |
 |---|---|
-| [../plans/cli-interactive-keybindings-gap.md](../plans/cli-interactive-keybindings-gap.md) | investigation；记录 OMP keybinding parity 缺口 |
+| [../plans/cli-interactive-keybindings-gap.md](../plans/cli-interactive-keybindings-gap.md) | active remediation；记录输入契约、OMP parity 和已关闭的 Escape / selector 回归 |
 
 ## Rules
 

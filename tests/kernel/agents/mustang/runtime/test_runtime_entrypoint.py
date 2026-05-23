@@ -52,9 +52,10 @@ def test_access_router_connection_id_accepts_snake_and_camel_case() -> None:
 @pytest.mark.anyio
 async def test_runtime_sends_router_heartbeat_notifications() -> None:
     websocket = _SendingWebSocket()
+    peer = runtime_main._AccessRouterRuntimePeer(websocket)
     task = asyncio.create_task(
         runtime_main._send_router_heartbeats(
-            websocket,
+            peer,
             "conn-1",
             interval_seconds=0.01,
         )
@@ -70,6 +71,26 @@ async def test_runtime_sends_router_heartbeat_notifications() -> None:
         "jsonrpc": "2.0",
         "method": "_mustang.router/ping",
         "params": {"connection_id": "conn-1"},
+    }
+
+
+@pytest.mark.anyio
+async def test_runtime_peer_routes_client_response_while_dispatch_loop_keeps_reading() -> None:
+    websocket = _SendingWebSocket()
+    peer = runtime_main._AccessRouterRuntimePeer(websocket)
+
+    request_task = asyncio.create_task(
+        peer.request_client(method="session/request_permission", params={"sessionId": "s-1"})
+    )
+    await asyncio.wait_for(websocket.sent_event.wait(), timeout=1)
+    request = json.loads(websocket.sent[0])
+
+    assert request["method"] == "session/request_permission"
+    assert peer.handle_client_response(
+        {"jsonrpc": "2.0", "id": request["id"], "result": {"outcome": {"outcome": "cancelled"}}}
+    )
+    assert await asyncio.wait_for(request_task, timeout=1) == {
+        "outcome": {"outcome": "cancelled"}
     }
 
 

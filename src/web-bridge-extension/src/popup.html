@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font: 13px system-ui, sans-serif; width: 340px; margin: 14px; }
+    label { display: block; margin-top: 10px; font-weight: 600; }
+    input { box-sizing: border-box; width: 100%; margin-top: 4px; padding: 7px; }
+    button { margin-top: 12px; padding: 7px 10px; }
+    pre { white-space: pre-wrap; background: #f6f7f8; padding: 8px; }
+  </style>
+</head>
+<body>
+  <strong>DeepCLI WebBridge</strong>
+  <label>Bridge WebSocket URL<input id="bridgeWsUrl" placeholder="ws://127.0.0.1:12345/web-bridge"></label>
+  <label>Pairing token<input id="pairingToken" placeholder="123456"></label>
+  <button id="connect">Save and connect</button>
+  <button id="disconnect">Disconnect</button>
+  <pre id="status"></pre>
+  <script src="popup.js"></script>
+</body>
+</html>

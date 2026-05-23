@@ -137,7 +137,7 @@ DeepCLI 会直接实现需要的控制平面能力，不依赖 `acpx` CLI/runtim
 | **Backlog** | `plans/backlog.md` | Deferred features from design docs |
 | **Current progress** | `plans/progress.md` | Short current status + recent log; detailed history lives in `kernel/history.md` and `cli/history/implemented-summary.md` |
 
-> ⚠️ **"Done" means five gates green, not four.**  Unit tests passing
+> ⚠️ **"Done" means six gates green, not five.**  Unit tests passing
 > is necessary but not sufficient.  Every closure seam (callable wired
 > across subsystem boundaries) needs a probe against the **real**
 > subsystem — mocks cannot catch protocol / payload / arg-arity bugs.
@@ -151,7 +151,7 @@ DeepCLI 会直接实现需要的控制平面能力，不依赖 `acpx` CLI/runtim
 - **New chat?** Read `AGENTS.md` → `plans/progress.md` → confirm with user.
 - **Implementing a subsystem?** Read its `kernel/subsystems/<name>.md` first.
 - **Starting a new feature?** Check `plans/backlog.md` or `plans/roadmap.md`.
-- **Finishing a subsystem?** Work the five gates in
+- **Finishing a subsystem?** Work the six gates in
   [`workflow/definition-of-done.md`](workflow/definition-of-done.md)
   before reporting complete.
 - **Hit a bug?** Check `lessons-learned.md` first.

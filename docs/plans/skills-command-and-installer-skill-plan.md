@@ -4,6 +4,14 @@
 日期: 2026-05-22
 实现日期: 2026-05-23
 
+> 2026-05-24 audit note: `/skills` 与 `/skill:<name>` 本身已经实现并通过
+> real-kernel probe。随后发现的 broader slash-command surface 漂移也已闭合：
+> Kernel CommandManager catalog、active CLI slash execution surface、CLI
+> autocomplete surface、Primary Runtime ACP dispatcher、real-kernel E2E 覆盖
+> 已重新对齐。闭合状态记录在
+> [`docs/kernel/subsystems/commands.md`](../kernel/subsystems/commands.md)。
+> 后续实现仍不得把 catalog presence 当作 command completion proof。
+
 ## 背景
 
 DeepCLI 现在已经有 SkillManager、SkillTool、user-invocable skill command
@@ -1099,8 +1107,11 @@ result=PASS
 本实现必须满足项目 DoD：
 
 1. Unit tests 覆盖 CommandManager、SkillManager API、ACP schema/routing。
-2. Integration tests 覆盖 CLI slash parsing 到 ACP method。
-3. Closure probe 走真实 Access -> Hub -> Mustang runtime。
+2. Integration tests 覆盖 CLI slash parsing 到 ACP method；这只证明 parser /
+   dispatch shape，不等于命令闭合。
+3. Closure probe 走真实 Access -> Hub -> Mustang runtime，并且从真实
+   `commands/list` 验证所有 `source="skill"` command 都可通过
+   `/skill:<name>` 激活。
 4. `ruff` / `mypy` / targeted pytest 通过。
 5. 报告中粘贴真实 probe 输出。
 
@@ -1111,3 +1122,39 @@ install source -> target skill dir -> SkillManager refresh -> commands/list sees
 ```
 
 缺任何一环都不算完成。
+
+## Post-Implementation Command Audit
+
+2026-05-24 复查后，`/skills` 本身的闭合状态如下：
+
+- `/skills list` / `inspect` / `refresh` 通过 `_mustang.agent/skills/*`
+  real-kernel path。
+- `/skills install/search/sources/check/update/audit/uninstall` 通过
+  `/skill:skill-installer ...` activation path。
+- Runtime `commands/list` 中的每个 `source="skill"` command 都由
+  `probe_real_kernel_slash_commands.ts` 逐个激活。
+
+随后完成的非 `/skills` 命令闭合：
+
+```text
+/session resume
+/cron list/create/delete
+/memory list/show/delete
+/global restore
+/agents add/set-identity/bindings/unbind/start/stop/restart/health/grants/grant/revoke-grant
+/gateways enable/disable/reload/bindings/unbind
+/webfetch browser install/status/pair/reset
+```
+
+这些命令本来应该可用；现在均已通过 active CLI slash registry 到
+Kernel ACP/Runtime dispatcher 的 real-kernel probe。闭合证据：
+
+```text
+bun run tests/probe_real_kernel_slash_commands.ts
+kernel_status_via_real_acp=true
+skills_management_via_real_acp=true
+skill_commands_via_real_cli_print=2
+top_level_slash_commands_smoked=true
+warnings=0
+result=PASS
+```

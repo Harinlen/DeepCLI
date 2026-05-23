@@ -1,0 +1,14 @@
+{
+  "name": "@deepcli/web-bridge-extension",
+  "version": "1.0.6",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "test": "bun test tests"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "typescript": "^5.5.4"
+  }
+}

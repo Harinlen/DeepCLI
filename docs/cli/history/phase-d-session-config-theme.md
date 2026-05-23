@@ -1,6 +1,6 @@
 # CLI Phase D — Session 管理、本地配置与主题计划
 
-**父计划**: [`../../plans/cli-plan.md`](../../plans/cli-plan.md)
+**父计划**: retired; current shipped CLI map lives in [`implemented-summary.md`](implemented-summary.md)
 **范围**: `src/cli/` TypeScript / Bun client
 **状态**: implemented
 **前置**: Phase A/B/C 已完成；kernel Session ACP compliance + lifecycle actions 已完成；

@@ -15,6 +15,7 @@ kernel handler the entry routes to:
 - ``"model"``   -> ``ModelHandler``   (implemented by ``LLMManager``)
 - ``"secrets"`` -> ``SecretManager``  (bootstrap service on module table)
 - ``"commands"`` -> ``CommandManager`` (slash command catalog)
+- ``"skills"`` -> ``SkillManager`` (skill management catalog)
 
 ``AcpSessionHandler._route_request`` reads ``target`` to select the
 right handler object from ``KernelModuleTable``.  Adding a new target
@@ -24,7 +25,7 @@ matching ``_get_<target>_handler()`` branch in ``session_handler.py``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal
 
@@ -38,6 +39,17 @@ from kernel.core.protocol.acp.schemas.commands import (
     CommandEntry,
     ListCommandsRequest,
     ListCommandsResponse,
+)
+from kernel.core.protocol.acp.schemas.skills import (
+    SkillCommandEntry,
+    SkillInspectEntry,
+    SkillRecordEntry,
+    SkillsInspectRequest,
+    SkillsInspectResponse,
+    SkillsListRequest,
+    SkillsListResponse,
+    SkillsRefreshRequest,
+    SkillsRefreshResponse,
 )
 from kernel.core.protocol.acp.schemas.agents import (
     AgentHealthRequest,
@@ -279,6 +291,7 @@ HandlerTarget = Literal[
     "model",
     "secrets",
     "commands",
+    "skills",
     "tools",
     "global",
     "flags",
@@ -1496,6 +1509,45 @@ async def _handle_commands_list(cm: Any, ctx: HandlerContext, p: ListCommandsReq
 
 
 # ---------------------------------------------------------------------------
+# skills/* handler wrappers
+# ---------------------------------------------------------------------------
+
+
+async def _handle_skills_list(sm: Any, ctx: HandlerContext, p: SkillsListRequest) -> BaseModel:
+    del ctx
+    records = [SkillRecordEntry.model_validate(asdict(item)) for item in sm.list_skill_records()]
+    commands = []
+    if p.include_commands:
+        commands = [
+            SkillCommandEntry(
+                name=record.name,
+                command=record.command,
+                aliases=list(record.aliases),
+            )
+            for record in records
+            if record.command
+        ]
+    return SkillsListResponse(skills=records, commands=commands)
+
+
+async def _handle_skills_inspect(
+    sm: Any, ctx: HandlerContext, p: SkillsInspectRequest
+) -> BaseModel:
+    del ctx
+    result = sm.inspect_skill(p.name)
+    if result is None:
+        raise InvalidParams(f"Unknown skill: {p.name}")
+    return SkillsInspectResponse(skill=SkillInspectEntry.model_validate(asdict(result)))
+
+
+async def _handle_skills_refresh(
+    sm: Any, ctx: HandlerContext, p: SkillsRefreshRequest
+) -> BaseModel:
+    del ctx, p
+    return SkillsRefreshResponse.model_validate(sm.refresh())
+
+
+# ---------------------------------------------------------------------------
 # web_fetch/* handler wrappers
 # ---------------------------------------------------------------------------
 
@@ -1558,6 +1610,24 @@ REQUEST_DISPATCH: dict[str, RequestSpec] = {
         params_type=ListCommandsRequest,
         result_type=ListCommandsResponse,
         target="commands",
+    ),
+    MustangMethod.SKILLS_LIST: RequestSpec(
+        handler=_handle_skills_list,
+        params_type=SkillsListRequest,
+        result_type=SkillsListResponse,
+        target="skills",
+    ),
+    MustangMethod.SKILLS_INSPECT: RequestSpec(
+        handler=_handle_skills_inspect,
+        params_type=SkillsInspectRequest,
+        result_type=SkillsInspectResponse,
+        target="skills",
+    ),
+    MustangMethod.SKILLS_REFRESH: RequestSpec(
+        handler=_handle_skills_refresh,
+        params_type=SkillsRefreshRequest,
+        result_type=SkillsRefreshResponse,
+        target="skills",
     ),
     MustangMethod.AGENTS_LIST: RequestSpec(
         handler=_handle_agents_list,

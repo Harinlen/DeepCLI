@@ -17,11 +17,23 @@ from kernel.access_router.router import AccessRouter, RouteUnavailable
 from kernel.access_router.schemas import (
     DeliverTurnRequest,
     RuntimeAcpRequest,
+    RuntimePing,
+    RuntimePong,
     RuntimeRegisterRequest,
+)
+from kernel.core.protocol.acp.schemas.runtime import (
+    RuntimeRestartRequest,
+    RuntimeRestartResponse,
+    RuntimeStatusRequest,
+    RuntimeStatusResponse,
 )
 
 _BOOT_TIME = time.time()
-_LOCAL_MANAGEMENT_TARGETS = {"agents", "gateways", "mcp"}
+_LOCAL_MANAGEMENT_TARGETS = {"agents", "gateways", "mcp", "global", "flags", "secrets"}
+_RUNTIME_CONTROL_METHODS = {
+    "_mustang.agent/runtime/status",
+    "_mustang.agent/runtime/restart",
+}
 
 
 def create_app(router: AccessRouter | None = None, *, resource_home: str | None = None) -> FastAPI:
@@ -182,6 +194,8 @@ async def _route_session_payload(
     if method in {None, "_mustang.client/turn"}:
         request = DeliverTurnRequest.model_validate(params)
         return await router.deliver_turn(request, _client_request_proxy(client_ws))
+    if isinstance(method, str) and method in _RUNTIME_CONTROL_METHODS:
+        return await _route_runtime_control_payload(method, params)
     resource_home = getattr(client_ws.app.state, "resource_home", None)
     if isinstance(method, str) and resource_home is not None:
         local_result = await _route_local_management_payload(
@@ -205,6 +219,33 @@ async def _route_session_payload(
     return await router.deliver_acp(acp_request, _client_request_proxy(client_ws))
 
 
+async def _route_runtime_control_payload(
+    method: str,
+    params: dict[str, Any],
+) -> dict[str, object]:
+    """Handle supervisor runtime control methods owned by the local router path."""
+    socket_path = os.getenv("MUSTANG_SUPERVISOR_CONTROL_SOCKET", "")
+    token = os.getenv("MUSTANG_SUPERVISOR_CONTROL_TOKEN", "")
+    if not socket_path or not token:
+        raise RuntimeError("Supervisor control is not available")
+
+    from kernel.supervisor.control import request_control
+
+    if method == "_mustang.agent/runtime/status":
+        RuntimeStatusRequest.model_validate(params)
+        status = await asyncio.to_thread(request_control, socket_path, token, "status", {})
+        return RuntimeStatusResponse(status=dict(status)).model_dump(by_alias=True)
+    restart = RuntimeRestartRequest.model_validate(params)
+    status = await asyncio.to_thread(
+        request_control,
+        socket_path,
+        token,
+        "restart_runtime",
+        {"reason": restart.reason},
+    )
+    return RuntimeRestartResponse(status=dict(status)).model_dump(by_alias=True)
+
+
 async def _route_local_management_payload(
     *,
     router: AccessRouter,
@@ -218,7 +259,10 @@ async def _route_local_management_payload(
     from kernel.agent_hub.manager.command_surface import AgentCommandService
     from kernel.agent_hub.manager.manager import AgentManager
     from kernel.agents.mustang.mcp.command_surface import MCPCommandService
+    from kernel.core.flags import FlagManager
     from kernel.core.protocol.acp.routing import REQUEST_DISPATCH
+    from kernel.core.secrets import SecretManager
+    from kernel.core.storage.global_commands import GlobalResourceCommandService
 
     spec = REQUEST_DISPATCH.get(method)
     if spec is None or spec.target not in _LOCAL_MANAGEMENT_TARGETS:
@@ -226,9 +270,21 @@ async def _route_local_management_payload(
 
     repo: AccessRouterRepository | None = None
     manager: AgentManager | None = None
+    flags: FlagManager | None = None
+    secrets_manager: SecretManager | None = None
     try:
         handler: object
-        if spec.target == "mcp":
+        if spec.target == "global":
+            handler = GlobalResourceCommandService(resource_home)
+        elif spec.target == "flags":
+            flags = FlagManager(resource_home=resource_home)
+            await flags.initialize()
+            handler = flags
+        elif spec.target == "secrets":
+            secrets_manager = SecretManager(home=resource_home)
+            await secrets_manager.startup()
+            handler = secrets_manager
+        elif spec.target == "mcp":
             handler = MCPCommandService(resource_home)
         else:
             repo = AccessRouterRepository.open(resource_home)
@@ -249,6 +305,10 @@ async def _route_local_management_payload(
         result = await spec.handler(handler, None, request_params)  # type: ignore[arg-type]
         return result.model_dump(by_alias=True)
     finally:
+        if secrets_manager is not None:
+            secrets_manager.close()
+        if flags is not None:
+            flags.close()
         if manager is not None:
             manager.close()
         if repo is not None:
@@ -386,6 +446,8 @@ class _RuntimeWebSocketClient:
         while True:
             response: dict[str, Any] = await self._ws.receive_json()
             self._touch_activity()
+            if await self._handle_router_message(response):
+                continue
             if response.get("id") == request_id:
                 if "error" in response:
                     error = response["error"]
@@ -427,8 +489,12 @@ class _RuntimeWebSocketClient:
         while not self._closed.is_set():
             async with self._lock:
                 try:
-                    await asyncio.wait_for(self._ws.receive_json(), timeout=0.1)
+                    payload: dict[str, Any] = await asyncio.wait_for(
+                        self._ws.receive_json(),
+                        timeout=0.1,
+                    )
                     self._touch_activity()
+                    await self._handle_router_message(payload)
                 except TimeoutError:
                     pass
                 except WebSocketDisconnect:
@@ -446,6 +512,25 @@ class _RuntimeWebSocketClient:
     def _touch_activity(self) -> None:
         if self._on_activity is not None:
             self._on_activity()
+
+    async def _handle_router_message(self, payload: dict[str, Any]) -> bool:
+        """Consume runtime-originated router control messages."""
+        if payload.get("method") != "_mustang.router/ping":
+            return False
+        params = payload.get("params")
+        if not isinstance(params, dict):
+            params = {}
+        ping = RuntimePing.model_validate(params)
+        response_id = payload.get("id")
+        if response_id is not None:
+            await self._ws.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": response_id,
+                    "result": RuntimePong(connection_id=ping.connection_id).model_dump(),
+                }
+            )
+        return True
 
 
 class MethodNotFound(RuntimeError):

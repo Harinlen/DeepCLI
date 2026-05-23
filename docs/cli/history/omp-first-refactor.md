@@ -1,7 +1,7 @@
 # CLI OMP-First 重构计划
 
 **父计划**：
-[`../../plans/cli-plan.md`](../../plans/cli-plan.md),
+retired CLI plan,
 [`phase-b-tui-migration.md`](phase-b-tui-migration.md),
 [`phase-b-ui-alignment-repair.md`](phase-b-ui-alignment-repair.md),
 [`phase-c-permissions.md`](phase-c-permissions.md)

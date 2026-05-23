@@ -267,6 +267,7 @@ async def _run_access_router_client(
                 ack = json.loads(await ws.recv())
                 if ack.get("ok") is not True and ack.get("result", {}).get("ok") is not True:
                     raise RuntimeError(f"registration failed: {ack}")
+                connection_id = _access_router_connection_id(ack)
                 _write_json(
                     Path(args.runtime_file),
                     {
@@ -280,33 +281,67 @@ async def _run_access_router_client(
                     },
                 )
                 peer = _AccessRouterRuntimePeer(ws)
-                async for raw in ws:
-                    request = json.loads(raw)
-                    request_id = request.get("id")
-                    try:
-                        if request.get("method") == "_mustang.runtime/request":
-                            acp = RuntimeAcpRequest.model_validate(request.get("params", {}))
-                            result = await _deliver_router_acp(acp, session_service, peer)
-                        else:
-                            result = {"ok": False, "error": "unknown_runtime_method"}
-                        await ws.send(
-                            json.dumps({"jsonrpc": "2.0", "id": request_id, "result": result})
-                        )
-                    except Exception as exc:
-                        code: str | int = (
-                            -32601 if isinstance(exc, ValueError) else type(exc).__name__
-                        )
-                        await ws.send(
-                            json.dumps(
-                                {
-                                    "jsonrpc": "2.0",
-                                    "id": request_id,
-                                    "error": {"code": code, "message": str(exc)},
-                                }
+                heartbeat_task = asyncio.create_task(_send_router_heartbeats(ws, connection_id))
+                try:
+                    async for raw in ws:
+                        request = json.loads(raw)
+                        request_id = request.get("id")
+                        try:
+                            if request.get("method") == "_mustang.runtime/request":
+                                acp = RuntimeAcpRequest.model_validate(request.get("params", {}))
+                                result = await _deliver_router_acp(acp, session_service, peer)
+                            else:
+                                result = {"ok": False, "error": "unknown_runtime_method"}
+                            await ws.send(
+                                json.dumps({"jsonrpc": "2.0", "id": request_id, "result": result})
                             )
-                        )
+                        except Exception as exc:
+                            code: str | int = (
+                                -32601 if isinstance(exc, ValueError) else type(exc).__name__
+                            )
+                            await ws.send(
+                                json.dumps(
+                                    {
+                                        "jsonrpc": "2.0",
+                                        "id": request_id,
+                                        "error": {"code": code, "message": str(exc)},
+                                    }
+                                )
+                            )
+                finally:
+                    heartbeat_task.cancel()
+                    await asyncio.gather(heartbeat_task, return_exceptions=True)
         except (OSError, websockets.ConnectionClosed):
             await asyncio.sleep(0.2)
+
+
+def _access_router_connection_id(ack: dict[str, Any]) -> str:
+    result = ack.get("result")
+    if not isinstance(result, dict):
+        raise RuntimeError(f"registration missing result: {ack}")
+    connection_id = result.get("connection_id") or result.get("connectionId")
+    if not isinstance(connection_id, str) or not connection_id:
+        raise RuntimeError(f"registration missing connection id: {ack}")
+    return connection_id
+
+
+async def _send_router_heartbeats(
+    ws: Any,
+    connection_id: str,
+    *,
+    interval_seconds: float = 5.0,
+) -> None:
+    while True:
+        await asyncio.sleep(interval_seconds)
+        await ws.send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "_mustang.router/ping",
+                    "params": {"connection_id": connection_id},
+                }
+            )
+        )
 
 
 async def _deliver_router_acp(
@@ -369,6 +404,17 @@ async def _deliver_router_acp(
         return await session_service.prompt(PromptRequest.model_validate(params), client_peer=peer)  # type: ignore[arg-type]
     if method == "session/set_mode":
         return await session_service.set_mode(SetSessionModeRequest.model_validate(params))
+    if method == "_mustang.agent/session/activate_skill":
+        if peer is None:
+            raise RuntimeError("runtime peer is required for session/activate_skill")
+        result = await session_service.activate_skill(
+            ActivateSkillRequest.model_validate(params),
+            client_peer=peer,  # type: ignore[arg-type]
+        )
+        for update in result.get("updates", []):
+            if isinstance(update, dict):
+                await peer.notify_client(method="session/update", params=update)
+        return result
     if method == "_mustang.agent/session/execute_shell":
         if peer is None:
             raise RuntimeError("runtime peer is required for session/execute_shell")
@@ -393,6 +439,17 @@ async def _deliver_router_acp(
         return result
     if method == "_mustang.agent/commands/list":
         return await session_service.commands_list()
+    if method == "_mustang.agent/skills/list":
+        return await session_service.skills_list(
+            bool(params.get("includeCommands", params.get("include_commands", True)))
+        )
+    if method == "_mustang.agent/skills/inspect":
+        name = params.get("name")
+        if not isinstance(name, str) or not name:
+            raise RuntimeError("skills/inspect requires name")
+        return await session_service.skills_inspect(name)
+    if method == "_mustang.agent/skills/refresh":
+        return await session_service.skills_refresh()
     if method == "_mustang.agent/session/get_usage":
         return await session_service.get_usage(GetUsageRequest.model_validate(params))
     if method.startswith("_mustang.agent/model/"):
@@ -473,6 +530,19 @@ async def _dispatch_runtime_contract(
         return {"ok": True, **result}
     if frame.contract == "agent.commands_list":
         result = await session_service.commands_list()
+        return {"ok": True, **result}
+    if frame.contract == "agent.skills_list":
+        raw = frame.payload["params"]
+        result = await session_service.skills_list(
+            bool(raw.get("includeCommands", raw.get("include_commands", True)))
+        )
+        return {"ok": True, **result}
+    if frame.contract == "agent.skills_inspect":
+        raw = frame.payload["params"]
+        result = await session_service.skills_inspect(str(raw.get("name", "")))
+        return {"ok": True, **result}
+    if frame.contract == "agent.skills_refresh":
+        result = await session_service.skills_refresh()
         return {"ok": True, **result}
     if frame.contract == "agent.resume":
         result = await session_service.resume_session(

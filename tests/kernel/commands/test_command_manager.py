@@ -25,6 +25,8 @@ def test_command_def_is_frozen() -> None:
 def test_command_def_defaults() -> None:
     cmd = CommandDef(name="x", description="d", usage="/x", acp_method="m/foo")
     assert cmd.subcommands == []
+    assert cmd.aliases == []
+    assert cmd.metadata == {}
 
 
 # ---------------------------------------------------------------------------
@@ -34,9 +36,16 @@ def test_command_def_defaults() -> None:
 
 def test_registry_register_and_lookup() -> None:
     reg = CommandRegistry()
-    cmd = CommandDef(name="model", description="List models", usage="/model", acp_method="m/list")
+    cmd = CommandDef(
+        name="skill:debug",
+        description="Debug",
+        usage="/skill:debug",
+        acp_method="m/skill",
+        aliases=["debug"],
+    )
     reg.register(cmd)
-    assert reg.lookup("model") is cmd
+    assert reg.lookup("skill:debug") is cmd
+    assert reg.lookup("debug") is cmd
 
 
 def test_registry_lookup_unknown_returns_none() -> None:
@@ -50,6 +59,21 @@ def test_registry_duplicate_raises() -> None:
     reg.register(cmd)
     with pytest.raises(ValueError, match="already registered"):
         reg.register(cmd)
+
+
+def test_registry_alias_collision_raises() -> None:
+    reg = CommandRegistry()
+    reg.register(CommandDef(name="model", description="d", usage="/model", acp_method=None))
+    with pytest.raises(ValueError, match="alias already registered|already registered"):
+        reg.register(
+            CommandDef(
+                name="skill:model",
+                description="d",
+                usage="/skill:model",
+                acp_method=None,
+                aliases=["model"],
+            )
+        )
 
 
 def test_registry_list_commands_order() -> None:
@@ -92,11 +116,12 @@ async def test_command_manager_startup_registers_builtins(
         "memory",
         "kernel",
         "global",
-        "flags",
+        "flag",
         "secrets",
         "agents",
         "agent",
         "gateways",
+        "skills",
         "mcp",
     ):
         assert expected in names, f"Expected built-in command {expected!r} missing"
@@ -138,7 +163,8 @@ async def test_command_manager_global_flags_secrets_use_management_methods(
     await mgr.startup()
 
     assert mgr.lookup("global").acp_method == MustangMethod.GLOBAL_BACKUP
-    assert mgr.lookup("flags").acp_method == MustangMethod.FLAGS_LIST
+    assert mgr.lookup("flag").acp_method == MustangMethod.FLAGS_LIST
+    assert mgr.lookup("flags") is None
     assert mgr.lookup("secrets").acp_method == MustangMethod.SECRETS_LIST
 
 
@@ -165,6 +191,19 @@ async def test_command_manager_mcp_uses_management_methods(
     mcp = mgr.lookup("mcp")
     assert mcp.acp_method == MustangMethod.MCP_LIST
     assert mcp.subcommands == ["list", "read", "create", "update", "delete"]
+
+
+async def test_command_manager_skills_builtin_uses_skills_list(
+    module_table: MagicMock,
+) -> None:
+    mgr = CommandManager(module_table)
+    await mgr.startup()
+
+    skills = mgr.lookup("skills")
+    assert skills is not None
+    assert skills.acp_method == MustangMethod.SKILLS_LIST
+    assert "install" in skills.subcommands
+    assert "sources" in skills.subcommands
 
 
 async def test_command_manager_lookup_miss(module_table: MagicMock) -> None:
@@ -225,12 +264,16 @@ async def test_command_manager_projects_user_invocable_skills_as_commands() -> N
 
     await mgr.startup()
 
-    cmd = mgr.lookup("debug")
+    cmd = mgr.lookup("skill:debug")
     assert cmd is not None
     assert cmd.source == "skill"
     assert cmd.description == "Debug workflow"
-    assert cmd.usage == "/debug <target>"
-    assert cmd.acp_method is None
+    assert cmd.usage == "/skill:debug <target>"
+    assert cmd.acp_method == MustangMethod.SESSION_ACTIVATE_SKILL
+    assert cmd.metadata["skillName"] == "debug"
+    assert cmd.aliases == ["debug"]
+    assert mgr.lookup("debug") is cmd
+    assert [c.name for c in mgr.list_commands()].count("debug") == 0
 
 
 async def test_command_manager_does_not_let_skills_shadow_builtins() -> None:
@@ -243,6 +286,10 @@ async def test_command_manager_does_not_let_skills_shadow_builtins() -> None:
     assert cmd is not None
     assert cmd.source == "builtin"
     assert cmd.description != "Should not replace builtin"
+    skill_cmd = mgr.lookup("skill:model")
+    assert skill_cmd is not None
+    assert skill_cmd.source == "skill"
+    assert "model" not in skill_cmd.aliases
 
 
 async def test_command_manager_refreshes_when_skills_change() -> None:
@@ -255,6 +302,6 @@ async def test_command_manager_refreshes_when_skills_change() -> None:
     skills.skills = [_skill("beta")]
     skills.callbacks[0]()
 
-    assert mgr.lookup("alpha") is None
-    assert mgr.lookup("beta") is not None
+    assert mgr.lookup("skill:alpha") is None
+    assert mgr.lookup("skill:beta") is not None
     assert seen

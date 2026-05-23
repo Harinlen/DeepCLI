@@ -49,8 +49,8 @@ export async function executeBuiltinSlashCommand(
 				return await executeWebFetchCommand(ctx, parsed.args ?? "");
 			case "global":
 				return await executeGlobalCommand(ctx, parsed.args ?? "");
-			case "flags":
-				return await executeFlagsCommand(ctx, parsed.args ?? "");
+			case "flag":
+				return await executeFlagCommand(ctx, parsed.args ?? "");
 			case "secrets":
 				return await executeSecretsCommand(ctx, parsed.args ?? "");
 			case "agents":
@@ -61,6 +61,8 @@ export async function executeBuiltinSlashCommand(
 				return await executeGatewaysCommand(ctx, parsed.args ?? "");
 			case "mcp":
 				return await executeMcpCommand(ctx, parsed.args ?? "");
+			case "skills":
+				return await executeSkillsCommand(ctx, parsed.args ?? "");
 			case "theme":
 				return await executeThemeCommand(ctx, parsed.args ?? "");
 			case "clear":
@@ -81,6 +83,32 @@ export async function executeBuiltinSlashCommand(
 		ctx.showError?.(`/${parsed.name} failed: ${message}`);
 		return true;
 	}
+}
+
+async function executeSkillsCommand(ctx: any, argsText: string): Promise<boolean | string> {
+	const args = splitArgs(argsText);
+	const subcommand = args[0] ?? "list";
+	if (subcommand === "list") {
+		renderManagementResult(ctx, "Skills", await requestManagement(ctx, MustangMethod.skillsList, {}));
+		return true;
+	}
+	if (subcommand === "inspect") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /skills inspect <name>");
+			return true;
+		}
+		renderManagementResult(ctx, "Skill", await requestManagement(ctx, MustangMethod.skillsInspect, { name: args[1] }));
+		return true;
+	}
+	if (subcommand === "refresh") {
+		renderManagementResult(ctx, "Skills refreshed", await requestManagement(ctx, MustangMethod.skillsRefresh, {}));
+		return true;
+	}
+	if (["install", "search", "sources", "check", "update", "audit", "uninstall"].includes(subcommand)) {
+		return `/skill:skill-installer ${argsText}`.trim();
+	}
+	ctx.showWarning?.("Usage: /skills [list|inspect|search|sources|install|refresh|check|update|audit|uninstall]");
+	return true;
 }
 
 async function executeGlobalCommand(ctx: any, argsText: string): Promise<boolean> {
@@ -121,52 +149,149 @@ async function executeGlobalCommand(ctx: any, argsText: string): Promise<boolean
 	return true;
 }
 
-async function executeFlagsCommand(ctx: any, argsText: string): Promise<boolean> {
+async function executeFlagCommand(ctx: any, argsText: string): Promise<boolean> {
 	const args = splitArgs(argsText);
+	if ((!args[0] || args[0] === "list") && ctx.showFlagsSelector) {
+		ctx.showFlagsSelector();
+		return true;
+	}
 	const subcommand = args[0] ?? "list";
 	if (subcommand === "list") {
-		renderManagementResult(ctx, "Flags", await requestManagement(ctx, MustangMethod.flagsList, {}));
+		const result = await requestManagement(ctx, MustangMethod.flagsList, {});
+		renderFlagsList(ctx, result);
 		return true;
 	}
 	if (subcommand === "read") {
-		if (!args[1]) {
-			ctx.showWarning?.("Usage: /flags read <section>");
+		const path = parseFlagPath(args[1]);
+		if (!path) {
+			ctx.showWarning?.("Usage: /flag read <section>.<key>");
 			return true;
 		}
-		renderManagementResult(ctx, "Flag section", await requestManagement(ctx, MustangMethod.flagsRead, { section: args[1] }));
+		const section = await requestManagement(ctx, MustangMethod.flagsRead, { section: path.section });
+		renderFlagValue(ctx, section, path.key);
 		return true;
 	}
 	if (subcommand === "set") {
-		if (!args[1] || !args[2] || args.length < 4) {
-			ctx.showWarning?.("Usage: /flags set <section> <key> <value> [revision]");
+		const path = parseFlagPath(args[1]);
+		if (!path || args.length < 3) {
+			ctx.showWarning?.("Usage: /flag set <section>.<key> <value> [revision]");
 			return true;
 		}
-		const revision = parseOptionalRevision(args[4]);
+		const revision = parseOptionalRevision(args[3]);
+		const expectedRevision = revision ?? await readConfigRevision(ctx, MustangMethod.flagsRead, path.section);
 		const result = await requestManagement(ctx, MustangMethod.flagsSet, {
-			section: args[1],
-			key: args[2],
-			value: parseConfigValue(args[3]),
-			...(revision !== undefined ? { expectedRevision: revision } : {}),
+			section: path.section,
+			key: path.key,
+			value: parseConfigValue(args[2]),
+			...(expectedRevision !== undefined ? { expectedRevision } : {}),
 		});
 		renderManagementResult(ctx, "Flag staged", result);
 		return true;
 	}
 	if (subcommand === "reset") {
-		if (!args[1]) {
-			ctx.showWarning?.("Usage: /flags reset <section> [key] [revision]");
+		const path = parseFlagPath(args[1]);
+		if (!path) {
+			ctx.showWarning?.("Usage: /flag reset <section>.<key> [revision]");
 			return true;
 		}
-		const revision = parseOptionalRevision(args[3]);
+		const revision = parseOptionalRevision(args[2]);
+		const expectedRevision = revision ?? await readConfigRevision(ctx, MustangMethod.flagsRead, path.section);
 		const result = await requestManagement(ctx, MustangMethod.flagsReset, {
-			section: args[1],
-			...(args[2] ? { key: args[2] } : {}),
-			...(revision !== undefined ? { expectedRevision: revision } : {}),
+			section: path.section,
+			key: path.key,
+			...(expectedRevision !== undefined ? { expectedRevision } : {}),
 		});
 		renderManagementResult(ctx, "Flag reset staged", result);
 		return true;
 	}
-	ctx.showWarning?.("Usage: /flags [list|read|set|reset]");
+	ctx.showWarning?.("Usage: /flag [list|read|set|reset]");
 	return true;
+}
+
+type FlagSectionView = {
+	section?: unknown;
+	payload?: unknown;
+	revision?: unknown;
+	pendingRestart?: unknown;
+};
+
+function renderFlagsList(ctx: any, result: unknown): void {
+	const sections = Array.isArray((result as { sections?: unknown } | undefined)?.sections)
+		? (result as { sections: FlagSectionView[] }).sections
+		: [];
+	const lines = sections.flatMap(section => formatFlagSectionLines(section));
+	renderLines(ctx, "Flags", lines.length > 0 ? lines : [theme.fg("muted", "No flag sections registered.")]);
+}
+
+function renderFlagSection(ctx: any, result: unknown): void {
+	const section = result as FlagSectionView;
+	const name = String(section?.section ?? "section");
+	const lines = formatFlagSectionLines(section);
+	renderLines(ctx, `Flags: ${name}`, lines.length > 0 ? lines : [theme.fg("muted", "No flags in this section.")]);
+}
+
+function renderFlagValue(ctx: any, result: unknown, key: string): void {
+	const section = result as FlagSectionView;
+	const name = String(section?.section ?? "section");
+	const payload = section?.payload && typeof section.payload === "object" && !Array.isArray(section.payload)
+		? section.payload as Record<string, unknown>
+		: {};
+	if (!Object.prototype.hasOwnProperty.call(payload, key)) {
+		ctx.showError?.(`Flag not found: ${name}.${key}`);
+		return;
+	}
+	const revision = Number(section?.revision);
+	const revisionText = Number.isFinite(revision) ? `rev ${revision}` : "rev ?";
+	const restartText = section?.pendingRestart ? theme.fg("warning", "restart pending") : "active";
+	const value = payload[key];
+	const line = `${flagMarker(value)} ${`${name}.${key}`.padEnd(28)} ${formatFlagValue(value).padEnd(8)} ${theme.fg("muted", revisionText)}  ${restartText}`;
+	renderLines(ctx, `Flag: ${name}.${key}`, [line]);
+}
+
+function formatFlagSectionLines(section: FlagSectionView): string[] {
+	const name = String(section?.section ?? "unknown");
+	const payload = section?.payload && typeof section.payload === "object" && !Array.isArray(section.payload)
+		? section.payload as Record<string, unknown>
+		: {};
+	const revision = Number(section?.revision);
+	const revisionText = Number.isFinite(revision) ? `rev ${revision}` : "rev ?";
+	const restartText = section?.pendingRestart ? theme.fg("warning", "restart pending") : "active";
+	const keys = Object.keys(payload).sort();
+	if (keys.length === 0) {
+		return [`${theme.fg("muted", name.padEnd(14))} ${revisionText}  ${restartText}  ${theme.fg("muted", "(empty)")}`];
+	}
+	return keys.map(key => {
+		const value = payload[key];
+		const marker = flagMarker(value);
+		const label = `${name}.${key}`;
+		const command = `/flag set ${name}.${key} ${nextFlagValue(value)}`;
+		return `${marker} ${label.padEnd(28)} ${formatFlagValue(value).padEnd(8)} ${theme.fg("muted", revisionText)}  ${restartText}  ${theme.fg("muted", command)}`;
+	});
+}
+
+function parseFlagPath(value: string | undefined): { section: string; key: string } | undefined {
+	if (!value) return undefined;
+	const dot = value.indexOf(".");
+	if (dot <= 0 || dot === value.length - 1) return undefined;
+	return { section: value.slice(0, dot), key: value.slice(dot + 1) };
+}
+
+function flagMarker(value: unknown): string {
+	if (value === true) return theme.fg("success", "[x]");
+	if (value === false) return theme.fg("muted", "[ ]");
+	return theme.fg("muted", "[-]");
+}
+
+function nextFlagValue(value: unknown): string {
+	if (value === true) return "false";
+	if (value === false) return "true";
+	return "<value>";
+}
+
+function formatFlagValue(value: unknown): string {
+	if (typeof value === "string") return value;
+	if (typeof value === "number" || typeof value === "boolean") return String(value);
+	return JSON.stringify(value);
 }
 
 async function executeSecretsCommand(ctx: any, argsText: string): Promise<boolean> {
@@ -779,13 +904,17 @@ async function requestManagement(ctx: any, method: string, params: Record<string
 
 function renderManagementResult(ctx: any, title: string, result: unknown): void {
 	const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
+	renderLines(ctx, title, [text ?? ""]);
+}
+
+function renderLines(ctx: any, title: string, lines: string[]): void {
 	if (ctx.chatContainer?.addChild) {
 		ctx.chatContainer.addChild(new Text(theme.fg("accent", title), 1, 0));
-		ctx.chatContainer.addChild(new Text(text ?? "", 1, 0));
+		ctx.chatContainer.addChild(new Text(lines.join("\n"), 1, 0));
 		ctx.ui?.requestRender?.();
 		return;
 	}
-	ctx.showStatus?.(`${title}: ${text}`);
+	ctx.showStatus?.(`${title}: ${lines.join("\n")}`);
 }
 
 function optionalPathParam(key: string, value: string | undefined): Record<string, unknown> {
@@ -795,6 +924,16 @@ function optionalPathParam(key: string, value: string | undefined): Record<strin
 function parseOptionalRevision(value: string | undefined): number | undefined {
 	if (!value) return undefined;
 	const revision = Number(value);
+	return Number.isFinite(revision) ? revision : undefined;
+}
+
+async function readConfigRevision(
+	ctx: any,
+	method: string,
+	section: string,
+): Promise<number | undefined> {
+	const result = await requestManagement(ctx, method, { section });
+	const revision = Number((result as { revision?: unknown } | undefined)?.revision);
 	return Number.isFinite(revision) ? revision : undefined;
 }
 

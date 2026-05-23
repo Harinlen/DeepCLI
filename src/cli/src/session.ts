@@ -63,6 +63,10 @@ export interface CommandEntry {
   acp_method?: string | null;
   subcommands?: string[];
   source?: string;
+  aliases?: string[];
+  canonicalName?: string | null;
+  canonical_name?: string | null;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ListCommandsResponse {
@@ -71,6 +75,11 @@ export interface ListCommandsResponse {
 
 export interface RuntimeStatusReport {
   status: Record<string, unknown>;
+}
+
+export interface SkillsListResponse {
+  skills: Array<Record<string, unknown>>;
+  commands?: Array<Record<string, unknown>>;
 }
 
 const RESUME_RETRY_ATTEMPTS = 24;
@@ -160,6 +169,18 @@ export class MustangSession {
       {},
     );
     return result.commands ?? [];
+  }
+
+  async listSkills(): Promise<SkillsListResponse> {
+    return await this.client.request<SkillsListResponse>(MustangMethod.skillsList, {});
+  }
+
+  async inspectSkill(name: string): Promise<Record<string, unknown>> {
+    return await this.client.request<Record<string, unknown>>(MustangMethod.skillsInspect, { name });
+  }
+
+  async refreshSkills(): Promise<Record<string, unknown>> {
+    return await this.client.request<Record<string, unknown>>(MustangMethod.skillsRefresh, {});
   }
 
   async executeShell(

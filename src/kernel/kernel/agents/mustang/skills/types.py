@@ -194,6 +194,7 @@ class LoadedSkill:
     """Absolute path to SKILL.md (used for deduplication via realpath)."""
 
     _body: str | None = field(default=None, repr=False)
+    bundled_files: dict[str, str] | None = field(default=None, repr=False)
 
     @property
     def body(self) -> str:
@@ -267,12 +268,49 @@ class ActivationResult:
     setup_message: str | None = None
 
 
+@dataclass(frozen=True)
+class SkillRecord:
+    """Read-only management view of one discovered skill."""
+
+    name: str
+    source: str
+    layer_priority: int
+    path: str | None
+    user_invocable: bool
+    model_invocable: bool
+    command: str | None
+    aliases: tuple[str, ...]
+    setup_needed: bool
+    missing_bins: tuple[str, ...]
+    missing_env: tuple[str, ...]
+    missing_tools: tuple[str, ...]
+    provenance: dict[str, Any] | None
+    warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SkillInspectResult:
+    """Detailed management view of a skill, excluding the body."""
+
+    record: SkillRecord
+    description: str
+    when_to_use: str | None
+    allowed_tools: tuple[str, ...]
+    argument_hint: str | None
+    supporting_files: tuple[str, ...]
+    requires: dict[str, Any]
+    setup: dict[str, Any] | None
+    config: dict[str, Any] | None
+
+
 __all__ = [
     "ActivationResult",
     "InvokedSkillInfo",
     "LoadedSkill",
     "SkillFallbackFor",
     "SkillManifest",
+    "SkillInspectResult",
+    "SkillRecord",
     "SkillRequires",
     "SkillSetup",
     "SkillSetupEnvVar",

@@ -1,6 +1,6 @@
 # CLI 交互输入契约与快捷键差距
 
-**父计划**: [`cli-plan.md`](cli-plan.md)
+**父计划**: CLI plan retired; current CLI design facts live in [`../cli/design.md`](../cli/design.md)
 **范围**: `src/cli/` interactive TUI 输入行为
 **状态**: active remediation — 2026-05-11
 

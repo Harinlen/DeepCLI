@@ -10,6 +10,11 @@ No exceptions.  A task isn't done until all five pass.
 - Confirm interface, data flow, module boundaries match.
 - If the implementation deviated, **update the doc** to match reality.
   Don't leave docs and code out of sync.
+- If a change touches user-visible CLI TUI behavior, layout,
+  interaction components, slash-command UI paths, or TUI startup
+  diagnostics, bump `TUI_VERSION` in `src/cli/src/compat/utils.ts`
+  by increasing the third semver segment and update the matching
+  golden / PTY / slash probe assertions.  See `docs/cli/design.md`.
 
 ## 2. Write Tests
 

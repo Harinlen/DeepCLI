@@ -205,6 +205,7 @@ export interface InteractiveModeContext {
 	showModelSelector(options?: { temporaryOnly?: boolean }): void;
 	showWebFetchBackendSelector(): void;
 	showWebFetchConfigSelector(): void;
+	showFlagsSelector(): void;
 	showModelAdd(): void;
 	showPluginSelector(mode?: "install" | "uninstall"): void;
 	showUserMessageSelector(): void;

@@ -104,9 +104,9 @@ _BUILTIN_COMMANDS: list[CommandDef] = [
         subcommands=["backup", "backups", "export", "import", "restore"],
     ),
     CommandDef(
-        name="flags",
+        name="flag",
         description="Read or stage startup flag changes for the next restart",
-        usage="/flags [list | read | set | reset]",
+        usage="/flag [list | read | set | reset]",
         acp_method=MustangMethod.FLAGS_LIST,
         subcommands=["list", "read", "set", "reset"],
     ),
@@ -162,6 +162,24 @@ _BUILTIN_COMMANDS: list[CommandDef] = [
             "bindings",
             "bind",
             "unbind",
+        ],
+    ),
+    CommandDef(
+        name="skills",
+        description="Manage skills and skill-installed commands",
+        usage="/skills [list | inspect | search | sources | install | refresh | check | update | audit | uninstall]",
+        acp_method=MustangMethod.SKILLS_LIST,
+        subcommands=[
+            "list",
+            "inspect",
+            "search",
+            "sources",
+            "install",
+            "refresh",
+            "check",
+            "update",
+            "audit",
+            "uninstall",
         ],
     ),
     CommandDef(
@@ -237,7 +255,7 @@ class CommandManager(Subsystem):
         """Register user-invocable skills from SkillManager as commands.
 
         Called during startup.  Skills become available as
-        ``/skill-name`` in the command catalog for client autocomplete.
+        ``/skill:<name>`` in the command catalog for client autocomplete.
         """
         try:
             from kernel.agents.mustang.skills import SkillManager
@@ -250,21 +268,30 @@ class CommandManager(Subsystem):
 
         for skill in skills_mgr.user_invocable_skills():
             name = skill.manifest.name
-            # Don't shadow built-in commands.
-            if self._registry.lookup(name) is not None:
+            command_name = f"skill:{name}"
+            if self._registry.lookup(command_name) is not None:
                 continue
+            aliases = [] if self._registry.lookup(name) is not None else [name]
             hint = skill.manifest.argument_hint or ""
-            usage = f"/{name} {hint}".strip()
+            usage = f"/{command_name} {hint}".strip()
             self._registry.register(
                 CommandDef(
-                    name=name,
+                    name=command_name,
                     description=skill.manifest.description,
                     usage=usage,
-                    acp_method=None,  # Skills execute via SkillTool, not ACP.
+                    acp_method=MustangMethod.SESSION_ACTIVATE_SKILL,
                     source="skill",
+                    aliases=aliases,
+                    canonical_name=command_name,
+                    metadata={
+                        "kind": "skill",
+                        "skillName": name,
+                        "canonicalCommand": command_name,
+                        "compatAliases": aliases,
+                    },
                 )
             )
-            self._skill_command_names.add(name)
+            self._skill_command_names.add(command_name)
 
     def _subscribe_to_skill_changes(self) -> None:
         """Subscribe to SkillManager changes when the subsystem is present."""

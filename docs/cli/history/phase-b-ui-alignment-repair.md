@@ -1,6 +1,6 @@
 # CLI Phase B UI 对齐修复计划
 
-**父计划**: [`../../plans/cli-plan.md`](../../plans/cli-plan.md)
+**父计划**: retired; current shipped CLI map lives in [`implemented-summary.md`](implemented-summary.md)
 **原 Phase B 计划**: [`phase-b-tui-migration.md`](phase-b-tui-migration.md)
 **范围**: `src/cli/` TypeScript / Bun client
 **状态**: implemented — R1/R2/R3/R4/R5/R6 main Phase B repair gates complete

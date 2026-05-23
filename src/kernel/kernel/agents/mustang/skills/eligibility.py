@@ -3,8 +3,9 @@
 Two-phase filtering:
 
 1. **Static eligibility** (``is_eligible``) — runs once at startup /
-   discovery time.  Checks OS, binaries on PATH, and environment
-   variables.  Mirrors ``hooks/eligibility.py``.
+   discovery time.  Checks OS only.  Missing binaries/env vars are
+   reported through management/listing as setup-needed instead of
+   hiding the skill.
 
 2. **Dynamic visibility** (``is_visible``) — runs at listing time
    (each ``get_skill_listing`` call) because the tool set can change
@@ -18,8 +19,6 @@ registry — it becomes visible again if the required tools appear.
 
 from __future__ import annotations
 
-import os
-import shutil
 import sys
 
 from kernel.agents.mustang.skills.types import LoadedSkill, SkillManifest
@@ -32,21 +31,11 @@ def is_eligible(manifest: SkillManifest) -> tuple[bool, str | None]:
     returns ``(False, reason)`` so the loader can include the reason
     in its skip log.
 
-    Checks (all must pass):
+    Checks:
     - ``os``: ``sys.platform`` must be in the allow-list (empty = any).
-    - ``requires.bins``: every binary must resolve via ``shutil.which``.
-    - ``requires.env``: every variable must be set and non-empty.
     """
     if manifest.os and sys.platform not in manifest.os:
         return False, f"os {sys.platform!r} not in allow-list {list(manifest.os)}"
-
-    for binary in manifest.requires.bins:
-        if shutil.which(binary) is None:
-            return False, f"required binary not on PATH: {binary!r}"
-
-    for var in manifest.requires.env:
-        if not os.environ.get(var):
-            return False, f"required env var unset or empty: {var!r}"
 
     return True, None
 

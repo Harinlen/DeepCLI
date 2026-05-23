@@ -175,6 +175,15 @@ class TestDispatchTables:
         for method in [MustangMethod.MODEL_PROVIDER_LIST, MustangMethod.MODEL_PROVIDER_ADD]:
             assert REQUEST_DISPATCH[method].target == "model"
 
+    def test_skill_management_methods_present(self) -> None:
+        assert REQUEST_DISPATCH[MustangMethod.SKILLS_LIST].target == "skills"
+        assert REQUEST_DISPATCH[MustangMethod.SKILLS_INSPECT].target == "skills"
+        assert REQUEST_DISPATCH[MustangMethod.SKILLS_REFRESH].target == "skills"
+        assert MustangMethod.SKILLS_LIST in REQUEST_DISPATCH
+        assert "_mustang.agent/skills/install" not in REQUEST_DISPATCH
+        assert "_mustang.agent/skills/update" not in REQUEST_DISPATCH
+        assert "_mustang.agent/skills/uninstall" not in REQUEST_DISPATCH
+
 
 def _schema_methods() -> set[str]:
     schema_path = Path(__file__).parents[3] / "docs/kernel/references/acp/schema.json"
@@ -364,9 +373,7 @@ class TestHandlePrompt:
         sh.prompt = AsyncMock(
             return_value=PromptResult(
                 stop_reason="end_turn",
-                meta={
-                    "mustang.agent/clientTurnId": "11111111-1111-4111-8111-111111111111"
-                },
+                meta={"mustang.agent/clientTurnId": "11111111-1111-4111-8111-111111111111"},
             )
         )
         params = PromptRequest(

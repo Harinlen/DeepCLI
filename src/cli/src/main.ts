@@ -115,10 +115,15 @@ async function resolvePrintSkillInvocation(
   if (!match) return undefined;
   const name = match[1] ?? "";
   const commands = await session.listCommands().catch(() => []);
-  if (!commands.some(command => command.name === name && command.source === "skill")) {
-    return undefined;
-  }
-  return { name, args: match[2] ?? "" };
+  const command = commands.find(command => command.name === name && command.source === "skill");
+  if (!command) return undefined;
+  const metadataSkill = command.metadata?.skillName;
+  const skillName = typeof metadataSkill === "string"
+    ? metadataSkill
+    : name.startsWith("skill:")
+      ? name.slice("skill:".length)
+      : name;
+  return { name: skillName, args: match[2] ?? "" };
 }
 
 main().catch((error) => {

@@ -58,11 +58,11 @@ const GLOBAL_ACTIONS: Item[] = [
 	{ value: "import", label: "import", description: "Dry-run a ResourceStore import" },
 ];
 
-const FLAGS_ACTIONS: Item[] = [
-	{ value: "list", label: "list", description: "List startup flag sections" },
-	{ value: "read", label: "read", description: "Read one flag section" },
+const FLAG_ACTIONS: Item[] = [
+	{ value: "read", label: "read", description: "Read one flag value" },
 	{ value: "set", label: "set", description: "Stage a flag value for restart" },
 	{ value: "reset", label: "reset", description: "Reset a staged flag value" },
+	{ value: "list", label: "list", description: "Open the flag editor or list flags" },
 ];
 
 const SECRETS_ACTIONS: Item[] = [
@@ -92,6 +92,27 @@ const GATEWAYS_ACTIONS: Item[] = [
 	{ value: "bind", label: "bind", description: "Bind a gateway channel to an agent" },
 ];
 
+const MCP_ACTIONS: Item[] = [
+	{ value: "list", label: "list", description: "List MCP server declarations" },
+	{ value: "read", label: "read", description: "Read one MCP server declaration" },
+	{ value: "create", label: "create", description: "Create an MCP server declaration" },
+	{ value: "update", label: "update", description: "Update an MCP server declaration" },
+	{ value: "delete", label: "delete", description: "Delete an MCP server declaration" },
+];
+
+const SKILLS_ACTIONS: Item[] = [
+	{ value: "list", label: "list", description: "List visible skills" },
+	{ value: "inspect", label: "inspect", description: "Inspect one skill manifest" },
+	{ value: "search", label: "search", description: "Search installable skill sources" },
+	{ value: "sources", label: "sources", description: "List known skill sources" },
+	{ value: "install", label: "install", description: "Install or import a skill" },
+	{ value: "refresh", label: "refresh", description: "Refresh skill discovery" },
+	{ value: "check", label: "check", description: "Check installed skill provenance" },
+	{ value: "update", label: "update", description: "Update installed skills" },
+	{ value: "audit", label: "audit", description: "Audit installed skills" },
+	{ value: "uninstall", label: "uninstall", description: "Archive an installed skill" },
+];
+
 export const BUILTIN_SLASH_COMMANDS: SlashCommand[] = [
 	{ name: "clear", description: "Clear the current conversation view" },
 	{ name: "compact", description: "Compact conversation context" },
@@ -100,16 +121,18 @@ export const BUILTIN_SLASH_COMMANDS: SlashCommand[] = [
 	{ name: "agent", description: "Send a message to a durable agent", getArgumentCompletions: completeAgentArguments },
 	{ name: "agents", description: "Manage durable agents", getArgumentCompletions: completeAgentsArguments },
 	{ name: "help", description: "Show available commands" },
-	{ name: "flags", description: "Read or stage startup flags", getArgumentCompletions: completeFlagsArguments },
+	{ name: "flag", description: "Read or stage startup flags", getArgumentCompletions: completeFlagArguments },
 	{ name: "gateways", description: "Manage Access Router gateways", getArgumentCompletions: completeGatewaysArguments },
 	{ name: "global", description: "Backup, export, or dry-run import global ResourceStore data", getArgumentCompletions: completeGlobalArguments },
 	{ name: "memory", description: "List, show, or delete memories" },
 	{ name: "kernel", description: "Inspect or restart the local runtime", getArgumentCompletions: completeKernelArguments },
+	{ name: "mcp", description: "Manage MCP server declarations", getArgumentCompletions: completeMcpArguments },
 	{ name: "model", description: "Manage models", getArgumentCompletions: completeModelArguments },
 	{ name: "plan", description: "Enter, exit, or inspect plan mode", getArgumentCompletions: completePlanArguments },
 	{ name: "quit", description: "Exit DeepCLI" },
 	{ name: "secrets", description: "Manage secret metadata", getArgumentCompletions: completeSecretsArguments },
 	{ name: "session", description: "List, resume, or delete sessions", getArgumentCompletions: completeSessionArguments },
+	{ name: "skills", description: "Manage skills and skill-installed commands", getArgumentCompletions: completeSkillsArguments },
 	{ name: "theme", description: "Show or switch theme", getArgumentCompletions: completeThemeArguments },
 	{ name: "webfetch", description: "Manage WebFetch backend", getArgumentCompletions: completeWebFetchArguments },
 ];
@@ -172,10 +195,10 @@ function completeGlobalArguments(argumentPrefix: string): Item[] | null {
 	return filterCompletions(subcommand, GLOBAL_ACTIONS);
 }
 
-function completeFlagsArguments(argumentPrefix: string): Item[] | null {
+function completeFlagArguments(argumentPrefix: string): Item[] | null {
 	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
 	if (argumentPrefix.includes(" ")) return null;
-	return filterCompletions(subcommand, FLAGS_ACTIONS);
+	return filterCompletions(subcommand, FLAG_ACTIONS);
 }
 
 function completeSecretsArguments(argumentPrefix: string): Item[] | null {
@@ -200,6 +223,18 @@ function completeGatewaysArguments(argumentPrefix: string): Item[] | null {
 	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
 	if (argumentPrefix.includes(" ")) return null;
 	return filterCompletions(subcommand, GATEWAYS_ACTIONS);
+}
+
+function completeMcpArguments(argumentPrefix: string): Item[] | null {
+	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
+	if (argumentPrefix.includes(" ")) return null;
+	return filterCompletions(subcommand, MCP_ACTIONS);
+}
+
+function completeSkillsArguments(argumentPrefix: string): Item[] | null {
+	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
+	if (argumentPrefix.includes(" ")) return null;
+	return filterCompletions(subcommand, SKILLS_ACTIONS);
 }
 
 function filterCompletions(prefix: string, items: Item[]): Item[] | null {

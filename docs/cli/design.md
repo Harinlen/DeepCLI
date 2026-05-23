@@ -71,6 +71,23 @@ executable 中不稳定，则 fallback 为 bundled Bun runtime + JS bundle：
 TypeScript CLI 的源码仍使用 Bun 开发和测试；产品入口 `deepcli` 是 native
 launcher，不是直接暴露给用户的 Bun script。
 
+### TUI 版本标识
+
+CLI TUI 有独立于产品版本的三段版本号，定义在
+`src/cli/src/compat/utils.ts` 的 `TUI_VERSION`，Welcome 首屏必须显示：
+
+```text
+Version
+Kernel v<product-version>
+TUI v<tui-version>
+```
+
+目的不是发布语义，而是让用户和测试能区分"正在运行的 TUI 代码"与
+"后台 Kernel / 产品版本"。每次修改用户可见 TUI 行为、布局、交互组件、
+slash-command UI 路径或 TUI 首屏诊断能力时，必须把 `TUI_VERSION` 的
+第三段版本号加 1，并更新对应 golden / PTY / slash probe 断言。
+仅修改 kernel、非交互 CLI 输出、文档或测试夹具时不需要 bump。
+
 ---
 
 ## 仓库位置

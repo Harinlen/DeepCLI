@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,12 @@ class CommandDef:
         source: Where the command came from.  ``"skill"`` commands are
             projections of user-invocable skills and execute through the
             Kernel skill activation path, not local CLI file reads.
+        aliases: Deprecated or compatibility names accepted for lookup
+            but not returned as standalone catalog entries.
+        canonical_name: Stable display name when ``name`` is an aliasable
+            projection.  Defaults to ``name``.
+        metadata: Structured command metadata used by clients and gateways
+            so they do not have to parse command strings.
     """
 
     name: str
@@ -32,3 +39,6 @@ class CommandDef:
     acp_method: str | None
     subcommands: list[str] = field(default_factory=list)
     source: str = "builtin"
+    aliases: list[str] = field(default_factory=list)
+    canonical_name: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)

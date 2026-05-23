@@ -90,6 +90,20 @@ assert(themeArgs !== null, "expected /theme set suggestions");
 assert(themeArgs.items[0]?.value === "light", "/theme set should complete loaded themes");
 
 const activePortProvider = new CombinedAutocompleteProvider(ACTIVE_PORT_BUILTIN_COMMANDS);
+const activePortSkillCommands = await activePortProvider.getSuggestions(["/skil"], 0, 5);
+assert(activePortSkillCommands !== null, "expected active-port /skills suggestion");
+assert(
+	activePortSkillCommands.items.some(item => item.value === "skills"),
+	"active-port slash autocomplete should include /skills management command",
+);
+
+const activePortSkillsArgs = await activePortProvider.getSuggestions(["/skills "], 0, 8);
+assert(activePortSkillsArgs !== null, "expected active-port /skills argument suggestions");
+assert(
+	activePortSkillsArgs.items.map(item => item.value).includes("install") && activePortSkillsArgs.items.map(item => item.value).includes("refresh"),
+	"/skills autocomplete should include management subcommands",
+);
+
 const activePortThemeArgs = await activePortProvider.getSuggestions(["/theme set l"], 0, 12);
 assert(activePortThemeArgs !== null, "expected active-port /theme set suggestions");
 assert(

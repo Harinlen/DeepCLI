@@ -1,6 +1,8 @@
 # 多 Agent 通信与外部 Agent 接入计划
 
-状态: proposed
+状态: active architecture reference — partially implemented; agent-visible tool
+surface superseded by
+[`agent-tool-openclaw-tools-separation-plan.md`](agent-tool-openclaw-tools-separation-plan.md)
 创建: 2026-05-11
 参考:
 
@@ -30,6 +32,39 @@
 - OpenManus: `app/agent/base.py`
 - OpenManus: `app/agent/toolcall.py`
 
+## 2026-05-24 当前 Kernel 对照
+
+这份计划不再是从零开始的 proposed plan。当前 Kernel 已经落地了
+**operator / management 侧的 durable Agent 通信 hot path**：
+
+- `/agents`、`/agent send`、`/gateways` 已进入 Kernel CommandManager catalog
+  和 ACP 管理面。
+- `/agent send <agent-id> <message>` 通过 `AccessRouter.deliver_turn()` 进入目标
+  runtime；这是当前 durable agent message hot path。
+- `/agents bind` 和 `/gateways bind` 都写 `access_channel_bindings`；
+  `agent_bindings` 保持 reserved/deferred，不启用、不双写。
+- Access Router 已有 route freshness / stale rejection / reconnect freshness，
+  AgentManager health 能区分 unavailable/stale/fresh。
+- CLI slash dispatch 已通过真实 Access Router `/session` 路径覆盖 `/agents`、
+  `/agent send`、`/gateways` 等管理命令。
+
+仍未完成的是 **agent-visible Agent Network 产品面**，也就是让普通 agent 在
+对话中安全地发现、创建和联系 durable agents：
+
+- `AgentDirectory`、`AgentSession`、`AgentMessage` 尚未作为默认
+  `BUILTIN_TOOLS` 注册。
+- 旧 `agents_list` / `sessions_spawn` / `sessions_send` / `subagents` 工具壳存在，
+  但不是最终主路径，也未进入默认 tool snapshot。
+- 尚无 spawned run registry、agent-visible directory policy、
+  `tools.agentToAgent` gate、durable `AgentSession(runtime="agent")` 实现。
+- `runtime="acp"` / Codex / Claude Code 外部 ACP runtime controller 仍未闭合。
+- Platform Adapter inbound 到 bound agent/session 的完整路径仍未按本计划验收。
+
+因此，本文件保留为多 Agent 架构参考和剩余能力边界；普通 agent 可见工具的
+命名、实现顺序和验收以
+[`agent-tool-openclaw-tools-separation-plan.md`](agent-tool-openclaw-tools-separation-plan.md)
+为准。
+
 ## 结论
 
 DeepCLI 要实现的是 OpenClaw 的核心模型，不是照搬 `acpx`：
@@ -45,7 +80,7 @@ agent A
   -> agent B
 
 agent
-  -> sessions_spawn(runtime="subagent")
+  -> AgentSession(runtime="agent")
   -> sub-agent session
 
 ACP agent / ACP session(Codex / Claude Code / Gemini CLI)
@@ -54,8 +89,11 @@ ACP agent / ACP session(Codex / Claude Code / Gemini CLI)
 ```
 
 内部多 Agent 通信的真相是 **agentId + per-agent sessions + Hub Router +
-per-session queue + `sessions_*` tools**。`acpx` 只作为外部 ACP harness 的参考实现和可选
-兼容目标；DeepCLI 不把 `acpx` 当内部总线，也不让 Access/Gateway 直接绕过 Hub。
+per-session queue + agent-visible Agent Network tools**。早期草案使用
+OpenClaw 原名 `sessions_*`，当前 Kernel 计划改为 DeepCLI-native
+`AgentDirectory` / `AgentSession` / `AgentMessage`。`acpx` 只作为外部 ACP
+harness 的参考实现和可选兼容目标；DeepCLI 不把 `acpx` 当内部总线，也不让
+Access/Gateway 直接绕过 Hub。
 
 ## 原始问题
 
@@ -83,8 +121,8 @@ OpenClaw 的多 Agent 不是靠 ACPX 互调，而是靠这些结构：
 | `agentId` 是一个完整 brain | `AgentDefinition.id`，对应 `workspace`、`agentDir`、`sessions`、资源 scope |
 | 每个 agent 独立 workspace / agentDir / sessions | `~/.deepcli/agents/<agentId>/` + `AgentResources` |
 | gateway bindings 决定 inbound 到哪个 agent | Access Platform Adapter 归一化 ingress，Hub RoutingSnapshot 决定 target |
-| `sessions_spawn` 创建 sub-agent 或 ACP session | DeepCLI 也暴露 `sessions_spawn`，内部映射到 Hub Manager |
-| `sessions_send` 跨 session 投递 | DeepCLI 也暴露 `sessions_send`，经 Router 进入目标 session queue |
+| `sessions_spawn` 创建 sub-agent 或 ACP session | DeepCLI 当前目标为 `AgentSession`，内部复用 Hub / Access Router route truth |
+| `sessions_send` 跨 session 投递 | DeepCLI 当前目标为 `AgentMessage`，经 Access Router / Hub-owned route truth 进入目标 session queue |
 | per-session queue 防止同一会话并发 turn 碰撞 | 复用 `SessionManager` 单 session FIFO；Hub 只暴露 queue 状态，不替 SessionManager 执行 turn |
 | ACPX 只接外部 harness | `AgentRuntimeKind.acp` + `AcpRuntimeController` |
 
@@ -110,16 +148,16 @@ OpenClaw Gateway 负责：
 
 OpenClaw agent 间通信依靠：
 
-- `sessions_send`：把消息送进另一个 `sessionKey`，可等待结果；transcript 标记
+- `AgentMessage`：把消息送进另一个 durable agent 或 session，可等待结果；transcript 标记
   `message.provenance.kind = "inter_session"`，并有 reply-back loop / announce step。
-- `sessions_spawn`：创建 `agent:<agentId>:subagent:<uuid>` 或
+- `AgentSession`：创建 `agent:<agentId>:subagent:<uuid>` 或
   `agent:<agentId>:acp:<uuid>`，completion 通过 announce 回到 requester。
 - session routing + per-session queue：同一目标 session 串行处理 turn，避免并发碰撞。
 
 因此 DeepCLI 现在已有 Gateway 层时，正确对齐方式是：
 
 - Gateway/Access 层负责外部入口、WS/RPC、reply sink、bindings、session state projection。
-- Agent Hub/Session 层负责 `sessions_send`、`sessions_spawn`、queue、completion、
+- Agent Hub/Session 层负责 `AgentMessage`、`AgentSession`、queue、completion、
   provenance、policy。
 - 不让 Gateway adapter 直接调用某个 agent 的 `SessionManager`；它只能把 inbound
   规范化后交给 Hub/Router。
@@ -132,12 +170,12 @@ OpenClaw 对齐。完成态必须支持：
 - 多个 agents 并存：`main`、`research`、`coding` 等。
 - 每个 agent 有自己的 `workspace`、`agentDir`、`sessions`、资源 scope。
 - Gateway / CLI / Probe / Home Screen 消息可以按 bindings 或显式 target 路由到不同 agent。
-- `sessions_send` 能把消息投递到另一个 session，支持 wait、timeout、accepted、
+- `AgentMessage` 能把消息投递到另一个 durable agent/session，支持 wait、timeout、accepted、
   reply-back loop、announce step、inter-session provenance。
-- `sessions_spawn` 能创建 `sub-agent session` 或 `ACP session`，支持 run/session
+- `AgentSession` 能创建 durable spawned session 或 `ACP session`，支持 run/session
   mode、thread bindings、cleanup、timeout、sandbox inheritance guard、allowlist。
-- `agents_list` 能发现当前 session 允许通信和 spawn 的 OpenClaw agents。
-- `subagents` 控制面能 list/info/log/kill/send/steer 当前 session 的 sub-agent runs。
+- `AgentDirectory` 能发现当前 session 允许通信和 spawn 的 durable agents。
+- `AgentSession` 控制面能 list/info/log/stop/steer 当前 session 的 spawned runs。
 - Codex / Claude Code 等外部 ACP-compatible harness 可以作为 `ACP runtime`
   被创建、prompt、cancel、status、close。
 - 所有权限请求、stream update、最终回复都仍从 Runtime -> Hub -> Access -> client/reply sink
@@ -169,11 +207,11 @@ OpenClaw 对齐。完成态必须支持：
 | `accountId` | 某个 channel 的账号实例，例如 WhatsApp `"personal"` / `"biz"`。 |
 | `peer` | channel 内的 DM、group、thread、room 等对话目标。 |
 | `session key` | OpenClaw 风格 session 主键，例如 `agent:main:main`。 |
-| `sub-agent` / `sub-agent session` | 由 `sessions_spawn` 创建的后台 agent run，key 形如 `agent:<agentId>:subagent:<uuid>`。 |
+| `sub-agent` / `sub-agent session` | 由 `AgentSession` 创建的后台 agent run，key 形如 `agent:<agentId>:subagent:<uuid>`。 |
 | `ACP agent` / `ACP session` | Codex / Claude Code / Gemini CLI 等 ACP harness，key 形如 `agent:<agentId>:acp:<uuid>`。 |
-| `sessions_send` | 向另一个 session 投递消息的工具名。 |
-| `sessions_spawn` | 创建 sub-agent 或 ACP session 的工具名。 |
-| `agents_list` | 发现当前 session 可见/可发送/可 spawn 的 agents。 |
+| `AgentMessage` | 向另一个 durable agent 或 spawned session 投递消息的目标工具名。 |
+| `AgentSession` | 创建/查看/停止/steer spawned agent 或 ACP session 的目标工具名。 |
+| `AgentDirectory` | 发现当前 session 可见/可发送/可 spawn 的 agents。 |
 | Agent Directory | Hub 维护的 policy-filtered agent 目录；agent 只能看到被允许通信的目标。 |
 
 ## 目标拓扑
@@ -245,8 +283,8 @@ DeepCLI 落地规则：
 OpenClaw 不是 agent object 互调，也不是 Gateway adapter 转发。它是
 session-to-session messaging：
 
-- `sessions_send` 向已有 `sessionKey` 投递消息，不创建新 session。
-- `sessions_spawn` 创建新的 `sub-agent session` 或 `ACP session`。
+- `AgentMessage` 向已有 durable agent/session 投递消息，不创建新 session。
+- `AgentSession` 创建新的 spawned agent session 或 `ACP session`。
 - Hub/Router 做 target 解析、policy、correlation/status projection。
 - 目标 runtime 的 per-session queue 负责 FIFO 和 turn execution。
 - transcript 记录 inter-session provenance，便于 UI、审计和调试区分外部用户输入与
@@ -254,11 +292,11 @@ session-to-session messaging：
 
 DeepCLI 落地规则：
 
-- Agent 可见入口只暴露 OpenClaw 工具名：`agents_list`、`sessions_send`、
-  `sessions_spawn`、`subagents`。
-- `sessions_send` 支持 `sessionKey`/`sessionId`、accepted、wait、timeout、
+- Agent 可见入口只暴露 DeepCLI-native 工具名：`AgentDirectory`、
+  `AgentMessage`、`AgentSession`。
+- `AgentMessage` 支持 `agentId`/`sessionId`/`runId`、accepted、wait、timeout、
   reply-back loop、announce step、max ping-pong turns。
-- `sessions_spawn` 支持 `runtime: "subagent" | "acp"`、`mode: "run" | "session"`、
+- `AgentSession` 支持 `runtime: "agent" | "acp" | "local"`、`mode: "run" | "session"`、
   `thread`、cleanup、timeout、sandbox inheritance guard、attachments。
 - Agent Hub 是 control plane bus：统一路由、权限、状态和事件；它不持久化对话队列，
   不执行 LLM turn，不替代 SessionManager。
@@ -374,12 +412,12 @@ Current Date & Time、Reply Tags、Heartbeats、Runtime、Reasoning。
 
 - base identity 是“运行在 OpenClaw 内的 personal assistant”。DeepCLI 应改成
   “运行在 DeepCLI/Mustang kernel 内”，但保留 section 结构。
-- Tooling section 会提示：复杂/较长任务用 `sessions_spawn` 创建 sub-agent；
+- Tooling section 会提示：复杂/较长任务用 `AgentSession` 创建 spawned agent session；
   如果用户说“用 codex / claude code / cursor / gemini 做”，应视为 ACP harness
-  intent，调用 `sessions_spawn` 且 `runtime: "acp"`。
-- ACP harness 不走 `subagents`/`agents_list` 或本地 shell 逃逸启动；它必须通过
-  `sessions_spawn` 进入 Hub/ACP controller。
-- 不要 busy-poll `subagents list` / `sessions_list`；completion 是 push-based。
+  intent，调用 `AgentSession` 且 `runtime: "acp"`。
+- ACP harness 不走 `Agent` local subtask 或本地 shell 逃逸启动；它必须通过
+  `AgentSession(runtime="acp")` 进入 Hub/ACP controller。
+- 不要 busy-poll `AgentSession(action="list")`；completion 是 push-based。
 - Safety 是 advisory，硬边界仍靠 tool policy、exec approvals、sandbox、channel
   allowlists。
 - Runtime section 应带 `agent=<agentId>`、host、repo、OS、model、channel、
@@ -401,7 +439,7 @@ OpenClaw 文档说 sub-agent sessions 只注入 `AGENTS.md` 和 `TOOLS.md`；实
 源码位置：OpenClaw `src/agents/subagent-announce.ts` 的
 `buildSubagentSystemPrompt`。
 
-DeepCLI 的 `sessions_spawn(runtime="subagent")` 应注入一个 `# Subagent Context`
+DeepCLI 的 `AgentSession(runtime="agent")` 应注入一个 `# Subagent Context`
 块，包含这些规则：
 
 - 你是 parent orchestrator 为特定任务创建的 **subagent**，不是 parent。
@@ -411,7 +449,7 @@ DeepCLI 的 `sessions_spawn(runtime="subagent")` 应注入一个 `# Subagent Con
 - 如果工具输出被截断，只重读需要的片段。
 - 输出要简洁说明完成了什么、发现了什么、相关细节。
 - 除非 task 明确要求，不和用户/外部平台对话，不伪装 parent。
-- 如果允许嵌套 spawn，子 session 仍用 `sessions_spawn`；ACP harness 子任务必须
+- 如果允许嵌套 spawn，子 session 仍用 `AgentSession`；ACP harness 子任务必须
   用 `runtime: "acp"` 和明确 `agentId`。
 
 ### ACP agent prompt guidance
@@ -421,9 +459,9 @@ DeepCLI 的 `sessions_spawn(runtime="subagent")` 应注入一个 `# Subagent Con
 OpenClaw 区分：
 
 - ACP session：`agent:<agentId>:acp:<uuid>`，spawn tool 是
-  `sessions_spawn({ runtime: "acp" })`。
+  `AgentSession({ runtime: "acp" })`。
 - Sub-agent session：`agent:<agentId>:subagent:<uuid>`，spawn tool 是
-  `sessions_spawn()` 默认 runtime。
+  `AgentSession({ runtime: "agent" })`。
 
 DeepCLI 也按这个模型接入 Codex / Claude Code：
 
@@ -446,9 +484,9 @@ per-agent `sessions` / `bindings[]` / thread-bound session 的长期运行模型
 
 | OpenManus 机制 | 借鉴方式 |
 |---|---|
-| `BaseFlow` 持有 `agents: Dict[str, BaseAgent]` 和 `primary_agent_key` | DeepCLI 可在 `main` agent 内实现“flow/orchestrator session”，用 `agents_list` 发现可用 agent，再用 `sessions_send`/`sessions_spawn` 执行 step。 |
+| `BaseFlow` 持有 `agents: Dict[str, BaseAgent]` 和 `primary_agent_key` | DeepCLI 可在 `main` agent 内实现“flow/orchestrator session”，用 `AgentDirectory` 发现可用 agent，再用 `AgentMessage`/`AgentSession` 执行 step。 |
 | `PlanningFlow` 用 `PlanningTool` 创建 plan、标记 `in_progress/completed/blocked` | 可作为 DeepCLI 的 session-level planning tool 参考，让 orchestrator session 对跨 agent 工作有可观测 plan 状态。 |
-| plan step 支持 `[AGENT_NAME]` 选择 executor | 可映射为 OpenClaw-style agent selection：plan step metadata 里记录目标 `agentId`，执行时调用 `sessions_send` 或 `sessions_spawn`。 |
+| plan step 支持 `[AGENT_NAME]` 选择 executor | 可映射为 OpenClaw-style agent selection：plan step metadata 里记录目标 `agentId`，执行时调用 `AgentMessage` 或 `AgentSession`。 |
 | `_execute_step` 给 executor 注入当前 plan status 和当前 step | 值得保留：跨 agent 委派时应带 compact plan context、当前 step、验收标准，而不是只发一句 task。 |
 | `ToolCollection` 有 tool map、重复工具名跳过、统一 `execute` 错误包装 | 可借鉴为 session tools registry 的冲突检测和 tool result 规范化。 |
 | `BaseAgent.is_stuck()` 检测重复 assistant content 并插入 anti-stuck prompt | 可作为 session loop 的轻量 stuck detector；但应做成可观测 event，不要静默改 prompt。 |
@@ -459,7 +497,8 @@ per-agent `sessions` / `bindings[]` / thread-bound session 的长期运行模型
 - OpenManus 的 Flow agents 是同一进程里的对象引用，不是独立 `agentId` 生命周期；
   不具备 per-agent auth、workspace、session store、bindings。
 - `PlanningFlow` 串行执行 step，executor 直接 `agent.run(step_prompt)`；这不能替代
-  OpenClaw 的 `sessions_send` / `sessions_spawn` queue 和 transcript provenance。
+  OpenClaw 的 queue 和 transcript provenance；DeepCLI 对应工具名是
+  `AgentMessage` / `AgentSession`。
 - `PlanningTool.plans` 是内存 dict；DeepCLI 需要持久化 plan/session 状态，并能在
   Gateway/Home Screen 展示。
 - OpenManus A2A adapter 当前非 streaming、cancel 未实现、task store 是 in-memory，
@@ -470,13 +509,13 @@ per-agent `sessions` / `bindings[]` / thread-bound session 的长期运行模型
 ### 对本计划的调整
 
 OpenManus 不改变核心目标：DeepCLI 多 agent 通信仍对齐 OpenClaw，靠
-`sessions_send` / `sessions_spawn`、session routing、per-session queue、bindings。
+`AgentMessage` / `AgentSession`、session routing、per-session queue、bindings。
 它补充的是一个“orchestrator flow”层：
 
 - 在某个 agent session 内创建 durable plan。
 - plan step 可以声明目标 `agentId`、runtime、mode、验收标准。
-- 执行 step 时，对已有长期 session 用 `sessions_send`。
-- 执行 step 时，对一次性委派或 ACP harness 用 `sessions_spawn`。
+- 执行 step 时，对已有长期 session 用 `AgentMessage`。
+- 执行 step 时，对一次性委派或 ACP harness 用 `AgentSession`。
 - 每次 step completion 回写 plan 状态和 notes。
 - Home Screen / Gateway session view 能看到 plan、step、target session、runId。
 
@@ -647,8 +686,21 @@ Adapter 不负责：
 
 ## Agent 工具面
 
-为了让 agent 使用多 Agent 能力，需要复用 OpenClaw 的工具名，而不是引入
-`agent_send` / `agent_spawn` 这套新名字：
+本节最初直接复用 OpenClaw 的 `agents_list` / `sessions_send` /
+`sessions_spawn` / `subagents` 命名。当前 Kernel 已经有 `/agents`、`/agent send`
+和 `/gateways` 管理面，为避免把管理命令、Claude Code-compatible `Agent` 工具、
+以及 durable Agent Network 混在一起，最终 agent-visible 工具名以
+[`agent-tool-openclaw-tools-separation-plan.md`](agent-tool-openclaw-tools-separation-plan.md)
+为准：
+
+| 旧草案名 | 当前目标名 | 说明 |
+|---|---|---|
+| `agents_list` | `AgentDirectory` | 只读发现当前 caller 可见、可联系的 durable agents。 |
+| `sessions_send` | `AgentMessage` | 向已有 durable agent 或 spawned session 投递消息。 |
+| `sessions_spawn` | `AgentSession(action="spawn")` | 创建 caller-owned spawned agent session；不得隐式回退到 `AgentTool`。 |
+| `subagents` | `AgentSession(action="list"|"stop"|"steer")` | 控制 caller-owned spawned runs；local `Agent` task 只能作为 compatibility projection。 |
+
+下方 OpenClaw 命名保留为历史语义参考，不再作为最终用户可见工具名。
 
 ### Agent 如何选择通信对象
 
@@ -658,14 +710,14 @@ Agent 不应该靠猜名字或广播来找目标。选择目标必须走这条�
    直接解析为 `agentId`、`sessionKey` 或 ACP target。
 2. 当前 conversation/thread binding 优先：如果当前对话已绑定到某个 session，
    follow-up 继续发给该 session，不重新选择。
-3. Agent 调 `agents_list` 获取 Hub 过滤后的 Agent Directory。目录只返回当前
+3. Agent 调 `AgentDirectory` 获取 Hub 过滤后的 Agent Directory。目录只返回当前
    session 被 policy 允许看到、发送或 spawn 的目标。
 4. Orchestrator flow / durable plan 可以在 step metadata 里显式记录目标：
    `targetAgentId`、`targetSessionKey`、`runtime`、`mode`、`acceptance`。
 5. 如果用户意图和目录信息仍然歧义，agent 必须问用户；不能擅自把任务发给多个
    agent 试错。
 
-`agents_list` 返回的信息必须足够支持选择，而不只是 id 列表：
+`AgentDirectory` 返回的信息必须足够支持选择，而不只是 id 列表：
 
 - `agentId`
 - `name`
@@ -682,11 +734,11 @@ Agent 不应该靠猜名字或广播来找目标。选择目标必须走这条�
 - `whenToUse`
 - `examples`
 
-目录必须由 Hub 按 `tools.agentToAgent`、`subagents.allowAgents`、
+目录必须由 Hub 按 `tools.agentToAgent`、`agentSession.allowAgents`、
 `acp.allowedAgents`、当前 session scope、sandbox 状态过滤。Agent 不能先看到全局
 所有 agents 再靠 prompt 自律。
 
-### `agents_list`
+### `AgentDirectory`（原 `agents_list`）
 
 返回当前 session 可见、可发送、可 spawn 的 agents。
 
@@ -706,7 +758,7 @@ Agent 不应该靠猜名字或广播来找目标。选择目标必须走这条�
 - `whenToUse`
 - `examples`
 
-### `sessions_send`
+### `AgentMessage`（原 `sessions_send`）
 
 发送消息到另一个 session。
 
@@ -723,7 +775,7 @@ Agent 不应该靠猜名字或广播来找目标。选择目标必须走这条�
 - 默认不直接对用户发消息
 - 如果需要用户可见结果，返回目标 agent 的最新 assistant reply 或 accepted 状态
 
-### `sessions_spawn`
+### `AgentSession(action="spawn")`（原 `sessions_spawn`）
 
 创建新的 `sub-agent session` 或 `ACP session`。
 
@@ -740,7 +792,8 @@ Agent 不应该靠猜名字或广播来找目标。选择目标必须走这条�
 
 行为：
 
-- sub-agent spawn 走 Hub Manager 创建 `agent:<agentId>:subagent:<uuid>`。
+- durable agent spawn 走 Agent Network service / Hub-owned route truth 创建
+  caller-owned run metadata 和目标 session。
 - ACP spawn 走 Hub Manager 创建 `agent:<agentId>:acp:<uuid>` 并启动/复用 ACP controller。
 - `mode=run` 是 one-shot，完成后 close/release runtime，但保留 transcript。
 - `mode=session` 需要 `thread=true` 或 current-conversation binding，创建可继续对话的
@@ -748,13 +801,14 @@ Agent 不应该靠猜名字或广播来找目标。选择目标必须走这条�
 
 ### 与现有 `AgentTool` 的关系
 
-`AgentTool` 保持为内部兼容层；对 agent 暴露的产品级能力统一迁移到
-`sessions_spawn(runtime="subagent")`。
+`AgentTool` 保持为 Claude Code-compatible local subtask 工具；对 agent 暴露的
+durable Agent Network 能力统一迁移到 `AgentSession`。
 
 新增工具面用于跨 agent / 跨 session 通信：
 
-- `AgentTool`: 父 session 内部兼容实现，快、私有、不可被平台绑定。
-- `sessions_spawn`: Hub-visible session，慢一点，但有 `agentId`、session key、状态和 bindings。
+- `Agent`: 父 session 内部兼容实现，快、私有、不可被平台绑定。
+- `AgentSession`: Hub-visible / Access Router-visible session path，慢一点，但有
+  `agentId`、session/run identity、状态和 bindings。
 
 不要把两者合并。合并会让工具权限、生命周期、持久化边界变混。
 
@@ -864,9 +918,9 @@ tools:
 
 ### Spawn Policy
 
-`sessions_spawn` 需要独立 policy：
+`AgentSession` 需要独立 policy：
 
-- `allow_runtimes`: `subagent | acp`
+- `allow_runtimes`: `agent | acp | local`
 - `allow_agents`: agent id allowlist
 - `max_children_per_session`
 - `max_spawn_depth`
@@ -906,17 +960,19 @@ tools:
   persistent ACP bindings。
 - Gateway adapter 不直接调用 `SessionManager`；所有 inbound 都经 Hub/Router。
 
-### Session Tools
+### Agent Network Tools
 
-- `agents_list` 返回当前 session 可见、可发送、可 spawn 的 agents。
-- `sessions_send` 支持 OpenClaw 行为：`sessionKey`/`sessionId`、timeout 0
+- `AgentDirectory` 返回当前 session 可见、可发送、可 spawn 的 agents，并按
+  policy 过滤 operator-only 字段。
+- `AgentMessage` 支持 durable agent / spawned session 投递：timeout 0
   fire-and-forget、wait completion、timeout/error 返回、inter-session provenance、
   reply-back loop、announce step、max ping-pong turns。
-- `sessions_spawn` 支持 OpenClaw 行为：`runtime: "subagent" | "acp"`、
-  `agentId` allowlist、`mode: "run" | "session"`、`thread`、`cleanup`、
-  `runTimeoutSeconds`、`sandbox`、attachments（sub-agent only）。
-- `subagents` 控制面支持 list/info/log/kill/send/steer，并能显示 thread/acp/session
-  bindings 状态。
+- `AgentSession` 支持 `runtime: "agent" | "acp" | "local"`、`mode: "run" |
+  "session"`、run registry、thread/current-conversation binding、cleanup、
+  timeout、sandbox inheritance guard、attachments。
+- Deprecated aliases (`agents_list`、`sessions_send`、`sessions_spawn`、
+  `subagents`) 如保留，只能调用同一 Agent Network service 和同一 policy path；
+  默认 prompt/tool snapshot 不推荐旧名。
 
 ### Runtime 与 Queue
 
@@ -931,7 +987,7 @@ tools:
 - 支持 OpenManus-style flow，但实现为某个 agent session 内的 durable plan，不是
   同进程 agent object 互调。
 - plan step 可记录目标 `agentId`、目标 session、runtime、runId、状态、notes。
-- 执行 plan step 必须走 `sessions_send` 或 `sessions_spawn`，保留 queue、
+- 执行 plan step 必须走 `AgentMessage` 或 `AgentSession`，保留 queue、
   transcript provenance、policy 和 observability。
 - plan 状态必须持久化，并能被 Gateway/Home Screen 查询。
 
@@ -947,12 +1003,12 @@ tools:
 
 ### Policy / Observability / DoD
 
-- `tools.agentToAgent`、`subagents.allowAgents`、`acp.allowedAgents`、
+- `tools.agentToAgent`、`agentSession.allowAgents`、`acp.allowedAgents`、
   spawn depth/concurrency、sandbox inheritance guard 全部生效。
 - status/queue/active turn/last error/agentDir/session key/binding source 可观测。
 - legacy Mustang GatewayManager 不能成为新功能路径。
 - 每条闭合缝必须有真实 probe：Access -> Hub -> Mustang Runtime、
-  `sessions_send`、`sessions_spawn`、Access -> Hub -> ACP process、
+  `AgentMessage`、`AgentSession`、Access -> Hub -> ACP process、
   Runtime -> Hub -> Access permission request。
 
 ## 测试矩阵
@@ -961,7 +1017,7 @@ tools:
 |---|---|
 | Router | target 解析、binding 优先级、route miss、snapshot revision |
 | Access Platform | fake inbound、reply sink、permission round trip、binding persistence |
-| Mustang Multi-agent | 独立 `agentDir`/session DB、`sessions_send`、`sessions_spawn`、FIFO |
+| Mustang Multi-agent | 独立 `agentDir`/session DB、`AgentMessage`、`AgentSession`、FIFO |
 | ACP Runtime | fake ACP runtime、Codex/Claude Code smoke、cancel、process crash |
 | Policy | `tools.agentToAgent` allow/deny、spawn deny、ACP runtime capability deny |
 | E2E | CLI -> `main` -> spawned agent；platform fake -> bound ACP agent |
@@ -969,7 +1025,7 @@ tools:
 Definition of Done 必须包含真实闭合缝 probe：
 
 - Access -> Hub -> Mustang Runtime
-- Agent -> Hub -> Agent
+- Agent -> Access Router / Hub-owned route truth -> Agent
 - Access -> Hub -> ACP process
 - Runtime -> Hub -> Access permission request
 

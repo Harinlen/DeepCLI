@@ -18,6 +18,9 @@ class CommandEntry(AcpModel):
     acp_method: str | None = None
     subcommands: list[str] = Field(default_factory=list)
     source: str = "builtin"
+    aliases: list[str] = Field(default_factory=list)
+    canonical_name: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ListCommandsRequest(AcpModel):

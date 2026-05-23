@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from collections.abc import Coroutine
 from typing import Any
 
@@ -38,6 +40,39 @@ def test_main_does_not_suppress_runtime_errors(monkeypatch: pytest.MonkeyPatch) 
         runtime_main.main()
 
 
+def test_access_router_connection_id_accepts_snake_and_camel_case() -> None:
+    assert runtime_main._access_router_connection_id(
+        {"result": {"connection_id": "conn-snake"}}
+    ) == "conn-snake"
+    assert runtime_main._access_router_connection_id(
+        {"result": {"connectionId": "conn-camel"}}
+    ) == "conn-camel"
+
+
+@pytest.mark.anyio
+async def test_runtime_sends_router_heartbeat_notifications() -> None:
+    websocket = _SendingWebSocket()
+    task = asyncio.create_task(
+        runtime_main._send_router_heartbeats(
+            websocket,
+            "conn-1",
+            interval_seconds=0.01,
+        )
+    )
+    try:
+        await asyncio.wait_for(websocket.sent_event.wait(), timeout=1)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    payload = json.loads(websocket.sent[0])
+    assert payload == {
+        "jsonrpc": "2.0",
+        "method": "_mustang.router/ping",
+        "params": {"connection_id": "conn-1"},
+    }
+
+
 @pytest.mark.anyio
 async def test_runtime_handles_acp_initialize_inside_agent() -> None:
     result = await runtime_main._deliver_router_acp(
@@ -70,3 +105,50 @@ async def test_runtime_handles_acp_authenticate_inside_agent() -> None:
     )
 
     assert result == {"meta": None}
+
+
+@pytest.mark.anyio
+async def test_runtime_handles_acp_activate_skill_inside_agent() -> None:
+    service = _SkillService()
+
+    result = await runtime_main._deliver_router_acp(
+        RuntimeAcpRequest(
+            agent_id="primary",
+            method="_mustang.agent/session/activate_skill",
+            params={
+                "sessionId": "session-1",
+                "skill": "skill-installer",
+                "args": "sources",
+            },
+        ),
+        session_service=service,  # type: ignore[arg-type]
+        peer=_ClientPeer(),
+    )
+
+    assert service.seen == [("session-1", "skill-installer", "sources")]
+    assert result == {"stopReason": "end_turn", "_meta": {"ok": True}, "updates": []}
+
+
+class _SendingWebSocket:
+    def __init__(self) -> None:
+        self.sent: list[str] = []
+        self.sent_event = asyncio.Event()
+
+    async def send(self, payload: str) -> None:
+        self.sent.append(payload)
+        self.sent_event.set()
+
+
+class _SkillService:
+    def __init__(self) -> None:
+        self.seen: list[tuple[str, str, str]] = []
+
+    async def activate_skill(self, params: object, *, client_peer: object | None = None) -> dict:
+        del client_peer
+        self.seen.append((params.session_id, params.skill, params.args))
+        return {"stopReason": "end_turn", "_meta": {"ok": True}, "updates": []}
+
+
+class _ClientPeer:
+    async def notify_client(self, *, method: str, params: dict) -> None:
+        del method, params

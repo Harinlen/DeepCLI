@@ -507,6 +507,48 @@ wall twice.
   owned by `MCPManager`; trying to make the management surface hot-edit live
   connections risks mixing durable config with transient transport state.
 
+- **Runtime route freshness needs runtime-originated heartbeats.**  Native
+  WebSocket pong is not observable through the ASGI layer, and refreshing
+  `last_seen` only after successful runtime traffic leaves the first command
+  after an idle period vulnerable to `route stale: primary`.  The Access Router
+  route freshness contract needs an application-level runtime ping that can be
+  consumed even while an ACP request is in flight.
+
+- **Access Router `/session` must mirror SessionHandler control-plane specials.**
+  Methods such as `_mustang.agent/runtime/status` are not ordinary runtime tool
+  requests and are not always in `REQUEST_DISPATCH`.  When the CLI connects to
+  the lightweight Access Router `/session` path, those methods must be handled
+  locally through the Supervisor control socket; otherwise they leak to the
+  Primary Runtime and fail as unsupported tool requests.
+
+- **Slash-command closure needs a real CLI-to-kernel probe.**  A mock
+  `managementRequest()` probe can prove parser/dispatch behavior and prevent
+  direct SQLite writes, but it cannot prove Access Router `/session`, runtime
+  route freshness, Supervisor control methods, or Primary Runtime handlers.
+  User-facing slash commands need at least one probe that starts the supervised
+  kernel, connects through the CLI `AcpClient`, and invokes the same
+  `executeBuiltinSlashCommand()` path as the TUI.
+
+- **Skill commands need both command projection and runtime activation routing.**
+  Listing `skill:<name>` in the command catalog only proves discoverability.
+  The active Access Router path sends `/skill:<name>` as
+  `_mustang.agent/session/activate_skill`; the Primary Runtime direct ACP
+  dispatcher must handle that method explicitly, or it falls through to
+  `tools_request` and fails as an unsupported tools request.
+
+- **Real command probes need catalog coverage guards.**  A real-kernel slash
+  smoke test can still drift if new builtin commands are added without adding
+  smoke inputs.  Import the builtin slash catalog in the real probe and fail
+  when any catalog command is missing from the smoke list; keep mock dispatch
+  probes clearly labeled as parser-only.
+
+- **Dynamic skill commands need catalog-driven activation checks.**  Testing one
+  fixed `/skill:<name>` proves only that single built-in skill path.  Because
+  the runtime command catalog can project every user-invocable skill as
+  `skill:<name>`, the real CLI-to-kernel probe should fetch `commands/list`,
+  filter `source=skill`, and activate each returned command through the same
+  CLI path users run.
+
 - **Final migration closure should orchestrate existing probes.**  When a plan
   already has source-backed subsystem probes, the final monolithic target should
   run those probes as subprocesses and assert their public markers instead of

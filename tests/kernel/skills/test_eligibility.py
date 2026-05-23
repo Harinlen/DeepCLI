@@ -64,8 +64,8 @@ def test_missing_binary() -> None:
     ok, reason = is_eligible(
         _manifest(requires=SkillRequires(bins=("definitely_not_a_real_binary_xyz",)))
     )
-    assert ok is False
-    assert "not on PATH" in reason
+    assert ok is True
+    assert reason is None
 
 
 def test_present_binary() -> None:
@@ -74,18 +74,14 @@ def test_present_binary() -> None:
 
 
 def test_missing_env_var() -> None:
-    ok, reason = is_eligible(
-        _manifest(requires=SkillRequires(env=("DEFINITELY_NOT_SET_XYZ_123",)))
-    )
-    assert ok is False
-    assert "unset or empty" in reason
+    ok, reason = is_eligible(_manifest(requires=SkillRequires(env=("DEFINITELY_NOT_SET_XYZ_123",))))
+    assert ok is True
+    assert reason is None
 
 
 def test_present_env_var() -> None:
     with patch.dict("os.environ", {"MY_TEST_VAR": "value"}):
-        ok, _ = is_eligible(
-            _manifest(requires=SkillRequires(env=("MY_TEST_VAR",)))
-        )
+        ok, _ = is_eligible(_manifest(requires=SkillRequires(env=("MY_TEST_VAR",))))
     assert ok is True
 
 
@@ -107,16 +103,12 @@ def test_requires_tools_present() -> None:
 
 
 def test_fallback_for_hides_when_primary_available() -> None:
-    skill = _skill(
-        manifest=_manifest(fallback_for=SkillFallbackFor(tools=("WebSearch",)))
-    )
+    skill = _skill(manifest=_manifest(fallback_for=SkillFallbackFor(tools=("WebSearch",))))
     # Primary is available → fallback should be hidden.
     assert is_visible(skill, {"WebSearch", "Bash"}) is False
 
 
 def test_fallback_for_visible_when_primary_missing() -> None:
-    skill = _skill(
-        manifest=_manifest(fallback_for=SkillFallbackFor(tools=("WebSearch",)))
-    )
+    skill = _skill(manifest=_manifest(fallback_for=SkillFallbackFor(tools=("WebSearch",))))
     # Primary is missing → fallback should be visible.
     assert is_visible(skill, {"Bash", "Grep"}) is True

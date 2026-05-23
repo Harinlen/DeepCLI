@@ -1,6 +1,6 @@
 # CLI Phase B — oh-my-pi TUI 迁移计划
 
-**父计划**: [`../../plans/cli-plan.md`](../../plans/cli-plan.md)
+**父计划**: retired; current shipped CLI map lives in [`implemented-summary.md`](implemented-summary.md)
 **范围**: `src/cli/` TypeScript / Bun client
 **状态**: planned
 

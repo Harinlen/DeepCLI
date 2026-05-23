@@ -36,7 +36,7 @@ DeepCLI 的用户 slash path 是 Kernel-owned：
 - `SkillManager.user_invocable_skills()` 是 truth
 - `CommandManager` 把这些 skills 投影为 `source="skill"` 命令
 - CLI 从 `_mustang.agent/commands/list` 拉取目录用于 autocomplete
-- 输入 `/skill-name args` 时，CLI 调
+- 输入 `/skill:<name> args` 时，CLI 调
   `_mustang.agent/session/activate_skill`
 - `SessionManager.activate_skill()` 校验 `user_invocable`，调用
   `SkillManager.activate()`，记录 invoked skill 用于 compaction，然后把
@@ -44,6 +44,38 @@ DeepCLI 的用户 slash path 是 Kernel-owned：
 
 CLI 不扫描 `~/.deepcli/skills` 或 `.mustang/skills`；避免 Access/CLI 与
 Mustang Agent runtime 在 router mode 下看到不同 Skill 状态。
+
+### `/skills` management surface
+
+DeepCLI exposes a Kernel-owned `/skills` command:
+
+- `/skills` and `/skills list` call `_mustang.agent/skills/list`.
+- `/skills inspect <name>` calls `_mustang.agent/skills/inspect`.
+- `/skills refresh` calls `_mustang.agent/skills/refresh`.
+- `/skills search/sources/install/check/update/audit/uninstall ...` activates
+  bundled `skill-installer`; there is no kernel install/update/uninstall apply
+  method.
+
+`SkillManager` owns the read-only management APIs:
+
+- `list_skill_records()`
+- `inspect_skill(name)`
+- `refresh()`
+
+Installed skill commands use canonical `/skill:<name>`.  Bare `/name` is only
+an alias when it does not collide with a builtin command.
+
+The bundled `skill-installer` is directory-backed:
+
+```text
+kernel/agents/mustang/skills/bundled/skill_installer/
+├── SKILL.md
+├── scripts/
+└── references/
+```
+
+Its prompt/body belongs to the skill (`SKILL.md`), not PromptManager.
+`__init__.py` only registers the bundled skill and packages supporting files.
 
 ---
 

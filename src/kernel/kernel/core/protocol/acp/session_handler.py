@@ -85,6 +85,12 @@ from kernel.core.protocol.acp.schemas.session import (
     SetSessionModeRequest,
     SetSessionModeResponse,
 )
+from kernel.core.protocol.acp.schemas.skills import (
+    SkillsInspectRequest,
+    SkillsInspectResponse,
+    SkillsListResponse,
+    SkillsRefreshResponse,
+)
 from kernel.core.protocol.acp.schemas.runtime import (
     RuntimeRestartRequest,
     RuntimeRestartResponse,
@@ -383,6 +389,9 @@ class AcpSessionHandler:
         # --- session/* and model/* methods ---
         if os.getenv("MUSTANG_AGENT_PROMPT_BACKEND") == "router" and method in {
             MustangMethod.COMMANDS_LIST,
+            MustangMethod.SKILLS_LIST,
+            MustangMethod.SKILLS_INSPECT,
+            MustangMethod.SKILLS_REFRESH,
             "session/new",
             "session/list",
             "session/load",
@@ -400,6 +409,16 @@ class AcpSessionHandler:
         }:
             if method == MustangMethod.COMMANDS_LIST:
                 return await self._route_commands_list_through_hub(conn)
+            if method == MustangMethod.SKILLS_LIST:
+                return await self._route_skills_list_through_hub(msg.params, conn)
+            if method == MustangMethod.SKILLS_INSPECT:
+                try:
+                    inspect_params = SkillsInspectRequest.model_validate(msg.params)
+                except pydantic.ValidationError as exc:
+                    raise _make_invalid_params(exc)
+                return await self._route_skills_inspect_through_hub(inspect_params, conn)
+            if method == MustangMethod.SKILLS_REFRESH:
+                return await self._route_skills_refresh_through_hub(conn)
             if method in _ROUTER_MODEL_METHODS:
                 return await self._route_model_request_through_hub(method, msg, conn)
             if method in _ROUTER_TOOLS_METHODS:
@@ -709,6 +728,44 @@ class AcpSessionHandler:
             conn=conn,
         )
         return ListCommandsResponse.model_validate(payload)
+
+    async def _route_skills_list_through_hub(
+        self,
+        params: dict[str, Any],
+        conn: ConnectionContext,
+    ) -> SkillsListResponse:
+        payload = await self._route_agent_contract_through_hub(
+            contract="agent.skills_list",
+            params=params,
+            session_id=None,
+            conn=conn,
+        )
+        return SkillsListResponse.model_validate(payload)
+
+    async def _route_skills_inspect_through_hub(
+        self,
+        params: SkillsInspectRequest,
+        conn: ConnectionContext,
+    ) -> SkillsInspectResponse:
+        payload = await self._route_agent_contract_through_hub(
+            contract="agent.skills_inspect",
+            params=params.model_dump(by_alias=True),
+            session_id=None,
+            conn=conn,
+        )
+        return SkillsInspectResponse.model_validate(payload)
+
+    async def _route_skills_refresh_through_hub(
+        self,
+        conn: ConnectionContext,
+    ) -> SkillsRefreshResponse:
+        payload = await self._route_agent_contract_through_hub(
+            contract="agent.skills_refresh",
+            params={},
+            session_id=None,
+            conn=conn,
+        )
+        return SkillsRefreshResponse.model_validate(payload)
 
     async def _route_activate_skill_through_hub(
         self,
@@ -1125,6 +1182,8 @@ class AcpSessionHandler:
             return self._get_secrets_handler()
         if target == "commands":
             return self._get_commands_handler()
+        if target == "skills":
+            return self._get_skills_handler()
         if target == "tools":
             return self._get_tools_handler()
         if target == "global":
@@ -1186,6 +1245,15 @@ class AcpSessionHandler:
             return self._module_table.get(CommandManager)
         except KeyError:
             raise InternalError("CommandManager subsystem is not available")
+
+    def _get_skills_handler(self) -> Any:
+        """Retrieve the SkillManager skill catalog provider."""
+        try:
+            from kernel.agents.mustang.skills import SkillManager
+
+            return self._module_table.get(SkillManager)
+        except KeyError:
+            raise InternalError("SkillManager subsystem is not available")
 
     def _get_tools_handler(self) -> Any:
         """Retrieve the ToolManager for WebFetch management requests."""

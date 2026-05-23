@@ -71,7 +71,7 @@ async def test_startup_discovers_skills(
 @pytest.mark.asyncio
 async def test_startup_empty_dirs(manager: SkillManager) -> None:
     await manager.startup()
-    assert manager.get_skill_listing() == ""
+    assert "proj-skill" not in manager.get_skill_listing()
 
 
 # -- Listing --
@@ -114,7 +114,7 @@ async def test_listing_prunes_skills_deleted_after_startup(
 
     (skill_dir / "SKILL.md").unlink()
 
-    assert manager.get_skill_listing() == ""
+    assert "deleted-skill" not in manager.get_skill_listing()
     assert manager.lookup("deleted-skill") is None
     changed.assert_called_once()
 
@@ -218,3 +218,49 @@ async def test_user_invocable_skills(skills_dir: tuple[Path, Path], manager: Ski
     names = {s.manifest.name for s in manager.user_invocable_skills()}
     assert "public" in names
     assert "private" not in names
+
+
+@pytest.mark.asyncio
+async def test_skill_records_and_inspect(
+    skills_dir: tuple[Path, Path], manager: SkillManager
+) -> None:
+    project, _ = skills_dir
+    skill_dir = project / "managed"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: managed\n"
+        "description: test\n"
+        "requires:\n"
+        "  bins:\n"
+        "    - definitely-missing-bin\n"
+        "---\n"
+        "Skill body.\n",
+        encoding="utf-8",
+    )
+    await manager.startup()
+
+    records = {record.name: record for record in manager.list_skill_records()}
+    assert records["managed"].command == "skill:managed"
+    assert records["managed"].setup_needed is True
+    assert "missing_provenance" in records["managed"].warnings
+
+    inspected = manager.inspect_skill("managed")
+    assert inspected is not None
+    assert inspected.record.name == "managed"
+    assert inspected.description == "test"
+
+
+@pytest.mark.asyncio
+async def test_refresh_discovers_new_skill(
+    skills_dir: tuple[Path, Path], manager: SkillManager
+) -> None:
+    project, _ = skills_dir
+    await manager.startup()
+    _write_skill(project, "fresh")
+
+    result = manager.refresh()
+
+    assert result["changed"] is True
+    assert "fresh" in result["added"]
+    assert manager.lookup("fresh") is not None

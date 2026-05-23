@@ -23,7 +23,10 @@ Consumers:
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 import time
+from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -48,6 +51,8 @@ from kernel.agents.mustang.skills.types import (
     LoadedSkill,
     SkillFallbackFor,
     SkillManifest,
+    SkillInspectResult,
+    SkillRecord,
     SkillRequires,
     SkillSetup,
     SkillSetupEnvVar,
@@ -248,6 +253,17 @@ class SkillManager(Subsystem):
 
         manifest = skill.manifest
 
+        if skill.source == SkillSource.BUNDLED and skill.bundled_files:
+            from kernel.agents.mustang.skills.bundled import extract_bundled_files
+
+            extracted = extract_bundled_files(manifest.name, skill.bundled_files)
+            if extracted is None:
+                return ActivationResult(
+                    body="",
+                    setup_needed=True,
+                    setup_message=f"Failed to extract bundled files for skill {manifest.name!r}.",
+                )
+
         # Check setup requirements (Hermes).
         setup_ok, setup_message = check_setup(manifest)
         if not setup_ok:
@@ -399,6 +415,61 @@ class SkillManager(Subsystem):
         self._prune_missing_file_backed_skills()
         return self._registry.user_invocable()
 
+    def list_skill_records(self) -> list[SkillRecord]:
+        """Return read-only management records for discovered skills."""
+        self._prune_missing_file_backed_skills()
+        return [self._record_for_skill(skill) for skill in self._registry.all_skills()]
+
+    def inspect_skill(self, name: str) -> SkillInspectResult | None:
+        """Return a detailed management view without loading the skill body."""
+        self._prune_missing_file_backed_skills()
+        skill = self._registry.lookup(name)
+        if skill is None:
+            return None
+        manifest = skill.manifest
+        return SkillInspectResult(
+            record=self._record_for_skill(skill),
+            description=manifest.description,
+            when_to_use=manifest.when_to_use,
+            allowed_tools=manifest.allowed_tools,
+            argument_hint=manifest.argument_hint,
+            supporting_files=manifest.supporting_files,
+            requires={
+                "bins": list(manifest.requires.bins),
+                "env": list(manifest.requires.env),
+                "tools": list(manifest.requires.tools),
+                "toolsets": list(manifest.requires.toolsets),
+            },
+            setup=asdict(manifest.setup) if manifest.setup is not None else None,
+            config=manifest.config,
+        )
+
+    def refresh(self) -> dict[str, list[str] | bool]:
+        """Rescan all startup layers and emit skills_changed if the view changes."""
+        before = {skill.manifest.name for skill in self._registry.all_skills()}
+        self._registry.clear()
+        unconditional, conditional = self._discover_startup_skills()
+        for skill in unconditional:
+            self._registry.register(skill)
+        for skill in conditional:
+            self._registry.register_conditional(skill)
+        after = {skill.manifest.name for skill in self._registry.all_skills()}
+
+        for key, info in list(self._invoked.items()):
+            if info.skill_name not in after:
+                del self._invoked[key]
+
+        changed = before != after
+        if changed:
+            self._invalidate_listing_cache()
+            self._emit_skills_changed()
+        return {
+            "changed": changed,
+            "added": sorted(after - before),
+            "removed": sorted(before - after),
+            "updated": sorted(before & after),
+        }
+
     # ------------------------------------------------------------------
     # MCP skill integration
     # ------------------------------------------------------------------
@@ -480,13 +551,14 @@ class SkillManager(Subsystem):
             else self._user_skills_dir / ".resource-store-managed"
         )
 
+        bundled_skills = self._bundled_skills()
         unconditional, conditional = discover(
             project_dir=self._project_skills_dir,
             project_compat_dir=project_compat,
             external_dirs=external_dirs,
             user_dir=user_dir,
             user_compat_dir=user_compat,
-            bundled_skills=[],
+            bundled_skills=bundled_skills,
         )
         for skill in resource_user_skills or ():
             if skill.manifest.paths:
@@ -494,6 +566,64 @@ class SkillManager(Subsystem):
             else:
                 unconditional.append(skill)
         return unconditional, conditional
+
+    def _bundled_skills(self) -> list[LoadedSkill]:
+        from kernel.agents.mustang.skills.bundled import get_bundled_skills
+
+        return get_bundled_skills()
+
+    def _record_for_skill(self, skill: LoadedSkill) -> SkillRecord:
+        manifest = skill.manifest
+        missing_bins = tuple(
+            bin_name for bin_name in manifest.requires.bins if shutil.which(bin_name) is None
+        )
+        missing_env = tuple(name for name in manifest.requires.env if not os.environ.get(name))
+        missing_tools = manifest.requires.tools
+        setup_needed = bool(missing_bins or missing_env or missing_tools)
+        command = f"skill:{manifest.name}" if manifest.user_invocable else None
+        alias = (manifest.name,) if manifest.user_invocable else ()
+        provenance = self._read_provenance(manifest.base_dir)
+        warnings: list[str] = []
+        if provenance is None and skill.source in {
+            SkillSource.PROJECT,
+            SkillSource.USER,
+            SkillSource.EXTERNAL,
+        }:
+            warnings.append("missing_provenance")
+        if missing_bins:
+            warnings.append("missing_bins")
+        if missing_env:
+            warnings.append("missing_env")
+        if missing_tools:
+            warnings.append("missing_tools")
+        return SkillRecord(
+            name=manifest.name,
+            source=skill.source.value,
+            layer_priority=skill.layer_priority,
+            path=str(skill.file_path) if skill.file_path else None,
+            user_invocable=manifest.user_invocable,
+            model_invocable=not manifest.disable_model_invocation,
+            command=command,
+            aliases=alias,
+            setup_needed=setup_needed,
+            missing_bins=missing_bins,
+            missing_env=missing_env,
+            missing_tools=missing_tools,
+            provenance=provenance,
+            warnings=tuple(warnings),
+        )
+
+    def _read_provenance(self, base_dir: Path) -> dict[str, Any] | None:
+        path = base_dir / ".deepcli-skill-source.json"
+        if not path.is_file():
+            return None
+        try:
+            import json
+
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            return raw if isinstance(raw, dict) else None
+        except Exception:
+            return {"error": "invalid_provenance"}
 
     def _load_resource_store_user_declarations(self) -> list[LoadedSkill] | None:
         resource_home = self._resource_home()
@@ -606,6 +736,8 @@ __all__ = [
     "SkillFallbackFor",
     "SkillManager",
     "SkillManifest",
+    "SkillInspectResult",
+    "SkillRecord",
     "SkillRequires",
     "SkillSetup",
     "SkillSetupEnvVar",

@@ -18,6 +18,7 @@ class CommandRegistry:
 
     def __init__(self) -> None:
         self._commands: dict[str, CommandDef] = {}
+        self._aliases: dict[str, str] = {}
 
     def register(self, cmd: CommandDef) -> None:
         """Add a command definition to the registry.
@@ -28,9 +29,14 @@ class CommandRegistry:
         Raises:
             ValueError: If a command named ``cmd.name`` already exists.
         """
-        if cmd.name in self._commands:
+        if cmd.name in self._commands or cmd.name in self._aliases:
             raise ValueError(f"Command already registered: {cmd.name!r}")
+        for alias in cmd.aliases:
+            if alias in self._commands or alias in self._aliases:
+                raise ValueError(f"Command alias already registered: {alias!r}")
         self._commands[cmd.name] = cmd
+        for alias in cmd.aliases:
+            self._aliases[alias] = cmd.name
 
     def lookup(self, name: str) -> CommandDef | None:
         """Return the :class:`CommandDef` for ``name``, or ``None``.
@@ -38,7 +44,8 @@ class CommandRegistry:
         Args:
             name: Command name without the leading slash.
         """
-        return self._commands.get(name)
+        canonical = self._aliases.get(name, name)
+        return self._commands.get(canonical)
 
     def list_commands(self) -> list[CommandDef]:
         """Return all registered commands in registration order."""
@@ -47,3 +54,4 @@ class CommandRegistry:
     def clear(self) -> None:
         """Remove all command definitions."""
         self._commands.clear()
+        self._aliases.clear()

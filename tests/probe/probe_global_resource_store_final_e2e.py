@@ -127,6 +127,16 @@ def main() -> None:
                 "result=PASS",
             ),
         ),
+        ProbeTarget(
+            name="real_kernel_slash_commands",
+            command=("bun", "run", "tests/probe_real_kernel_slash_commands.ts"),
+            cwd=CLI_PROJECT,
+            required_markers=(
+                "kernel_status_via_real_acp=true",
+                "skills_management_via_real_acp=true",
+                "result=PASS",
+            ),
+        ),
     )
 
     print("probe=global_resource_store_final_e2e")

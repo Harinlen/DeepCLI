@@ -369,6 +369,9 @@ export class MustangAgentSessionAdapter {
 		for (const command of commands) {
 			if (command.source !== "skill") continue;
 			this.#skillCommandNames.add(command.name);
+			for (const alias of command.aliases ?? []) {
+				this.#skillCommandNames.add(alias);
+			}
 			this.customCommands.push({
 				source: "skill",
 				command: {
@@ -587,7 +590,8 @@ export class MustangAgentSessionAdapter {
 		if (!match) return undefined;
 		const name = match[1] ?? "";
 		if (!this.#skillCommandNames.has(name)) return undefined;
-		return { name, args: match[2] ?? "" };
+		const skillName = name.startsWith("skill:") ? name.slice("skill:".length) : name;
+		return { name: skillName, args: match[2] ?? "" };
 	}
 
 	#applySessionSetupMode(result: unknown): void {

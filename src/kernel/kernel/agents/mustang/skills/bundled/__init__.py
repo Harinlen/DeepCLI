@@ -75,6 +75,7 @@ def register_bundled_skill(definition: BundledSkillDef) -> LoadedSkill:
         agent=definition.agent,
         model=definition.model,
         base_dir=extract_dir if definition.files else Path("/dev/null"),
+        supporting_files=tuple(sorted((definition.files or {}).keys())),
     )
 
     body = definition.body
@@ -87,6 +88,7 @@ def register_bundled_skill(definition: BundledSkillDef) -> LoadedSkill:
         layer_priority=3,
         file_path=extract_dir / "SKILL.md",  # Virtual path.
         _body=body,
+        bundled_files=definition.files,
     )
     _bundled_registry.append(skill)
     return skill
@@ -122,6 +124,7 @@ def extract_bundled_files(name: str, files: dict[str, str]) -> Path | None:
 
 # Import bundled skill modules to trigger registration at import time.
 import kernel.agents.mustang.skills.bundled.loop_skill as _loop_skill  # noqa: F401, E402
+import kernel.agents.mustang.skills.bundled.skill_installer as _skill_installer  # noqa: F401, E402
 
 
 __all__ = [

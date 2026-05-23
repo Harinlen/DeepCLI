@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { defaultConfigDir, defaultDataDir } from "@/config/paths.js";
 import { type Component, padding, truncateToWidth, visibleWidth } from "@/tui/index.js";
-import { APP_NAME } from "@/compat/utils.js";
+import { APP_NAME, TUI_VERSION } from "@/compat/utils.js";
 import { theme } from "../../modes/theme/theme";
 
 const DEFAULT_WELCOME_LOGO = [
@@ -110,6 +110,10 @@ export class WelcomeComponent implements Component {
 
 		// Right column
 		const rightLines = [
+			` ${theme.bold(theme.fg("accent", "Version"))}`,
+			` ${theme.fg("dim", "Kernel")}${theme.fg("muted", ` v${this.version}`)}`,
+			` ${theme.fg("dim", "TUI")}${theme.fg("muted", ` v${TUI_VERSION}`)}`,
+			separator,
 			` ${theme.bold(theme.fg("accent", "Tips"))}`,
 			` ${theme.fg("dim", "?")}${theme.fg("muted", " for keyboard shortcuts")}`,
 			` ${theme.fg("dim", "#")}${theme.fg("muted", " for prompt actions")}`,
@@ -133,17 +137,22 @@ export class WelcomeComponent implements Component {
 
 		const lines: string[] = [];
 
-		// Top border with embedded title
-		const title = ` ${APP_NAME} v${this.version} `;
-		const titlePrefixRaw = hChar.repeat(3);
-		const titleStyled = theme.fg("dim", titlePrefixRaw) + theme.fg("muted", title);
-		const titleVisLen = visibleWidth(titlePrefixRaw) + visibleWidth(title);
+		// Top border with centered title
+		const title = ` ${APP_NAME} `;
 		const titleSpace = boxWidth - 2;
-		if (titleVisLen >= titleSpace) {
-			lines.push(tl + truncateToWidth(titleStyled, titleSpace) + tr);
+		const titleWidth = visibleWidth(title);
+		if (titleWidth >= titleSpace) {
+			lines.push(tl + truncateToWidth(theme.fg("muted", title), titleSpace) + tr);
 		} else {
-			const afterTitle = titleSpace - titleVisLen;
-			lines.push(tl + titleStyled + theme.fg("dim", hChar.repeat(afterTitle)) + tr);
+			const beforeTitle = Math.floor((titleSpace - titleWidth) / 2);
+			const afterTitle = titleSpace - titleWidth - beforeTitle;
+			lines.push(
+				tl
+				+ theme.fg("dim", hChar.repeat(beforeTitle))
+				+ theme.fg("muted", title)
+				+ theme.fg("dim", hChar.repeat(afterTitle))
+				+ tr,
+			);
 		}
 
 		// Content rows

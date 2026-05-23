@@ -161,7 +161,7 @@ def test_access_router_handles_agents_management_locally(tmp_path: Path) -> None
             "agentCapabilities": {"loadSession": True},
         }
 
-    router.register_runtime(
+    registration = router.register_runtime(
         RuntimeRegisterRequest(
             process_id="runtime-primary",
             pid=123,
@@ -191,6 +191,7 @@ def test_access_router_handles_agents_management_locally(tmp_path: Path) -> None
             )
             init_response = websocket.receive_json()
             assert init_response["id"] == "init-1"
+            router.unregister_runtime(registration.connection_id)
             websocket.send_json(
                 {
                     "jsonrpc": "2.0",
@@ -218,6 +219,33 @@ def test_access_router_handles_agents_management_locally(tmp_path: Path) -> None
                 }
             )
             mcp_response = websocket.receive_json()
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "global-1",
+                    "method": "_mustang.agent/global/backups",
+                    "params": {},
+                }
+            )
+            global_response = websocket.receive_json()
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "flags-1",
+                    "method": "_mustang.agent/flags/list",
+                    "params": {},
+                }
+            )
+            flags_response = websocket.receive_json()
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "secrets-1",
+                    "method": "_mustang.agent/secrets/list",
+                    "params": {},
+                }
+            )
+            secrets_response = websocket.receive_json()
 
     assert agents_response["id"] == "agents-1"
     assert agents_response["result"]["agents"][0]["agentId"] == "primary"
@@ -229,6 +257,18 @@ def test_access_router_handles_agents_management_locally(tmp_path: Path) -> None
     }
     assert mcp_response["id"] == "mcp-1"
     assert mcp_response["result"] == {"servers": [], "revision": 0}
+    assert global_response == {
+        "jsonrpc": "2.0",
+        "id": "global-1",
+        "result": {"backups": []},
+    }
+    assert flags_response["id"] == "flags-1"
+    assert flags_response["result"]["sections"]
+    assert secrets_response == {
+        "jsonrpc": "2.0",
+        "id": "secrets-1",
+        "result": {"secrets": []},
+    }
     assert [request.method for request in acp_log] == ["initialize"]
 
 

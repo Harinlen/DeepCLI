@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { ThinkingLevel } from "@/compat/agent-core.js";
+import { MustangMethod } from "@/acp/methods.js";
 import { getOAuthProviders, type OAuthProvider } from "@/compat/ai.js";
 import type { Component } from "@/tui/index.js";
 import { Input, Loader, Spacer, Text } from "@/tui/index.js";
@@ -29,6 +30,7 @@ import { AgentDashboard } from "../components/agent-dashboard";
 import { AssistantMessageComponent } from "../components/assistant-message";
 import { DeepSeekOobeSetupComponent } from "../components/deepseek-oobe-setup";
 import { ExtensionDashboard } from "../components/extensions";
+import { FlagsSelectorComponent, formatFlagValue, type FlagItemState } from "../components/flags-selector";
 import { HistorySearchComponent } from "../components/history-search";
 import { ModelConfigEditorComponent } from "../components/model-config-editor";
 import { ModelSelectorComponent } from "../components/model-selector";
@@ -81,6 +83,17 @@ function formatWebFetchBackendStatus(option: any): string {
 							: option.hasCredentials
 								? "configured"
 								: "unavailable";
+	}
+}
+
+function parseFlagInput(value: string): unknown {
+	if (value === "true") return true;
+	if (value === "false") return false;
+	if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value);
+	try {
+		return JSON.parse(value);
+	} catch {
+		return value;
 	}
 }
 
@@ -697,6 +710,72 @@ export class SelectorController {
 		}).catch(error => {
 			const message = error instanceof Error ? error.message : String(error);
 			this.ctx.showError(`Failed to load WebFetch config: ${message}`);
+		});
+	}
+
+	showFlagsSelector(options?: { initialSearchInput?: string }): void {
+		this.showSelector(done => {
+			let selector: FlagsSelectorComponent;
+			const reloadSelected = async (item: FlagItemState) => {
+				await selector.reload({ section: item.section, key: item.key });
+			};
+			const applySet = async (item: FlagItemState, value: unknown) => {
+				await this.ctx.session.managementRequest?.(MustangMethod.flagsSet, {
+					section: item.section,
+					key: item.key,
+					value,
+					...(item.revision !== undefined ? { expectedRevision: item.revision } : {}),
+				});
+				this.ctx.showStatus(`Flag staged: ${item.section}.${item.key} = ${formatFlagValue(value)}. Restart the kernel to apply.`);
+			};
+			selector = new FlagsSelectorComponent(
+				this.ctx.ui,
+				async () => await this.ctx.session.managementRequest?.(MustangMethod.flagsList, {}) ?? { sections: [] },
+				async item => {
+					try {
+						if (item.value === true || item.value === false) {
+							await applySet(item, !item.value);
+							await reloadSelected(item);
+							return;
+						}
+						const raw = await this.ctx.showHookInput(
+							`Set ${item.section}.${item.key}`,
+							formatFlagValue(item.value),
+						);
+						if (!raw?.trim()) {
+							this.showFlagsSelector({ initialSearchInput: `${item.section}.${item.key}` });
+							return;
+						}
+						await applySet(item, parseFlagInput(raw.trim()));
+						this.showFlagsSelector({ initialSearchInput: `${item.section}.${item.key}` });
+					} catch (error) {
+						const message = error instanceof Error ? error.message : String(error);
+						this.ctx.showError(`Failed to update ${item.section}.${item.key}: ${message}`);
+						await reloadSelected(item);
+					}
+				},
+				async item => {
+					try {
+						await this.ctx.session.managementRequest?.(MustangMethod.flagsReset, {
+							section: item.section,
+							key: item.key,
+							...(item.revision !== undefined ? { expectedRevision: item.revision } : {}),
+						});
+						this.ctx.showStatus(`Flag reset staged: ${item.section}.${item.key}. Restart the kernel to apply.`);
+						await reloadSelected(item);
+					} catch (error) {
+						const message = error instanceof Error ? error.message : String(error);
+						this.ctx.showError(`Failed to reset ${item.section}.${item.key}: ${message}`);
+						await reloadSelected(item);
+					}
+				},
+				() => {
+					done();
+					this.ctx.ui.requestRender();
+				},
+				options?.initialSearchInput,
+			);
+			return { component: selector, focus: selector };
 		});
 	}
 

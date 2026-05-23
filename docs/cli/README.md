@@ -11,7 +11,6 @@ session truth 和本地执行。
 |---|---|
 | [design.md](design.md) | CLI 设计：ACP 边界、oh-my-pi active-port、目录和约束 |
 | [history/](history/) | 已实现或历史计划，保留作为实现决策记录 |
-| [../plans/cli-plan.md](../plans/cli-plan.md) | CLI 未完成工作和后续计划 |
 | [../launcher/history/plans/launcher-subrepo-plan.md](../launcher/history/plans/launcher-subrepo-plan.md) | 用户级 `deepcli` launcher：后台 Kernel 单例 + CLI handoff |
 
 ## Current Facts
@@ -27,7 +26,6 @@ session truth 和本地执行。
 
 | 文档 | 状态 |
 |---|---|
-| [../plans/cli-plan.md](../plans/cli-plan.md) | CLI future / not-yet-implemented work |
 | [../plans/cli-interactive-keybindings-gap.md](../plans/cli-interactive-keybindings-gap.md) | investigation；记录 OMP keybinding parity 缺口 |
 
 ## Rules

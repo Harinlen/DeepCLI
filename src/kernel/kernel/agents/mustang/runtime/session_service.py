@@ -295,6 +295,49 @@ class AgentSessionRuntimeService:
         commands = self.module_table.get(CommandManager)
         return {"commands": commands.list_command_dicts()}
 
+    async def skills_list(self, include_commands: bool = True) -> dict[str, Any]:
+        if self.module_table is None:
+            raise RuntimeError("session runtime service is not started")
+        from dataclasses import asdict
+
+        from kernel.agents.mustang.skills import SkillManager
+
+        skills = self.module_table.get(SkillManager)
+        records = [asdict(record) for record in skills.list_skill_records()]
+        commands = []
+        if include_commands:
+            commands = [
+                {
+                    "name": record["name"],
+                    "command": record["command"],
+                    "aliases": list(record["aliases"]),
+                }
+                for record in records
+                if record["command"]
+            ]
+        return {"skills": records, "commands": commands}
+
+    async def skills_inspect(self, name: str) -> dict[str, Any]:
+        if self.module_table is None:
+            raise RuntimeError("session runtime service is not started")
+        from dataclasses import asdict
+
+        from kernel.agents.mustang.skills import SkillManager
+
+        skills = self.module_table.get(SkillManager)
+        result = skills.inspect_skill(name)
+        if result is None:
+            raise ValueError(f"Unknown skill: {name}")
+        return {"skill": asdict(result)}
+
+    async def skills_refresh(self) -> dict[str, Any]:
+        if self.module_table is None:
+            raise RuntimeError("session runtime service is not started")
+        from kernel.agents.mustang.skills import SkillManager
+
+        skills = self.module_table.get(SkillManager)
+        return skills.refresh()
+
     async def resume_session(self, params: ResumeSessionRequest) -> dict[str, Any]:
         manager = self._manager()
         sender = CollectingRuntimeSender()

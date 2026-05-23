@@ -7,7 +7,8 @@
 > - **Boundary**: catalog only, not command dispatch or CLI autocomplete UI.
 
 Status: **landed** — 全部实装。内置命令加上 `user-invocable`
-Skills 的 `/skill-name` 投影共同组成 Kernel-owned command catalog。
+Skills 的 canonical `/skill:<name>` 投影共同组成 Kernel-owned command
+catalog；裸 `/name` 仅作为兼容 alias，不作为 catalog 中的独立命令。
 
 ---
 
@@ -18,7 +19,8 @@ CommandManager 是**命令目录提供者**，不是执行者。
 - 维护一份 `CommandDef` 注册表（名称、描述、用法、映射关系）
 - WS 客户端在 initialize 握手后拉取目录，自己解析命令并调用对应 ACP 方法
 - kernel-side 客户端（DiscordBackend）查目录，直接调对应的 SessionManager / LLMManager 方法
-- `user-invocable` Skills 投影为 `source="skill"` 命令；执行走
+- `user-invocable` Skills 投影为 `source="skill"` 命令；canonical name 是
+  `skill:<name>`，执行走
   `_mustang.agent/session/activate_skill`，CLI 不读本地 Skill 文件
 - **没有 `session/command` ACP 方法**，不新建执行通道，执行永远走现有机制
 
@@ -44,6 +46,10 @@ CommandManager 是**命令目录提供者**，不是执行者。
 | `/cost` | `_mustang.agent/session/get_usage` | `SessionManager.get_usage()` | 美元价格估算待可信 pricing table |
 | `/help` | 本地渲染（从 catalog 生成） | 本地渲染 | 无 |
 | `/memory` | 本地渲染 + file I/O | 同左 | 无 |
+| `/skills list` | `_mustang.agent/skills/list` | `SkillManager.list_skill_records()` | 无 |
+| `/skills inspect <name>` | `_mustang.agent/skills/inspect` | `SkillManager.inspect_skill()` | 无 |
+| `/skills refresh` | `_mustang.agent/skills/refresh` | `SkillManager.refresh()` | 无 |
+| `/skills install/search/sources/check/update/audit/uninstall` | `_mustang.agent/session/activate_skill(skill="skill-installer")` | 激活 bundled `skill-installer` | 无 kernel install apply path |
 
 ---
 
@@ -72,6 +78,9 @@ class CommandDef:
                               # None = 本地命令（/help）
     subcommands: list[str] = field(default_factory=list)
     source: str = "builtin"   # "skill" = SkillManager projection
+    aliases: list[str] = field(default_factory=list)
+    canonical_name: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 ```
 
 ---
@@ -120,8 +129,9 @@ Mustang Agent runtime，避免 CLI 看到 Access-local 的 stale catalog。
    - 直接发 `{ method: "model/set_current", params: { role: "default", provider: "provider", model: "model" } }`
    - 从 ACP response / broadcast 中渲染结果
 3. 用户输入 `/help`：本地渲染目录，不发任何网络请求
-4. 用户输入 `/skill-name args`：
+4. 用户输入 `/skill:<name> args`：
    - 只在本地确认 catalog 中 `source="skill"`
+   - 从 `CommandDef.metadata["skillName"]` 取真实 skill name
    - 发 `_mustang.agent/session/activate_skill`
    - Kernel 校验 `user_invocable`，激活 SkillManager，记录 invoked skill，
      再进入普通 prompt queue

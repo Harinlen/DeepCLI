@@ -10,6 +10,9 @@ export const AcpMethod = {
 
 export const MustangMethod = {
   commandsList: "_mustang.agent/commands/list",
+  skillsList: "_mustang.agent/skills/list",
+  skillsInspect: "_mustang.agent/skills/inspect",
+  skillsRefresh: "_mustang.agent/skills/refresh",
   sessionActivateSkill: "_mustang.agent/session/activate_skill",
   sessionExecuteShell: "_mustang.agent/session/execute_shell",
   sessionExecutePython: "_mustang.agent/session/execute_python",

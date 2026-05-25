@@ -1,6 +1,7 @@
 const PROTOCOL_VERSION = "web-bridge.v1";
 const HEARTBEAT_MS = 15000;
 const DISCOVERY_URLS = ["http://127.0.0.1:8200/web-bridge/status.json"];
+const DISCOVERY_ALARM = "deepcli-webbridge-discovery";
 
 let socket = null;
 let heartbeat = null;
@@ -19,6 +20,11 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
+  void discoverAndConnect();
+});
+
+chrome.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name !== DISCOVERY_ALARM) return;
   void discoverAndConnect();
 });
 
@@ -47,6 +53,7 @@ async function handlePopupCommand(command, payload) {
 
 async function discoverAndConnect() {
   if (manuallyDisconnected) return await status();
+  await clearDiscoveryAlarm();
   for (const url of DISCOVERY_URLS) {
     try {
       const response = await fetch(url, { cache: "no-store" });
@@ -105,7 +112,7 @@ async function handleBridgeMessage(raw) {
   const message = JSON.parse(raw);
   if (message.type === "hello_ack") {
     if (message.secret) await chrome.storage.local.set({ secret: message.secret, pairingToken: "" });
-    if (message.ok === false) scheduleDiscovery();
+    if (message.ok === false) await recoverPairingAndReconnect();
     return;
   }
   if (message.type === "fetch_tab") {
@@ -198,6 +205,40 @@ function scheduleDiscovery() {
     discoveryTimer = null;
     void discoverAndConnect();
   }, 2000);
+  void chrome.alarms.create(DISCOVERY_ALARM, { delayInMinutes: 0.1 });
+}
+
+async function clearDiscoveryAlarm() {
+  if (discoveryTimer !== null) clearTimeout(discoveryTimer);
+  discoveryTimer = null;
+  await chrome.alarms.clear(DISCOVERY_ALARM).catch(() => undefined);
+}
+
+async function recoverPairingAndReconnect() {
+  await chrome.storage.local.set({ secret: "", pairingToken: "" });
+  for (const statusUrl of DISCOVERY_URLS) {
+    try {
+      const pairUrl = statusUrl.replace(/\/status\.json$/, "/pair");
+      const response = await fetch(pairUrl, { method: "POST", cache: "no-store" });
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      const data = await response.json();
+      if (!data.bridgeWsUrl || !data.pairingToken) {
+        throw new Error("pairing response missing bridge data");
+      }
+      await chrome.storage.local.set({
+        bridgeWsUrl: data.bridgeWsUrl,
+        pairingToken: data.pairingToken,
+      });
+      lastDiscoveryError = "";
+      closeSocket();
+      return await connectFromStorage({ allowDiscovery: false });
+    } catch (error) {
+      lastDiscoveryError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  closeSocket();
+  scheduleDiscovery();
+  return await status();
 }
 
 function closeSocket(manual = false) {
@@ -205,6 +246,7 @@ function closeSocket(manual = false) {
   clearInterval(heartbeat);
   if (discoveryTimer !== null) clearTimeout(discoveryTimer);
   discoveryTimer = null;
+  void chrome.alarms.clear(DISCOVERY_ALARM);
   heartbeat = null;
   if (socket) socket.close();
   socket = null;

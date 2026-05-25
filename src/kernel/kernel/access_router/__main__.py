@@ -25,6 +25,7 @@ def main() -> None:
 
     if args.hub_endpoint:
         os.environ["MUSTANG_AGENT_HUB_ENDPOINT"] = args.hub_endpoint
+    os.environ["MUSTANG_ACCESS_ROUTER_ENDPOINT"] = f"http://{args.host}:{args.port}"
     if args.dev:
         os.environ["_MUSTANG_DEV"] = "1"
     if args.runtime_file:

@@ -274,6 +274,48 @@ scheduled_task_events = sa.Table(
     sa.Index("idx_scheduled_task_events_task", "task_id", "revision"),
 )
 
+agent_spawned_runs = sa.Table(
+    "agent_spawned_runs",
+    resource_metadata,
+    sa.Column("run_id", sa.Text, primary_key=True),
+    sa.Column("parent_session_id", sa.Text, nullable=False),
+    sa.Column("requester_agent_id", sa.Text, nullable=False),
+    sa.Column("target_agent_id", sa.Text, nullable=False),
+    sa.Column("runtime", sa.Text, nullable=False),
+    sa.Column("mode", sa.Text, nullable=False),
+    sa.Column("session_id", sa.Text, nullable=False),
+    sa.Column("status", sa.Text, nullable=False),
+    sa.Column("task", sa.Text),
+    sa.Column("last_message", sa.Text),
+    sa.Column("result_json", sa.Text),
+    sa.Column("provenance_json", sa.Text),
+    sa.Column("binding_id", sa.Text),
+    sa.Column("timeout_seconds", sa.Integer),
+    sa.Column("wait_mode", sa.Text),
+    sa.Column("reply_back_enabled", sa.Integer, nullable=False, server_default="0"),
+    sa.Column("announce_enabled", sa.Integer, nullable=False, server_default="0"),
+    sa.Column("acp_session_id", sa.Text),
+    sa.Column("created_at", sa.Text, nullable=False),
+    sa.Column("updated_at", sa.Text, nullable=False),
+    sa.Column("stopped_at", sa.Text),
+    sa.Column("revision", sa.Integer, nullable=False),
+    sa.Index("idx_agent_spawned_runs_owner", "requester_agent_id", "status"),
+    sa.Index("idx_agent_spawned_runs_session", "session_id"),
+)
+
+agent_spawned_run_events = sa.Table(
+    "agent_spawned_run_events",
+    resource_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("run_id", sa.Text, nullable=False),
+    sa.Column("event_type", sa.Text, nullable=False),
+    sa.Column("revision", sa.Integer, nullable=False),
+    sa.Column("actor_agent_id", sa.Text),
+    sa.Column("created_at", sa.Text, nullable=False),
+    sa.Column("payload_json", sa.Text, nullable=False),
+    sa.Index("idx_agent_spawned_run_events_run", "run_id", "revision"),
+)
+
 secrets = sa.Table(
     "secrets",
     secret_metadata,

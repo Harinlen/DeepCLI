@@ -23,6 +23,7 @@ from kernel.access_router.schemas import (
     RuntimeRegisterRequest,
     RuntimeRegisterResult,
 )
+from kernel.kernel_bus import BusServiceRecord, BusTopologySnapshot
 
 ClientRequestProxy = Callable[[str, dict[str, object]], Awaitable[dict[str, Any]]]
 RuntimeHandler = Callable[
@@ -70,11 +71,18 @@ class AccessRouter:
         self._protocol_version = protocol_version
         self._stale_timeout_seconds = stale_timeout_seconds
         self._routes: dict[str, _RuntimeConnection] = {}
+        self._resource_records: dict[str, BusServiceRecord] = {}
+        self._topology_revision = 1
         self._idempotency = IdempotencyStore()
         self._repository = repository or (
             AccessRouterRepository.open(resource_home) if resource_home is not None else None
         )
         self.agent_hub_forward_count = 0
+
+    @property
+    def auth_token(self) -> str:
+        """Runtime registration token for manager-owned local Agent processes."""
+        return self._auth_token
 
     def register_runtime(
         self,
@@ -99,6 +107,7 @@ class AccessRouter:
             acp_handler=_normalize_acp_handler(acp_handler) if acp_handler is not None else None,
             last_seen=time.monotonic(),
         )
+        self._topology_revision += 1
         return RuntimeRegisterResult(
             agent_id=request.agent_id,
             connection_id=connection_id,
@@ -110,6 +119,7 @@ class AccessRouter:
         for agent_id, route in list(self._routes.items()):
             if route.connection_id == connection_id:
                 self._routes.pop(agent_id, None)
+                self._topology_revision += 1
                 return
 
     def ping(self, ping: RuntimePing) -> RuntimePong:
@@ -267,6 +277,82 @@ class AccessRouter:
             for route in self._routes.values()
             if self._route_is_fresh(route, now)
         ]
+
+    def register_resource(
+        self,
+        service_id: str,
+        *,
+        capabilities: tuple[str, ...] = (),
+        owner: str = "GlobalResourceHost",
+        status: str = "healthy",
+        connected: bool = True,
+        last_error: str | None = None,
+    ) -> None:
+        """Register or update one resource route in the KernelBus projection."""
+
+        from kernel.kernel_bus.messages import service_kind
+
+        if service_kind(service_id) != "resource":
+            raise ValueError("register_resource requires resource:<name> service id")
+        current = self._resource_records.get(service_id)
+        generation = current.generation + 1 if current is not None else 1
+        record_status = (
+            status if status in {"healthy", "degraded", "unavailable", "closed"} else "healthy"
+        )
+        self._resource_records[service_id] = BusServiceRecord(
+            serviceId=service_id,
+            kind="resource",
+            status=record_status,  # type: ignore[arg-type]
+            capabilities=capabilities,
+            connected=connected,
+            generation=generation,
+            owner=owner,
+            routeReady=connected and status == "healthy",
+            lastError=last_error,
+        )
+        self._topology_revision += 1
+
+    def mark_resource_unavailable(self, service_id: str, error: str | None = None) -> None:
+        """Mark a registered resource as unavailable."""
+
+        current = self._resource_records.get(service_id)
+        if current is None:
+            return
+        self._resource_records[service_id] = current.model_copy(
+            update={
+                "status": "unavailable",
+                "connected": False,
+                "route_ready": False,
+                "last_error": error,
+            },
+        )
+        self._topology_revision += 1
+
+    def bus_topology_snapshot(self) -> BusTopologySnapshot:
+        """Return the KernelBus topology projection for Agents and probes."""
+
+        now = time.monotonic()
+        services: list[BusServiceRecord] = []
+        for route in self._routes.values():
+            status = self._route_status(route, now)
+            services.append(
+                BusServiceRecord(
+                    serviceId=f"agent:{route.agent_id}",
+                    kind="agent",
+                    status="healthy" if status.status == "registered" else "degraded",
+                    capabilities=(),
+                    connected=status.status == "registered",
+                    generation=1,
+                    owner="AgentRuntimeHost",
+                    routeReady=status.status == "registered",
+                    lastError=None if status.status == "registered" else status.status,
+                )
+            )
+        services.extend(self._resource_records.values())
+        return BusTopologySnapshot(
+            revision=self._topology_revision,
+            services=tuple(sorted(services, key=lambda record: record.service_id)),
+        )
 
     def route_status(self, agent_id: str) -> RouteStatus:
         """Return route status without delivering messages."""

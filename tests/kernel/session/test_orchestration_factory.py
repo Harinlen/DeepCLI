@@ -144,6 +144,8 @@ def test_make_orchestrator_wires_deps_and_session_bound_closures(tmp_path: Path)
     assert deps.prompts is module_table.prompts
     assert deps.module_table is module_table
     assert deps.task_registry is task_registry
+    assert orchestrator._agent_context is factory._agent_context  # type: ignore[attr-defined]
+    assert orchestrator._prompt_builder._agent_context is factory._agent_context  # type: ignore[attr-defined]
     assert deps.mcp_instructions() == [("docs", "Read docs first")]
     assert deps.should_avoid_prompts_provider() is False
 

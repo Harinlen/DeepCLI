@@ -9,7 +9,7 @@
 Status: **active / closure verified 2026-05-24** — CommandManager 目录、
 `/skills`、以及 `user-invocable` Skills 的 canonical `/skill:<name>` 投影
 已经 landed。2026-05-24 的命令闭合修正已重新对齐 Kernel command catalog、
-CLI slash execution surface、CLI autocomplete surface、Primary Runtime ACP
+CLI slash execution surface、CLI autocomplete surface、Mustang Agent Runtime ACP
 dispatcher、real-kernel E2E 覆盖。当前规则仍然不变：catalog 不是完成证明，
 凡 catalog 暴露的用户命令都必须有对应 CLI 执行路径和真实 kernel closure
 probe。

@@ -7,7 +7,7 @@ import {
 } from "../modes/theme/theme";
 import { Text } from "@/tui/index.js";
 import { formatWebFetchSetupFailure } from "@/webfetch/diagnostics.js";
-import { MustangMethod } from "@/acp/methods.js";
+import { AcpMethod, MustangMethod } from "@/acp/methods.js";
 
 export interface ParsedBuiltinSlashCommand {
 	name: string;
@@ -54,8 +54,6 @@ export async function executeBuiltinSlashCommand(
 				return await executeFlagCommand(ctx, parsed.args ?? "");
 			case "secrets":
 				return await executeSecretsCommand(ctx, parsed.args ?? "");
-			case "agents":
-				return await executeAgentsCommand(ctx, parsed.args ?? "");
 			case "agent":
 				return await executeAgentCommand(ctx, parsed.args ?? "");
 			case "gateways":
@@ -403,16 +401,83 @@ async function executeSecretsCommand(ctx: any, argsText: string): Promise<boolea
 	return true;
 }
 
-async function executeAgentsCommand(ctx: any, argsText: string): Promise<boolean> {
+async function executeAgentCommand(ctx: any, argsText: string): Promise<boolean> {
 	const args = splitArgs(argsText);
 	const subcommand = args[0] ?? "list";
+	if (subcommand === "use") {
+		if (!args[1]) {
+			ctx.showWarning?.("Usage: /agent use <agent-id>");
+			return true;
+		}
+		const agentId = normalizeAgentTarget(args[1]);
+		const result: any = await requestManagement(ctx, MustangMethod.agentsList, {});
+		const exists = (result.agents ?? []).some((agent: any) => normalizeAgentTarget(agent.agentId ?? agent.agent_id) === agentId);
+		if (!exists) {
+			ctx.showError?.(`/agent failed: unknown agent: ${args[1]}`);
+			return true;
+		}
+		ctx.session.targetAgentId = agentId === "primary" ? undefined : agentId;
+		ctx.session.currentTargetAgentId = ctx.session.targetAgentId;
+		ctx.session.targetAgentSessionId = undefined;
+		let health: any = undefined;
+		if (ctx.session.targetAgentId) {
+			health = await ensureAgentRouteAvailable(ctx, agentId);
+			const sessionResult: any = await requestManagement(ctx, AcpMethod.sessionNew, {
+				cwd: process.cwd(),
+				mcpServers: [],
+				agentId,
+			});
+			ctx.session.targetAgentSessionId = sessionResult.sessionId ?? sessionResult.session_id;
+		}
+		if (!health) {
+			health = await requestManagement(ctx, MustangMethod.agentsHealth, { agentId });
+		}
+		refreshAgentTargetStatusLine(ctx);
+		renderManagementResult(ctx, "Agent target", {
+			targetAgentId: displayAgentTarget(agentId),
+			internalAgentId: agentId,
+			sessionId: ctx.session.sessionId,
+			targetSessionId: ctx.session.targetAgentSessionId ?? null,
+			health,
+		});
+		return true;
+	}
+	if (subcommand === "current") {
+		const agentId = ctx.session.targetAgentId ?? ctx.session.currentTargetAgentId ?? "primary";
+		let health: any = undefined;
+		try {
+			health = await requestManagement(ctx, MustangMethod.agentsHealth, { agentId });
+		} catch {
+			health = null;
+		}
+		renderManagementResult(ctx, "Agent target", {
+			targetAgentId: displayAgentTarget(agentId),
+			internalAgentId: agentId,
+			sessionId: ctx.session.sessionId,
+			targetSessionId: ctx.session.targetAgentSessionId ?? null,
+			health,
+		});
+		return true;
+	}
+	if (subcommand === "clear-use") {
+		ctx.session.targetAgentId = undefined;
+		ctx.session.currentTargetAgentId = undefined;
+		ctx.session.targetAgentSessionId = undefined;
+		refreshAgentTargetStatusLine(ctx);
+		renderManagementResult(ctx, "Agent target", {
+			targetAgentId: "main",
+			internalAgentId: "primary",
+			sessionId: ctx.session.sessionId,
+		});
+		return true;
+	}
 	if (subcommand === "list") {
 		renderManagementResult(ctx, "Agents", await requestManagement(ctx, MustangMethod.agentsList, { includeBindings: args.includes("--bindings") }));
 		return true;
 	}
 	if (subcommand === "read") {
 		if (!args[1]) {
-			ctx.showWarning?.("Usage: /agents read <agent-id>");
+			ctx.showWarning?.("Usage: /agent read <agent-id>");
 			return true;
 		}
 		const result: any = await requestManagement(ctx, MustangMethod.agentsList, { includeBindings: true });
@@ -422,7 +487,7 @@ async function executeAgentsCommand(ctx: any, argsText: string): Promise<boolean
 	}
 	if (subcommand === "create" || subcommand === "add") {
 		if (!args[1] || !args[2]) {
-			ctx.showWarning?.("Usage: /agents create <agent-id> <workspace> [name]");
+			ctx.showWarning?.("Usage: /agent create <agent-id> <workspace> [name]");
 			return true;
 		}
 		renderManagementResult(ctx, "Agent created", await requestManagement(ctx, MustangMethod.agentsAdd, {
@@ -434,7 +499,7 @@ async function executeAgentsCommand(ctx: any, argsText: string): Promise<boolean
 	}
 	if (subcommand === "set-identity") {
 		if (!args[1]) {
-			ctx.showWarning?.("Usage: /agents set-identity <agent-id> [name] [json-patch]");
+			ctx.showWarning?.("Usage: /agent set-identity <agent-id> [name] [json-patch]");
 			return true;
 		}
 		const patch = args.length > 3 ? parseJsonObject(args.slice(3).join(" ")) : undefined;
@@ -445,13 +510,24 @@ async function executeAgentsCommand(ctx: any, argsText: string): Promise<boolean
 		}));
 		return true;
 	}
+	if (subcommand === "send") {
+		if (!args[1] || args.length < 3) {
+			ctx.showWarning?.("Usage: /agent send <agent-id> <message>");
+			return true;
+		}
+		renderManagementResult(ctx, "Agent send", await requestManagement(ctx, MustangMethod.agentSend, {
+			agentId: args[1],
+			message: args.slice(2).join(" "),
+		}));
+		return true;
+	}
 	if (subcommand === "bindings") {
 		renderManagementResult(ctx, "Agent bindings", await requestManagement(ctx, MustangMethod.agentsBindings, optionalPathParam("agentId", args[1])));
 		return true;
 	}
 	if (subcommand === "delete") {
 		if (!args[1] || !args.includes("--confirm")) {
-			ctx.showWarning?.("Usage: /agents delete <agent-id> --confirm");
+			ctx.showWarning?.("Usage: /agent delete <agent-id> --confirm");
 			return true;
 		}
 		renderManagementResult(ctx, "Agent deleted", await requestManagement(ctx, MustangMethod.agentsDelete, {
@@ -462,7 +538,7 @@ async function executeAgentsCommand(ctx: any, argsText: string): Promise<boolean
 	}
 	if (subcommand === "bind") {
 		if (!args[1] || !args[2]) {
-			ctx.showWarning?.("Usage: /agents bind <agent-id> <gateway:channel> [session-id]");
+			ctx.showWarning?.("Usage: /agent bind <agent-id> <gateway:channel> [session-id]");
 			return true;
 		}
 		renderManagementResult(ctx, "Agent binding", await requestManagement(ctx, MustangMethod.agentsBind, {
@@ -474,7 +550,7 @@ async function executeAgentsCommand(ctx: any, argsText: string): Promise<boolean
 	}
 	if (subcommand === "unbind") {
 		if (!args[1]) {
-			ctx.showWarning?.("Usage: /agents unbind <agent-id> [gateway:channel|--all]");
+			ctx.showWarning?.("Usage: /agent unbind <agent-id> [gateway:channel|--all]");
 			return true;
 		}
 		renderManagementResult(ctx, "Agent unbind", await requestManagement(ctx, MustangMethod.agentsUnbind, {
@@ -485,7 +561,7 @@ async function executeAgentsCommand(ctx: any, argsText: string): Promise<boolean
 	}
 	if (["start", "stop", "restart", "health"].includes(subcommand)) {
 		if (!args[1]) {
-			ctx.showWarning?.(`Usage: /agents ${subcommand} <agent-id>`);
+			ctx.showWarning?.(`Usage: /agent ${subcommand} <agent-id>`);
 			return true;
 		}
 		const method = subcommand === "start"
@@ -504,7 +580,7 @@ async function executeAgentsCommand(ctx: any, argsText: string): Promise<boolean
 	}
 	if (subcommand === "grant") {
 		if (!args[1] || !args[2]) {
-			ctx.showWarning?.("Usage: /agents grant <agent-id> <capability> [scope] [resource]");
+			ctx.showWarning?.("Usage: /agent grant <agent-id> <capability> [scope] [resource]");
 			return true;
 		}
 		renderManagementResult(ctx, "Agent grant", await requestManagement(ctx, MustangMethod.agentsGrant, {
@@ -517,27 +593,46 @@ async function executeAgentsCommand(ctx: any, argsText: string): Promise<boolean
 	}
 	if (subcommand === "revoke-grant") {
 		if (!args[1]) {
-			ctx.showWarning?.("Usage: /agents revoke-grant <grant-id>");
+			ctx.showWarning?.("Usage: /agent revoke-grant <grant-id>");
 			return true;
 		}
 		renderManagementResult(ctx, "Agent grant revoked", await requestManagement(ctx, MustangMethod.agentsRevokeGrant, { grantId: args[1] }));
 		return true;
 	}
-	ctx.showWarning?.("Usage: /agents [list|read|create|add|set-identity|delete|bindings|bind|unbind|start|stop|restart|health|grants|grant|revoke-grant]");
+	ctx.showWarning?.("Usage: /agent [list|read|create|add|set-identity|use|current|clear-use|send|delete|bindings|bind|unbind|start|stop|restart|health|grants|grant|revoke-grant]");
 	return true;
 }
 
-async function executeAgentCommand(ctx: any, argsText: string): Promise<boolean> {
-	const args = splitArgs(argsText);
-	if ((args[0] ?? "") !== "send" || !args[1] || args.length < 3) {
-		ctx.showWarning?.("Usage: /agent send <agent-id> <message>");
-		return true;
+function refreshAgentTargetStatusLine(ctx: any): void {
+	ctx.statusLine?.invalidate?.();
+	ctx.updateEditorTopBorder?.();
+	ctx.ui?.requestRender?.();
+}
+
+async function ensureAgentRouteAvailable(ctx: any, agentId: string): Promise<any> {
+	let health: any = await requestManagement(ctx, MustangMethod.agentsHealth, { agentId });
+	let status = agentRouteStatus(health);
+	if (status === "registered") return health;
+
+	await requestManagement(ctx, MustangMethod.agentsStart, { agentId });
+	health = await requestManagement(ctx, MustangMethod.agentsHealth, { agentId });
+	status = agentRouteStatus(health);
+	if (status !== "registered") {
+		throw new Error(`route unavailable: ${displayAgentTarget(agentId)}`);
 	}
-	renderManagementResult(ctx, "Agent send", await requestManagement(ctx, MustangMethod.agentSend, {
-		agentId: args[1],
-		message: args.slice(2).join(" "),
-	}));
-	return true;
+	return health;
+}
+
+function agentRouteStatus(health: any): string | undefined {
+	return health?.health?.routeStatus ?? health?.health?.route_status ?? health?.status?.routeStatus ?? health?.status?.route_status;
+}
+
+function normalizeAgentTarget(agentId: string): string {
+	return agentId === "main" ? "primary" : agentId;
+}
+
+function displayAgentTarget(agentId: string): string {
+	return agentId === "primary" ? "main" : agentId;
 }
 
 async function executeGatewaysCommand(ctx: any, argsText: string): Promise<boolean> {

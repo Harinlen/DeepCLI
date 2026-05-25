@@ -76,6 +76,7 @@ class StandardOrchestrator:
         depth: int = 0,
         cwd: Path | None = None,
         agent_id: str | None = None,
+        agent_context: Any | None = None,
     ) -> None:
         """Create a session-local conversation engine.
 
@@ -87,12 +88,14 @@ class StandardOrchestrator:
             depth: Root/sub-agent depth; root sessions use ``0``.
             cwd: Initial working directory for tools and hooks.
             agent_id: Child-agent id when this orchestrator runs as a sub-agent.
+            agent_context: Durable Agent runtime context for root Agent sessions.
         """
         self._deps = deps
         self._session_id = session_id
         self._depth = depth
         self._cwd = cwd or Path.cwd()
-        self._agent_id = agent_id
+        self._agent_context = agent_context
+        self._agent_id = agent_id or getattr(agent_context, "agent_id", None)
         self._closed = False
         default_model = _default_model(deps)
         self._config = config or OrchestratorConfig(model=default_model, temperature=None)
@@ -105,7 +108,11 @@ class StandardOrchestrator:
         self._turn_input_tokens = 0
         self._turn_output_tokens = 0
         self._history = ConversationHistory(initial_messages=initial_history)
-        self._prompt_builder = PromptBuilder(session_id=session_id, deps=deps)
+        self._prompt_builder = PromptBuilder(
+            session_id=session_id,
+            deps=deps,
+            agent_context=agent_context,
+        )
         self._compactor = Compactor(deps=deps, model=self._config.model, keep_recent_turns=5)
 
     def query(

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from kernel.agent_hub import AgentHub, AgentHubManager, AgentHubWebSocketServer
 from kernel.agent_hub.contracts import default_primary_agent_definition
+from kernel.agent_hub.manager.manager import AgentManager
 
 
 async def _amain() -> None:
@@ -30,6 +31,8 @@ async def _amain() -> None:
         home=args.home,
         workspace=args.workspace,
     )
+    durable_manager = AgentManager(home=Path(args.home))
+    durable_manager.startup()
     hub = AgentHub(manager=AgentHubManager([definition]))
     hub.router.update_snapshot(hub.manager.routing_snapshot(revision=1))
     server = AgentHubWebSocketServer(
@@ -49,6 +52,19 @@ async def _amain() -> None:
         workspace=Path(args.workspace),
         runtime_file=Path(args.runtime_file).with_name("primary-agent.json"),
     )
+    managed_runtimes: dict[str, dict[str, object]] = {"primary": {"pid": primary_proc.pid}}
+    if args.access_router_endpoint:
+        for agent_id in durable_manager.bootstrap_runtime_agent_ids():
+            if agent_id == "primary":
+                continue
+            status = durable_manager.start(
+                agent_id,
+                actor_agent_id="system",
+                router_endpoint=args.access_router_endpoint,
+                router_token=args.primary_token,
+                wait_for_route=False,
+            )
+            managed_runtimes[agent_id] = status.model_dump()
     _write_json(
         Path(args.runtime_file),
         {
@@ -56,12 +72,13 @@ async def _amain() -> None:
             "endpoint": server.endpoint,
             "ready": True,
             "role": "agent_hub",
-            "managedRuntimes": {"primary": {"pid": primary_proc.pid}},
+            "managedRuntimes": managed_runtimes,
         },
     )
     try:
         await asyncio.Event().wait()
     finally:
+        durable_manager.close()
         _terminate(primary_proc)
         await server.stop()
 
@@ -86,6 +103,8 @@ def _start_primary_runtime(
         "kernel.agents.mustang.runtime",
         "--agent-id",
         agent_id,
+        "--agent-name",
+        "Primary" if agent_id == "primary" else agent_id,
         "--host",
         host,
         "--port",

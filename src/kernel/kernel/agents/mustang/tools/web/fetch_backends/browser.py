@@ -2,16 +2,85 @@
 
 from __future__ import annotations
 
-from kernel.agents.mustang.tools.web.fetch_backends.base import FetchBackend, FetchResult
+from typing import Any
 
+import httpx
+
+from kernel.agents.mustang.tools.web.fetch_backends.base import FetchBackend, FetchResult
+from kernel.agents.mustang.tools.web.web_bridge.protocol import WebBridgeFetchResult
+
+_CLIENT = None
 _MANAGER = None
 
 
 def set_web_bridge_manager(manager: object | None) -> None:
-    """Set the process-local WebBridge manager used by this backend."""
+    """Set the WebBridge client used by this backend.
 
-    global _MANAGER
+    The historical name is kept as a compatibility alias for tests and older
+    ToolManager wiring.  New production wiring passes an AccessAgent client,
+    not a process-local WebBridge server.
+    """
+
+    global _CLIENT, _MANAGER
+    _CLIENT = manager
     _MANAGER = manager
+
+
+def _web_bridge_client() -> object | None:
+    return _CLIENT or _MANAGER
+
+
+class AccessAgentWebBridgeClient:
+    """WebBridge facade that calls the AccessAgent-owned WebBridge edge."""
+
+    def __init__(self, access_url: str) -> None:
+        self._access_url = access_url.rstrip("/")
+
+    def status(self) -> dict[str, Any]:
+        """Return WebBridge status through the AccessAgent HTTP edge."""
+
+        try:
+            with httpx.Client(timeout=5) as client:
+                response = client.get(f"{self._access_url}/web-bridge/status.json")
+                response.raise_for_status()
+                payload = response.json()
+                return payload if isinstance(payload, dict) else {}
+        except Exception as exc:
+            return {
+                "status": "unavailable",
+                "paired": False,
+                "connected": False,
+                "message": str(exc),
+            }
+
+    def pair_start(self) -> dict[str, Any]:
+        """Start WebBridge pairing through the AccessAgent HTTP edge."""
+
+        with httpx.Client(timeout=10) as client:
+            response = client.post(f"{self._access_url}/web-bridge/pair")
+            response.raise_for_status()
+            payload = response.json()
+            return payload if isinstance(payload, dict) else {}
+
+    async def pair_reset(self) -> dict[str, Any]:
+        """Reset WebBridge pairing through the AccessAgent HTTP edge."""
+
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(f"{self._access_url}/web-bridge/reset")
+            response.raise_for_status()
+            payload = response.json()
+            return payload if isinstance(payload, dict) else {}
+
+    async def fetch_tab(self, url: str, *, max_chars: int = 50_000) -> WebBridgeFetchResult:
+        """Ask AccessAgent/resource:web_bridge to fetch one tab."""
+
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(
+                f"{self._access_url}/web-bridge/fetch",
+                json={"url": url, "maxChars": max_chars},
+            )
+            response.raise_for_status()
+            return WebBridgeFetchResult.model_validate(response.json())
 
 
 class BrowserFetchBackend(FetchBackend):
@@ -20,15 +89,15 @@ class BrowserFetchBackend(FetchBackend):
     name = "browser"
 
     def is_available(self) -> bool:
-        manager = _MANAGER
-        return bool(manager is not None and manager.status().get("connected"))  # type: ignore[attr-defined]
+        client = _web_bridge_client()
+        return bool(client is not None and client.status().get("connected"))  # type: ignore[attr-defined]
 
     async def fetch(self, url: str, *, max_chars: int = 50_000) -> FetchResult:
-        manager = _MANAGER
-        if manager is None:
+        client = _web_bridge_client()
+        if client is None:
             return FetchResult(url=url, content="", content_type="", error="WebBridge is not running")
         try:
-            response = await manager.fetch_tab(url, max_chars=max_chars)  # type: ignore[attr-defined]
+            response = await client.fetch_tab(url, max_chars=max_chars)  # type: ignore[attr-defined]
         except Exception as exc:
             return FetchResult(url=url, content="", content_type="", error=str(exc))
         if not response.ok:
@@ -72,4 +141,4 @@ def _metadata_summary(metadata: dict[str, object]) -> str:
     return "\n".join(parts)
 
 
-__all__ = ["BrowserFetchBackend", "set_web_bridge_manager"]
+__all__ = ["AccessAgentWebBridgeClient", "BrowserFetchBackend", "set_web_bridge_manager"]

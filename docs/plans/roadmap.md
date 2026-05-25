@@ -14,14 +14,23 @@ for shipped CLI milestones.
 
 ---
 
-## Future — Durable Multi-Agent Communication
+## Landed — Kernel Bus, Multi-Agent, and Global WebBridge
 
-Active plan: [`multi-agent-communication-plan.md`](multi-agent-communication-plan.md).
+The KernelBus + Global WebBridge implementation slice landed on 2026-05-25.
+Current facts now live in:
 
-This is the post-single-Primary Agent Control Plane route for OpenClaw-style
-durable Agent routing, agent-to-agent communication, Access-owned Platform
-Adapters, and external ACP runtime integration for tools such as Codex and
-Claude Code.
+- [`../kernel/architecture.md`](../kernel/architecture.md) for topology,
+  process ownership, bus projection, and WebBridge ownership.
+- [`../kernel/subsystems/transport.md`](../kernel/subsystems/transport.md)
+  for `/session`, `/runtime`, shutdown, and WebSocket error handling.
+- [`../kernel/subsystems/tools.md`](../kernel/subsystems/tools.md) for
+  WebFetch browser backend ownership.
+- [`../kernel/subsystems/session.md`](../kernel/subsystems/session.md) for
+  the SessionManager boundary behind `agent:<id>` routes.
+
+No active plan remains for this completed slice.  Future extraction of a
+separate KernelBus or GlobalResourceHost process should be opened as a new
+plan against the current architecture, not by reviving the completed plan.
 
 ## Superseded — ACP 跨 Session 通信
 

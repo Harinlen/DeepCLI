@@ -25,6 +25,11 @@ from kernel.agents.mustang.tools.builtin.glob_tool import GlobTool
 from kernel.agents.mustang.tools.builtin.grep_tool import GrepTool
 from kernel.agents.mustang.tools.builtin.list_mcp_resources import ListMcpResourcesTool
 from kernel.agents.mustang.tools.builtin.monitor import MonitorTool
+from kernel.agents.mustang.tools.builtin.multi_agent import (
+    AgentDirectoryTool,
+    AgentMessageTool,
+    AgentSessionTool,
+)
 from kernel.agents.mustang.tools.builtin.python_tool import PythonTool
 from kernel.agents.mustang.tools.builtin.read_mcp_resource import ReadMcpResourceTool
 from kernel.agents.mustang.tools.builtin.restart_self import RestartSelfTool
@@ -74,6 +79,9 @@ BUILTIN_TOOLS: list[type[Tool]] = [
     RestartSelfTool,
     SkillTool,
     AgentTool,
+    AgentDirectoryTool,
+    AgentMessageTool,
+    AgentSessionTool,
     SendMessageTool,
     TaskOutputTool,
     TaskStopTool,
@@ -87,6 +95,9 @@ BUILTIN_TOOLS: list[type[Tool]] = [
 
 __all__ = [
     "AgentTool",
+    "AgentDirectoryTool",
+    "AgentMessageTool",
+    "AgentSessionTool",
     "AskUserQuestionTool",
     "BUILTIN_TOOLS",
     "BashTool",

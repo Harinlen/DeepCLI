@@ -122,6 +122,15 @@ class ToolContext:
     session and are addressed through the task registry path above.
     """
 
+    agent_network_request: Callable[[str, dict[str, Any]], "Awaitable[dict[str, Any]]"] | None = None
+    """Call the authority-side Agent Network service.
+
+    Signature: ``(action, payload) -> result`` where action is one of
+    ``directory``, ``message``, or ``session``.  This is the preferred path for
+    durable Agent Network tools; ``route_agent_message`` is kept only for legacy
+    compatibility tools.
+    """
+
     schedule_manager: Any = None
     """ScheduleManager subsystem instance — ``None`` when the schedule
     subsystem is disabled.  Used by CronCreate/Delete/List tools."""

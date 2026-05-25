@@ -161,25 +161,27 @@ class SupervisorRuntime:
             time.sleep(0.25)
 
     def stop(self) -> None:
-        """Stop all children in reverse startup order."""
+        """Stop runtimes before the Access Router edge."""
 
-        for name in ("access_router", "hub"):
+        self._terminate_children(("hub", "access_router"), timeout_seconds=8)
+        self._write_stopped_runtime_file()
+        if self._control is not None:
+            self._control.stop()
+            self._control = None
+
+    def _terminate_children(self, names: tuple[str, ...], *, timeout_seconds: float) -> None:
+        deadline = time.time() + timeout_seconds
+        for name in names:
             proc = self.children.get(name)
             if proc is None or proc.poll() is not None:
                 continue
             proc.terminate()
-        deadline = time.time() + 8
-        for proc in self.children.values():
             remaining = max(0.1, deadline - time.time())
             try:
                 proc.wait(timeout=remaining)
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait(timeout=3)
-        self._write_stopped_runtime_file()
-        if self._control is not None:
-            self._control.stop()
-            self._control = None
 
     def _start_child(self, spec: ChildSpec) -> None:
         env = os.environ.copy()
@@ -224,20 +226,7 @@ class SupervisorRuntime:
         if name not in order:
             return
         start_index = order.index(name)
-        for child_name in reversed(order[start_index:]):
-            proc = self.children.get(child_name)
-            if proc is not None and proc.poll() is None:
-                proc.terminate()
-        deadline = time.time() + 8
-        for child_name in order[start_index:]:
-            proc = self.children.get(child_name)
-            if proc is None or proc.poll() is not None:
-                continue
-            try:
-                proc.wait(timeout=max(0.1, deadline - time.time()))
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=3)
+        self._terminate_children(tuple(order[start_index:]), timeout_seconds=8)
 
         specs = self.specs or self.build_specs()
         for child_name in order[start_index:]:

@@ -578,6 +578,13 @@ wall twice.
   document it as command-surface drift instead of reporting the command as
   tested.
 
+- **Keybinding config is not component behavior.**  OMP may declare app-level
+  keybinding IDs that are not wired inside a specific selector component.
+  Parity audits must compare the real component `handleInput()` behavior, not
+  only `config/keybindings.ts`; otherwise plans chase phantom actions such as
+  selector-local toggle path/sort or tree fold/unfold that the reference does
+  not actually implement.
+
 - **Slash-command closure needs subcommand coverage, not only top-level
   coverage.**  A probe that hits `/agents` does not prove `/agents grant`, and
   a probe that imports `BUILTIN_SLASH_COMMANDS` does not prove autocomplete or

@@ -211,6 +211,8 @@ export class InputController {
 
 			if (!text) return;
 
+			this.clearTransientStatus();
+
 			// Continue shortcuts: "." or "c" sends empty message (agent continues, no visible message)
 			if (text === "." || text === "c") {
 				if (this.ctx.onInputCallback) {
@@ -381,6 +383,13 @@ export class InputController {
 			}
 			this.ctx.editor.addToHistory(text);
 		};
+	}
+
+	clearTransientStatus(): void {
+		if (!this.ctx.loadingAnimation) {
+			this.ctx.statusContainer?.clear?.();
+			this.ctx.lastStatusText = undefined;
+		}
 	}
 
 	handleCtrlC(): void {

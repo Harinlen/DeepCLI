@@ -62,6 +62,7 @@ class ToolContextMixin:
             spawn_subagent=self._spawn_subagent,
             deliver_cross_session=self._deps.deliver_cross_session,
             route_agent_message=self._deps.route_agent_message,
+            agent_network_request=self._deps.agent_network_request,
             schedule_manager=self._deps.schedule_manager,
             mcp_manager=getattr(self._deps, "mcp", None),
             git_manager=getattr(self._deps, "git", None),

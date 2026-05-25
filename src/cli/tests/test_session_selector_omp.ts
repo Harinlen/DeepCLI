@@ -11,10 +11,15 @@ const selector = new SessionSelectorComponent(
 	[
 		session("sess-1", "Alpha", "/repo/a"),
 		session("sess-2", "Second session", "/repo/b"),
+		session("sess-3", "Gamma", "/repo/c"),
 	],
 	path => selected.push(path),
 	() => cancelled.push("cancel"),
 	() => cancelled.push("exit"),
+	async entry => {
+		cancelled.push(`delete:${entry.id}`);
+		return true;
+	},
 );
 
 const frame = selector.render(100).join("\n");
@@ -26,6 +31,31 @@ assert(frame.includes("Enter to select"), "OMP session selector should render up
 selector.handleInput("\x1b[B");
 selector.handleInput("\r");
 assert(selected[0] === "sess-2", "OMP session selector should select the highlighted session path");
+
+selector.handleInput("g");
+let filtered = Bun.stripANSI(selector.render(100).join("\n"));
+assert(filtered.includes("Gamma"), "session selector should filter rows by typed search");
+assert(!filtered.includes("Alpha"), "session selector search should hide non-matching rows");
+selector.handleInput("\x1b");
+assert(cancelled.includes("cancel"), "session selector should cancel on Escape");
+
+const deleteSelector = new SessionSelectorComponent(
+	[
+		session("delete-1", "Delete Me", "/repo/delete"),
+		session("keep-2", "Keep Me", "/repo/keep"),
+	],
+	() => {},
+	() => {},
+	() => {},
+	async entry => {
+		cancelled.push(`deleted:${entry.id}`);
+		return true;
+	},
+);
+deleteSelector.handleInput("\x1b[3~");
+assert(Bun.stripANSI(deleteSelector.render(100).join("\n")).includes("Delete session?"), "Delete should open session delete confirmation");
+deleteSelector.handleInput("\r");
+assert(cancelled.includes("deleted:delete-1"), "confirming Delete should call the selector deletion callback");
 
 console.log("PASS: OMP session selector component");
 

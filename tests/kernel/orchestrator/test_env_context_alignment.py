@@ -21,6 +21,7 @@ from pathlib import Path
 
 from kernel.agents.mustang.llm.config import ModelRef
 from kernel.agents.mustang.orchestrator.prompt_builder import PromptBuilder
+from kernel.agents.mustang.sessions.context import AgentContext
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +52,34 @@ class TestEnvContextShape:
         ref = ModelRef(provider="anthropic", model="claude-opus-4-7")
         text = PromptBuilder._build_env_context(tmp_path, model=ref)
         assert " - You are powered by the model claude-opus-4-7." in text
+
+    def test_agent_runtime_identity_present_when_agent_context_given(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Durable Agent runtimes tell the model which Agent owns the session."""
+        context = AgentContext(
+            agent_id="research",
+            workspace=tmp_path / "workspace",
+            state_dir=tmp_path / "agents" / "research",
+            session_store_path=tmp_path / "agents" / "research" / "sessions" / "sessions.db",
+            name="Research",
+            identity={
+                "avatar": "lens",
+                "persona": "Investigates primary sources",
+                "apiToken": "must-not-leak",
+            },
+        )
+
+        text = PromptBuilder._build_env_context(tmp_path, agent_context=context)
+
+        assert " - Agent ID: research" in text
+        assert " - Agent name: Research" in text
+        assert f" - Agent workspace: {tmp_path / 'workspace'}" in text
+        assert " - Agent bus identity: agent:research" in text
+        assert " - Agent resource scopes: memory=global,workspace,agent;" in text
+        assert "persona=Investigates primary sources" in text
+        assert "must-not-leak" not in text
 
     def test_model_line_provider_agnostic(self, tmp_path: Path) -> None:
         """Non-Claude IDs (OpenAI, Qwen, etc.) get the same phrasing."""

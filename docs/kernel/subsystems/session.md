@@ -3,7 +3,7 @@
 > **Quick header**
 > - **Role**: durable Mustang session lifecycle, turns, replay, permissions, and client stream.
 > - **Current code**: `kernel.agents.mustang.sessions.*`.
-> - **Runtime owner**: Mustang runtime; Access routes proxy through Agent Hub in supervised mode.
+> - **Runtime owner**: Mustang Agent runtime; Access routes proxy through the AccessRouter KernelBus slice in supervised mode.
 > - **Boundary**: session truth and turn serialization; orchestrator owns model/tool loop internals.
 
 `SessionManager` is the Mustang Agent runtime's durable conversation
@@ -16,9 +16,9 @@ logic, or process supervision.
 ## Current Boundaries
 
 ```text
-Access Agent
-  -> Agent Hub.Router
-  -> Mustang Agent (`primary`)
+AccessAgent.SessionEdge
+  -> AccessRouter KernelBus slice
+  -> Mustang Agent (`agent:<id>`)
   -> AgentSessionRuntimeService
   -> SessionManager
   -> Orchestrator
@@ -159,8 +159,9 @@ ToolAuthorizer ask
   -> tool execution continues or is denied
 ```
 
-In router mode, permission requests are tunneled Runtime -> Hub -> Access ->
-CLI/Probe or platform reply sink.
+In supervised mode, permission requests are tunneled Runtime -> AccessRouter
+KernelBus slice -> AccessAgent client stream -> CLI/Probe or platform reply
+sink.
 
 ## Public Surface
 
@@ -175,5 +176,5 @@ handlers.  Active surfaces include:
   shell/Python execution and cancellation
 
 Gateway delivery remains as legacy/transition support.  New platform ingress
-should route through Access Agent Platform Adapter semantics and Agent Hub
-Router, not directly into SessionManager.
+should route through AccessAgent Platform Adapter semantics and the addressed
+bus route for `agent:<id>`, not directly into SessionManager.

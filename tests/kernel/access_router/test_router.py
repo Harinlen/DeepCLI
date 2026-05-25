@@ -162,6 +162,28 @@ async def test_registered_runtime_receives_turn() -> None:
     assert [agent.agent_id for agent in router.registered_agents()] == ["primary"]
 
 
+async def test_bus_topology_separates_agent_and_resource_ownership() -> None:
+    router = AccessRouter(auth_token="secret")
+
+    async def handler(_: DeliverTurnRequest) -> dict[str, object]:
+        return {"reply": "from-primary"}
+
+    router.register_runtime(_register(), handler)
+    router.register_resource(
+        "resource:web_bridge",
+        capabilities=("_mustang.resource/web_bridge.status",),
+    )
+
+    snapshot = router.bus_topology_snapshot()
+    services = {service.service_id: service for service in snapshot.services}
+
+    assert services["agent:primary"].owner == "AgentRuntimeHost"
+    assert services["agent:primary"].kind == "agent"
+    assert services["resource:web_bridge"].owner == "GlobalResourceHost"
+    assert services["resource:web_bridge"].kind == "resource"
+    assert services["resource:web_bridge"].route_ready is True
+
+
 async def test_main_is_not_a_primary_alias() -> None:
     router = AccessRouter(auth_token="secret", stale_timeout_seconds=1)
 

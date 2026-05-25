@@ -25,6 +25,7 @@ matching ``_get_<target>_handler()`` branch in ``session_handler.py``.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal
@@ -1205,7 +1206,8 @@ async def _handle_agents_start(
     del ctx
     _require_primary(p.actor_agent_id)
     try:
-        status = service.start(
+        status = await asyncio.to_thread(
+            service.start,
             p.agent_id,
             router_endpoint=p.router_endpoint or "",
             router_token=p.router_token or "",
@@ -1233,7 +1235,8 @@ async def _handle_agents_restart(
     del ctx
     _require_primary(p.actor_agent_id)
     try:
-        status = service.restart(
+        status = await asyncio.to_thread(
+            service.restart,
             p.agent_id,
             router_endpoint=p.router_endpoint or "",
             router_token=p.router_token or "",

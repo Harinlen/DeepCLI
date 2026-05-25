@@ -225,12 +225,15 @@ class ToolManager(Subsystem):
         if self._mcp_disconnect is not None:
             self._mcp_disconnect()
         if self._web_bridge is not None:
-            await self._web_bridge.shutdown()
+            shutdown = getattr(self._web_bridge, "shutdown", None)
+            if shutdown is not None:
+                await shutdown()
             from kernel.agents.mustang.tools.web.fetch_backends.browser import (
                 set_web_bridge_manager,
             )
 
             set_web_bridge_manager(None)
+            self._web_bridge = None
         for tool, _layer in self._registry.all_tools():
             shutdown = getattr(tool, "shutdown", None)
             if shutdown is not None:
@@ -356,8 +359,30 @@ class ToolManager(Subsystem):
         }
 
     async def _start_web_bridge(self) -> None:
-        """Start the process-local WebBridge manager."""
-        from kernel.agents.mustang.tools.web.fetch_backends.browser import set_web_bridge_manager
+        """Attach the WebBridge backend.
+
+        Supervised runtimes call the AccessAgent-owned edge.  Direct
+        unsupervised Access app fixtures keep a process-local manager because
+        their Access and Agent code share one event loop.
+        """
+        from kernel.agents.mustang.tools.web.fetch_backends.browser import (
+            AccessAgentWebBridgeClient,
+            set_web_bridge_manager,
+        )
+
+        access_endpoint = os.getenv("MUSTANG_ACCESS_ROUTER_ENDPOINT")
+        if access_endpoint:
+            self._web_bridge = AccessAgentWebBridgeClient(access_endpoint)
+            set_web_bridge_manager(self._web_bridge)
+            return
+
+        if os.getenv("MUSTANG_AGENT_HUB_ENDPOINT"):
+            port = os.getenv("MUSTANG_ACCESS_PORT", os.getenv("MUSTANG_ACCESS_ROUTER_PORT", "8200"))
+            access_endpoint = f"http://127.0.0.1:{port}"
+            self._web_bridge = AccessAgentWebBridgeClient(access_endpoint)
+            set_web_bridge_manager(self._web_bridge)
+            return
+
         from kernel.agents.mustang.tools.web.web_bridge import WebBridgeManager
 
         async def _persist_pairing(extension_id: str, secret: str) -> None:

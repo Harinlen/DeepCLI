@@ -10,6 +10,7 @@ from kernel.access_router.repository import AccessRouterRepository
 from kernel.access_router.schemas import RouteStatus
 from kernel.agent_hub.manager.manager import AgentManager
 from kernel.agent_hub.manager.schemas import (
+    AgentRuntimeSpec,
     CreateAgentSpec,
     GrantCapability,
     ResourceScope,
@@ -42,6 +43,96 @@ def test_create_update_cas_bumps_directory_revision(tmp_path) -> None:
 
         assert updated.revision == 2
         assert snapshot.revision == 3  # primary bootstrap + create + update
+    finally:
+        manager.close()
+
+
+def test_create_rejects_reused_state_dir(tmp_path) -> None:
+    manager = AgentManager(home=tmp_path)
+    manager.startup()
+    try:
+        state_dir = tmp_path / "agents" / "shared"
+        manager.create(
+            CreateAgentSpec(
+                agent_id="one",
+                name="One",
+                workspace=tmp_path / "one",
+                state_dir=state_dir,
+            ),
+            actor_agent_id="primary",
+        )
+        with pytest.raises(ValueError, match="state_dir already in use"):
+            manager.create(
+                CreateAgentSpec(
+                    agent_id="two",
+                    name="Two",
+                    workspace=tmp_path / "two",
+                    state_dir=state_dir,
+                ),
+                actor_agent_id="primary",
+            )
+    finally:
+        manager.close()
+
+
+def test_create_bootstraps_per_agent_workspace_files(tmp_path) -> None:
+    manager = AgentManager(home=tmp_path)
+    manager.startup()
+    workspace = tmp_path / "research-workspace"
+    try:
+        manager.create(
+            CreateAgentSpec(
+                agent_id="research",
+                name="Research",
+                workspace=workspace,
+                state_dir=tmp_path / "agents" / "research",
+            ),
+            actor_agent_id="primary",
+        )
+
+        assert (workspace / "AGENTS.md").exists()
+        assert (workspace / "SOUL.md").exists()
+        assert (workspace / "IDENTITY.md").read_text(encoding="utf-8").startswith("# Research")
+        assert (tmp_path / "agents" / "research" / "sessions").is_dir()
+    finally:
+        manager.close()
+
+
+def test_create_can_reuse_deleted_agent_id(tmp_path) -> None:
+    manager = AgentManager(home=tmp_path)
+    manager.startup()
+    try:
+        first = manager.create(
+            CreateAgentSpec(
+                agent_id="research",
+                name="Bad Path",
+                workspace=tmp_path / "bad-workspace",
+                state_dir=tmp_path / "agents" / "research",
+            ),
+            actor_agent_id="primary",
+        )
+        manager.delete(
+            "research",
+            expected_revision=first.revision,
+            actor_agent_id="primary",
+            confirm=True,
+        )
+
+        recreated = manager.create(
+            CreateAgentSpec(
+                agent_id="research",
+                name="Research",
+                workspace=tmp_path / "research-workspace",
+                state_dir=tmp_path / "agents" / "research",
+            ),
+            actor_agent_id="primary",
+        )
+
+        assert recreated.agent_id == "research"
+        assert recreated.name == "Research"
+        assert recreated.deleted_at is None
+        assert recreated.revision == first.revision + 2
+        assert [agent.agent_id for agent in manager.list()].count("research") == 1
     finally:
         manager.close()
 
@@ -437,6 +528,49 @@ def test_start_spawns_runtime_and_combines_route_health(
         assert status.process_running is True
         assert status.route_status == "registered"
         assert health.healthy is True
+    finally:
+        manager.close()
+
+
+def test_bootstrap_runtime_agent_ids_include_autostart_and_previously_running(
+    tmp_path: Path,
+) -> None:
+    manager = AgentManager(home=tmp_path)
+    manager.startup()
+    try:
+        manager.create(
+            CreateAgentSpec(
+                agent_id="autostart",
+                name="Autostart",
+                workspace=tmp_path / "autostart",
+                state_dir=tmp_path / "agents" / "autostart",
+                runtime=AgentRuntimeSpec(autostart=True),
+            ),
+            actor_agent_id="primary",
+        )
+        manager.create(
+            CreateAgentSpec(
+                agent_id="manual",
+                name="Manual",
+                workspace=tmp_path / "manual",
+                state_dir=tmp_path / "agents" / "manual",
+                runtime=AgentRuntimeSpec(autostart=False),
+            ),
+            actor_agent_id="primary",
+        )
+        manager._write_runtime_status(
+            "manual",
+            desired_state="running",
+            observed_state="running",
+            pid=123,
+            route_status="registered",
+        )
+
+        assert set(manager.bootstrap_runtime_agent_ids()) == {
+            "primary",
+            "autostart",
+            "manual",
+        }
     finally:
         manager.close()
 

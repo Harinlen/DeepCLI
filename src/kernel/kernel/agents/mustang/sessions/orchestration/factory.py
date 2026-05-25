@@ -291,5 +291,6 @@ class SessionOrchestratorFactoryMixin(_SessionMixinBase):
                 language=prefs_language,
             ),
             cwd=cwd,
+            agent_context=self._agent_context,
         )
         return orchestrator, task_registry

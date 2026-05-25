@@ -118,7 +118,6 @@ async def test_command_manager_startup_registers_builtins(
         "global",
         "flag",
         "secrets",
-        "agents",
         "agent",
         "gateways",
         "skills",
@@ -174,8 +173,10 @@ async def test_command_manager_agents_and_gateways_use_management_methods(
     mgr = CommandManager(module_table)
     await mgr.startup()
 
-    assert mgr.lookup("agents").acp_method == MustangMethod.AGENTS_LIST
-    assert mgr.lookup("agent").acp_method == MustangMethod.AGENT_SEND
+    agent = mgr.lookup("agent")
+    assert agent.acp_method == MustangMethod.AGENTS_LIST
+    assert "send" in agent.subcommands
+    assert mgr.lookup("agents") is None
     gateways = mgr.lookup("gateways")
     assert gateways.acp_method == MustangMethod.GATEWAYS_LIST
     assert "create" in gateways.subcommands

@@ -10,6 +10,7 @@ from typing import Any
 
 import orjson
 import websockets
+from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 
 from kernel.agents.mustang.tools.web.web_bridge.install_assets import unpacked_extension_path
 from kernel.agents.mustang.tools.web.web_bridge.protocol import (
@@ -34,11 +35,13 @@ class WebBridgeManager:
         self,
         *,
         access_port: int | None = None,
+        bridge_port: int | None = None,
         persist_pairing: PairPersist | None = None,
         reset_pairing: PairReset | None = None,
         read_secret: SecretReader | None = None,
     ) -> None:
         self._access_port = access_port or 8200
+        self._preferred_bridge_port = bridge_port if bridge_port is not None else self._access_port + 1
         self._persist_pairing = persist_pairing
         self._reset_pairing = reset_pairing
         self._read_secret = read_secret
@@ -56,7 +59,14 @@ class WebBridgeManager:
 
         if self._server is not None:
             return
-        self._server = await websockets.serve(self._handle_ws, "127.0.0.1", 0)
+        try:
+            self._server = await websockets.serve(
+                self._handle_ws,
+                "127.0.0.1",
+                self._preferred_bridge_port,
+            )
+        except OSError:
+            self._server = await websockets.serve(self._handle_ws, "127.0.0.1", 0)
         sockets = getattr(self._server, "sockets", None) or []
         if sockets:
             self._port = int(sockets[0].getsockname()[1])
@@ -168,6 +178,10 @@ class WebBridgeManager:
                 return
             async for message in ws:
                 await self._handle_message(message)
+        except ConnectionClosedOK:
+            return
+        except ConnectionClosed:
+            return
         finally:
             async with self._lock:
                 if self._ws is ws:

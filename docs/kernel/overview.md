@@ -2,7 +2,7 @@
 
 > **Quick header**
 > - **Role**: product and design-principle overview for DeepCLI's Kernel.
-> - **Current runtime shape**: Supervisor -> Agent Hub -> Access Agent -> Mustang Agent (`primary` default instance).
+> - **Current runtime shape**: Supervisor -> AgentRuntimeHost (`kernel.agent_hub`) + AccessAgent (`kernel.access_router`) -> durable Mustang Agent runtimes (`primary` plus restored session agents).
 > - **Owns**: why the Kernel exists and which product layers it supports.
 > - **Does not own**: concrete subsystem APIs or current file paths.
 
@@ -26,7 +26,7 @@ DeepCLI 走**长期协同构建**的路线——用户通过 chat 带着 agent �
 | 层 | 是什么 | 在哪儿 |
 |---|---|---|
 | **Home Screen** | 统一入口。浏览 / 启动 / widget / 分享用户 build 出来的软件，同时能观察 kernel 里正在跑的 agent / session 状态。 | *未来独立前端 repo，尚未启动* |
-| **Multi-agent Kernel** | 运行时引擎。默认 Mustang Agent 实例 `primary` 常驻跟用户对话；未来更多 Mustang Agent 实例各自在自己的 session scope 里跑（OpenClaw 风格，不是 CC 那种 sub-agent-as-tool）。通过 memory / skills / hooks 自我进化。 | *本 repo* |
+| **Multi-agent Kernel** | 运行时引擎。默认 Mustang Agent 实例 `primary` 常驻跟用户对话；durable session agents（例如 `research`）各自在自己的 session scope 里跑（OpenClaw 风格，不是 CC 那种 sub-agent-as-tool）。通过 memory / skills / hooks 自我进化。 | *本 repo* |
 | **用户软件库** | 产品本体。用户累积出来的那堆专属软件，下面说。 | *用户的 DeepCLI 数据目录* |
 
 ### 用户 build 出来的软件的三种形态
@@ -66,6 +66,18 @@ DeepCLI 自己的设计，没有直接可抄的对标物。
 Kernel 通过 WebSocket（ACP 协议）为所有前端（未来的 Home Screen、
 IDE 扩展、terminal probe、messaging gateway 等）提供服务 —— 所有
 前端都是薄的 ACP 客户端，kernel 是唯一真理源。
+
+当前进程模型由 `kernel.supervisor` 启动两个粗粒度 host：
+
+- `kernel.agent_hub`：AgentRuntimeHost，拥有 durable Agent definitions 和
+  Agent runtime lifecycle；重启后恢复 `autostart` 或 desired-running agents。
+- `kernel.access_router`：AccessAgent，拥有 loopback `/session`、`/runtime`、
+  WebBridge HTTP/extension edge，以及当前 KernelBus/GlobalResourceHost
+  migration slice。
+
+Agent runtimes (`kernel.agents.mustang.runtime`) 是 AgentRuntimeHost 管理的子进程，
+每个 runtime 注册为 `agent:<id>`。Global resources 当前由 AccessAgent 启动并
+投影为 `resource:<name>`，例如 `resource:web_bridge` 和 `resource:web_search`。
 
 ## 目标
 

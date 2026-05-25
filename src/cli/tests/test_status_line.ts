@@ -1,10 +1,12 @@
 import { assert } from "./helpers.js";
 
 const load = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<any>;
-const { initTheme } = await load("../src/active-port/coding-agent/modes/theme/theme.ts");
+const themeModule = await load("../src/active-port/coding-agent/modes/theme/theme.ts");
+const { initTheme } = themeModule;
 const { StatusLineComponent } = await load("../src/active-port/coding-agent/modes/components/status-line.ts");
 
 await initTheme(false);
+const { theme } = themeModule;
 
 const statusLine = new StatusLineComponent({
 	model: { id: "claude-sonnet", name: "sonnet", provider: "anthropic", contextWindow: 200_000 },
@@ -47,14 +49,31 @@ const border = statusLine.getTopBorder(100);
 assert(border.width > 0, "status line top border should render visible content");
 assert(border.content.includes("⏺"), "status line should show connected kernel state");
 assert(border.content.includes("Ask"), "status line should show default permission mode as Ask");
-assert(border.content.indexOf("Ask") < border.content.indexOf("sonnet"), "permission mode should render before model");
+assert(border.content.includes("primary"), "status line should always show the current primary agent");
+assert(!border.content.includes("agent:"), "status line should not waste space on an agent label prefix");
+assert(border.content.indexOf("Ask") < border.content.indexOf("primary"), "permission mode should render before agent");
+assert(border.content.indexOf("primary") < border.content.indexOf("1.5K"), "agent should render before context usage");
+assert(border.content.indexOf("1.5K") < border.content.indexOf("sonnet"), "context usage should render before model");
 assert(border.content.includes("sonnet"), "status line should include model segment");
-assert(border.content.includes("mustang") || border.content.includes("/tmp"), "status line should include cwd path segment");
 assert(border.content.includes("1.5K (0.8%/200K)"), "status line should include computed context usage");
+assert(
+	border.content.includes(`${theme.getFgAnsi("borderMuted")}─`),
+	"status line trailing fill should use muted border color",
+);
+assert(
+	!border.content.includes(`${theme.getFgAnsi("border")}─`),
+	"status line trailing fill should not use the blue/accent border color",
+);
 
-const narrowBorder = statusLine.getTopBorder(34).content;
+const narrowBorder = statusLine.getTopBorder(70).content;
 const expandedBorder = statusLine.getTopBorder(120).content;
-assert(narrowBorder.includes("sonnet"), "narrow status line should keep high-priority model segment");
+assert(narrowBorder.includes("⏺"), "narrow status line should keep kernel connection state");
+assert(narrowBorder.includes("Ask"), "narrow status line should keep mode");
+assert(narrowBorder.includes("primary"), "narrow status line should keep primary agent");
+assert(!narrowBorder.includes("agent:"), "narrow status line should not waste space on an agent label prefix");
+assert(narrowBorder.includes("1.5K"), "narrow status line should keep context usage");
+assert(narrowBorder.includes("sonnet"), "narrow status line should keep model");
+assert(!narrowBorder.includes("mustang"), "narrow status line should drop low-priority path before core fields");
 assert(
 	expandedBorder.includes("mustang") || expandedBorder.includes("/tmp"),
 	"status line should restore width-dependent path segment after a wider render",
@@ -62,6 +81,42 @@ assert(
 assert(
 	expandedBorder.includes("1.5K (0.8%/200K)"),
 	"status line should restore width-dependent context segment after a wider render",
+);
+
+const targetAgentStatusLine = new StatusLineComponent({
+	model: { id: "claude-sonnet", name: "sonnet", provider: "anthropic", contextWindow: 200_000 },
+	agent: { state: { messages: [] } },
+	sessionManager: {
+		getCwd: () => "/tmp",
+		getSessionName: () => undefined,
+		getUsageStatistics: () => ({ premiumRequests: 0 }),
+		getContextUsage: () => ({ totalTokens: 0, contextWindow: 200_000, percent: 0 }),
+		titleSource: undefined,
+	},
+	state: {
+		messages: [],
+		model: { id: "claude-sonnet", name: "sonnet", provider: "anthropic", contextWindow: 200_000 },
+	},
+	isFastModeEnabled: () => false,
+	getAsyncJobSnapshot: () => ({ running: [] }),
+	modelRegistry: { isUsingOAuth: () => false },
+	targetAgentId: "research",
+} as never);
+targetAgentStatusLine.updateSettings({
+	preset: "custom",
+	leftSegments: [],
+	rightSegments: [],
+	separator: "ascii",
+	segmentOptions: {},
+});
+const targetAgentBorder = targetAgentStatusLine.getTopBorder(100).content;
+assert(targetAgentBorder.includes("research"), `status line should show selected target agent, got: ${targetAgentBorder}`);
+assert(!targetAgentBorder.includes("agent:"), "selected target agent should not include an agent label prefix");
+
+const narrowTargetAgentBorder = targetAgentStatusLine.getTopBorder(40).content;
+assert(
+	narrowTargetAgentBorder.includes("research"),
+	`status line should preserve selected target agent before long left-side segments, got: ${narrowTargetAgentBorder}`,
 );
 
 const millionWindowStatusLine = new StatusLineComponent({

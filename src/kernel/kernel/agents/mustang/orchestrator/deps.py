@@ -90,6 +90,8 @@ class OrchestratorDeps:
     deliver_cross_session: Callable[[str, str], bool] | None = field(default=None)
     # Durable peer-agent message delivery is routed through Agent Hub.Router.
     route_agent_message: Callable[[str, str], bool] | None = field(default=None)
+    # Preferred authority-side Agent Network service bridge.
+    agent_network_request: Callable[[str, dict[str, Any]], Any] | None = field(default=None)
     schedule_manager: ScheduleManager | None = field(default=None)
     git: Any = field(default=None)
     # Narrow summarisation helper used by tools that need a secondary LLM pass.

@@ -128,8 +128,6 @@ DeepCLI 会直接实现需要的控制平面能力，不依赖 `acpx` CLI/runtim
 | **Full-repo audit** | `workflow/code-review.md` | When user says "Code Review" |
 | **Future phases** | `plans/roadmap.md` | Planning what's next |
 | **Full-system test plan** | [`plans/full-system-test-plan.md`](plans/full-system-test-plan.md) | 覆盖单元测试、闭合缝、真实 Supervisor E2E、CLI/PTY、Probe 验收矩阵 |
-| **Multi-agent communication plan** | [`plans/multi-agent-communication-plan.md`](plans/multi-agent-communication-plan.md) | OpenClaw-style durable Agent routing、agent-to-agent、Platform Adapter、External ACP runtime 接入计划 |
-| **WebSearch backend expansion** | [`plans/websearch-backends-plan.md`](plans/websearch-backends-plan.md) | OpenClaw provider parity、中国大陆可用搜索后端、SearXNG 免费 fallback |
 | **CLI docs** | [`cli/README.md`](cli/README.md) | CLI implemented design facts and history |
 | **Kernel completed plans index** | [`kernel/history/plans/`](kernel/history/plans/) | 已完成 Kernel 计划的分类索引；计划本体按 owner 放在 architecture / interfaces / subsystems / testing |
 | **CLI completed plans archive** | [`cli/history/plans/`](cli/history/plans/) | 已完成的 CLI 计划/审计归档，例如 active-port prune、TUI OOBE |

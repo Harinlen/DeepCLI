@@ -8,7 +8,6 @@ import type { StatusLinePreset, StatusLineSegmentId, StatusLineSeparatorStyle } 
 import { theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
 import * as git from "../../utils/git";
-import { getSessionAccentAnsi, getSessionAccentHexForTitle } from "../../utils/session-color";
 import { sanitizeStatusText } from "../shared";
 import {
 	canReuseCachedPr,
@@ -355,37 +354,52 @@ export class StatusLineComponent implements Component {
 		const fgAnsi = theme.getFgAnsi("text");
 		const sepAnsi = theme.getFgAnsi("statusLineSep");
 
-		// Collect visible segment contents
-		const leftParts: string[] = [];
-		for (const segId of effectiveSettings.leftSegments) {
+		const renderVisibleSegment = (segId: StatusLineSegmentId): string | null => {
 			const rendered = renderSegment(segId, ctx);
-			if (rendered.visible && rendered.content) {
-				leftParts.push(rendered.content);
+			return rendered.visible && rendered.content ? rendered.content : null;
+		};
+
+		const targetAgentId =
+			(this.session as { targetAgentId?: string; currentTargetAgentId?: string }).targetAgentId
+			?? (this.session as { currentTargetAgentId?: string }).currentTargetAgentId
+			?? "primary";
+		const agentIcon = theme.icon.agents ? `${theme.icon.agents} ` : "";
+		const agentPart = theme.fg("statusLineSubagents", `${agentIcon}${targetAgentId}`);
+
+		const coreParts = [
+			renderVisibleSegment("pi"),
+			renderVisibleSegment("permission_mode"),
+			agentPart,
+			renderVisibleSegment("context_pct"),
+			renderVisibleSegment("model"),
+		].filter(Boolean) as string[];
+
+		const coreIds = new Set<StatusLineSegmentId>([
+			"pi",
+			"permission_mode",
+			"context_pct",
+			"context_total",
+			"model",
+		]);
+		const extraParts: string[] = [];
+		for (const segId of [...effectiveSettings.leftSegments, ...effectiveSettings.rightSegments]) {
+			if (coreIds.has(segId)) continue;
+			const rendered = renderVisibleSegment(segId);
+			if (rendered) {
+				extraParts.push(rendered);
 			}
 		}
-
-		const rightParts: string[] = [];
-		for (const segId of effectiveSettings.rightSegments) {
-			const rendered = renderSegment(segId, ctx);
-			if (rendered.visible && rendered.content) {
-				rightParts.push(rendered.content);
-			}
-		}
-
 		const runningBackgroundJobs = this.session.getAsyncJobSnapshot()?.running.length ?? 0;
 		if (runningBackgroundJobs > 0) {
 			const icon = theme.icon.agents ? `${theme.icon.agents} ` : "";
 			const label = `${formatCount("job", runningBackgroundJobs)} running`;
-			rightParts.push(theme.fg("statusLineSubagents", `${icon}${label}`));
+			extraParts.push(theme.fg("statusLineSubagents", `${icon}${label}`));
 		}
 		const topFillWidth = Math.max(0, width);
-		const left = [...leftParts];
-		const right = [...rightParts];
+		const parts = [...coreParts, ...extraParts];
 
 		const leftSepWidth = visibleWidth(separatorDef.left);
-		const rightSepWidth = visibleWidth(separatorDef.right);
 		const leftCapWidth = separatorDef.endCaps ? visibleWidth(separatorDef.endCaps.right) : 0;
-		const rightCapWidth = separatorDef.endCaps ? visibleWidth(separatorDef.endCaps.left) : 0;
 
 		const groupWidth = (parts: string[], capWidth: number, sepWidth: number): number => {
 			if (parts.length === 0) return 0;
@@ -394,60 +408,45 @@ export class StatusLineComponent implements Component {
 			return partsWidth + sepTotal + 2 + capWidth;
 		};
 
-		let leftWidth = groupWidth(left, leftCapWidth, leftSepWidth);
-		let rightWidth = groupWidth(right, rightCapWidth, rightSepWidth);
-		const totalWidth = () => leftWidth + rightWidth + (left.length > 0 && right.length > 0 ? 1 : 0);
-
+		let partsWidth = groupWidth(parts, leftCapWidth, leftSepWidth);
 		if (topFillWidth > 0) {
-			while (totalWidth() > topFillWidth && right.length > 0) {
-				right.pop();
-				rightWidth = groupWidth(right, rightCapWidth, rightSepWidth);
+			while (partsWidth > topFillWidth && parts.length > coreParts.length) {
+				parts.pop();
+				partsWidth = groupWidth(parts, leftCapWidth, leftSepWidth);
 			}
-			while (totalWidth() > topFillWidth && left.length > 0) {
-				left.pop();
-				leftWidth = groupWidth(left, leftCapWidth, leftSepWidth);
+			while (partsWidth > topFillWidth && parts.length > 1) {
+				parts.pop();
+				partsWidth = groupWidth(parts, leftCapWidth, leftSepWidth);
 			}
 		}
 
-		const renderGroup = (parts: string[], direction: "left" | "right"): string => {
+		const renderGroup = (parts: string[]): string => {
 			if (parts.length === 0) return "";
-			const sep = direction === "left" ? separatorDef.left : separatorDef.right;
 			const cap = separatorDef.endCaps
-				? direction === "left"
-					? separatorDef.endCaps.right
-					: separatorDef.endCaps.left
+				? separatorDef.endCaps.right
 				: "";
 			const capPrefix = separatorDef.endCaps?.useBgAsFg ? bgAnsi.replace("\x1b[48;", "\x1b[38;") : bgAnsi + sepAnsi;
 			const capText = cap ? `${capPrefix}${cap}\x1b[0m` : "";
 
 			let content = bgAnsi + fgAnsi;
-			content += ` ${parts.join(` ${sepAnsi}${sep}${fgAnsi} `)} `;
+			content += ` ${parts.join(` ${sepAnsi}${separatorDef.left}${fgAnsi} `)} `;
 			content += "\x1b[0m";
 
-			if (capText) {
-				return direction === "right" ? capText + content : content + capText;
-			}
-			return content;
+			return capText ? content + capText : content;
 		};
 
-		const leftGroup = renderGroup(left, "left");
-		const rightGroup = renderGroup(right, "right");
-		if (!leftGroup && !rightGroup) return "";
+		const group = renderGroup(parts);
+		if (!group) return "";
 
-		if (topFillWidth === 0 || left.length === 0 || right.length === 0) {
-			return leftGroup + (leftGroup && rightGroup ? " " : "") + rightGroup;
+		if (topFillWidth === 0) {
+			return group;
 		}
 
-		leftWidth = groupWidth(left, leftCapWidth, leftSepWidth);
-		rightWidth = groupWidth(right, rightCapWidth, rightSepWidth);
-		const gapWidth = Math.max(1, topFillWidth - leftWidth - rightWidth);
-		const accentHex = getSessionAccentHexForTitle(
-			this.session.sessionManager?.getSessionName(),
-			this.session.sessionManager?.titleSource,
-		);
-		const gapColor = getSessionAccentAnsi(accentHex) ?? theme.getFgAnsi("border");
+		partsWidth = groupWidth(parts, leftCapWidth, leftSepWidth);
+		const gapWidth = Math.max(0, topFillWidth - partsWidth);
+		const gapColor = theme.getFgAnsi("borderMuted");
 		const gapFill = `${gapColor}${theme.boxRound.horizontal.repeat(gapWidth)}\x1b[39m`;
-		return leftGroup + gapFill + rightGroup;
+		return group + gapFill;
 	}
 
 	getTopBorder(width: number): { content: string; width: number } {

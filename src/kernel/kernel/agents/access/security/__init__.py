@@ -21,7 +21,7 @@ per-tool permission decisions live in ``CredentialStore`` /
 
 ConnectionAuthenticator currently has no user-configurable settings
 and does not bind any ConfigManager section — the listening port is
-a process-level CLI argument (``python -m kernel --port N``), not an
+a process-level Supervisor argument (``python -m kernel --port N``), not an
 auth concern, and everything else (token / password hash) lives in
 ``~/.mustang/state/`` under the kernel's runtime state dir.
 

@@ -52,6 +52,7 @@ export interface PromptResult {
 
 export interface PromptRequestOptions {
   clientTurnId?: string;
+  agentId?: string;
 }
 
 export interface ExecutionResult {
@@ -392,6 +393,7 @@ export class AcpClient {
       {
         sessionId,
         prompt: [{ type: "text", text }],
+        ...(options.agentId ? { agentId: options.agentId } : {}),
         ...(meta ? { meta, _meta: meta } : {}),
       },
       { timeoutMs: 0 }, // no timeout
@@ -416,6 +418,7 @@ export class AcpClient {
         sessionId,
         skill,
         args,
+        ...(options.agentId ? { agentId: options.agentId } : {}),
         ...(meta ? { meta, _meta: meta } : {}),
       },
       { timeoutMs: 0 },

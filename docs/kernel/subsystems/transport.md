@@ -1,14 +1,15 @@
 # Transport
 
 > **Quick header**
-> - **Role**: Access Agent WebSocket `/session` transport loop.
-> - **Current code**: `kernel.agents.access.routes.session`, `kernel.agents.access.routes.flags`, `kernel.core.protocol.*`.
+> - **Role**: Access Agent WebSocket `/session` and runtime WebSocket boundary.
+> - **Current code**: `kernel.access_router.app`, `kernel.access_router.router`, `kernel.agents.mustang.runtime.__main__`, `kernel.core.protocol.*`.
 > - **Runtime owner**: Access Agent.
-> - **Boundary**: socket accept/auth/recv/send only; protocol dispatch and session logic live below.
+> - **Boundary**: socket accept/auth/recv/send/close only; protocol dispatch and session/runtime logic live below.
 
 ## Purpose
 
-WebSocket `/session` 是用户进入 kernel 的唯一 IO 入口。按
+WebSocket `/session` 是用户进入 kernel 的主要 client IO 入口。Agent
+Runtime 进程通过 `/runtime` 注册和接收 routed runtime requests。按
 [architecture.md](../architecture.md) 的分层设计，transport 是
 这条路径上最靠外的一层：它拥有 socket 本身，但**不**解析 JSON、
 **不**派发业务逻辑、**不**认识 session 和 orchestrator。它的职责
@@ -17,11 +18,17 @@ WebSocket `/session` 是用户进入 kernel 的唯一 IO 入口。按
 1. 接受 WebSocket 连接
 2. 调 `ConnectionAuthenticator.authenticate()` 验证身份
 3. 循环 `recv → 解码 → 派发 → 编码 → send`，直到客户端断开
-4. 断开时做最小清理并关 socket
+4. 断开和 server shutdown 时做最小清理并关 socket
 
 其中"解码 / 派发 / 编码"都不是 transport 自己写的 —— transport
 只是循环的驱动者，真正的 codec 和 dispatcher 由一个
 **ProtocolStack** 提供，transport 通过 Flag 查到当前激活的 stack。
+
+Current supervised code note: the original `kernel.agents.access.routes.session`
+path is no longer the product entry.  The supervised path terminates in
+`kernel.access_router.app`.  `/session` dispatches ACP/JSON-RPC to local
+management handlers or to the Access Router route table; `/runtime` is the
+southbound WebSocket used by `kernel.agents.mustang.runtime` processes.
 
 ## Design Decisions
 
@@ -233,7 +240,9 @@ Header / Authorization 不作为 WebSocket 凭证入口 —— 不同 WS
 |------|------|----------|
 | `1000` | Normal closure | handler 正常返回 / 客户端主动断开 |
 | `1001` | Going away | kernel shutdown 时服务端断开 |
+| `1002` | Protocol error | `/runtime` registration payload invalid |
 | `1011` | Internal error | transport 层未捕获异常 |
+| `1008` | Policy violation | `/runtime` registration token invalid |
 | `4003` | Authentication failed | 凭证缺失 / 错误 / 类型不支持 |
 
 `4003` 在 RFC 6455 的 4000-4999 private-use 区间。客户端侧收到
@@ -241,6 +250,42 @@ Header / Authorization 不作为 WebSocket 凭证入口 —— 不同 WS
 类型决定下一步（token 失效 → 重读文件 / password 错 → 让用户
 重新输入）。其他私有 code（4xxx）kernel **不**使用，以免和
 未来扩展语义撞车。
+
+`/runtime` 是 Agent Runtime 的 southbound registration edge。注册错误
+必须作为结构化 ACP/JSON-RPC 风格响应写回 socket，然后再用标准 WebSocket
+close code 关闭：
+
+- bad runtime auth token → `{ok:false,error:"unauthorized"}` + close `1008`
+- malformed registration → `{ok:false,error:"invalid_runtime_registration"}` +
+  close `1002`
+- 正常 server shutdown / peer disconnect → 不打印 traceback，不把
+  `ConnectionClosedOK` 当异常事故处理
+
+## Shutdown Discipline
+
+The Access Router owns short-lived dispatch/reader tasks for both `/session`
+and `/runtime`.  These tasks must be cancelled in `finally`, not only in the
+`WebSocketDisconnect` path, because Ctrl-C and Uvicorn shutdown can cancel the
+ASGI handler before the peer sends a normal close frame.
+
+The Supervisor shutdown order is:
+
+```text
+kernel.agent_hub          # stops primary/session Agent runtimes first
+kernel.access_router      # closes client/runtime edges after runtimes disconnect
+```
+
+This order is part of the transport contract.  Access Router must not be the
+first process killed while Agent runtimes still own live `/runtime`
+connections.
+
+The handler cleanup rule is stricter than "handle WebSocketDisconnect":
+
+- `/session` cancels dispatch tasks in `finally`
+- `/runtime` closes the registered runtime client and cancels its reader task
+  in `finally`
+- WebBridge extension close `1000/1001` is normal and should not emit a
+  traceback
 
 ## Heartbeat
 
@@ -317,13 +362,16 @@ class TransportFlags(BaseModel):
 注册由 lifespan 直接做（transport 不是 Subsystem）：
 
 ```python
-# kernel/agents/access/app.py
+# kernel/agents/access/app.py and kernel/agents/mustang/runtime/session_service.py
 flags.register("transport", TransportFlags)
 ```
 
+This remains a compatibility registration for the ACP stack used by the
+runtime/session service.  The supervised product edge itself is
+`kernel.access_router.app`, not the legacy `kernel.agents.access.app` process.
 用户在 `flags.yaml` 写了未知的 stack 名字 → pydantic 在 `register`
-时 `ValidationError` → lifespan 把它当作 bootstrap 失败，kernel
-直接挂掉。不需要 transport 代码里写运行时兜底分支。
+时 `ValidationError` → bootstrap 失败。不需要 transport 代码里写运行时
+兜底分支。
 
 ## Related
 

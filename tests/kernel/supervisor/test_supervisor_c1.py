@@ -265,6 +265,25 @@ def test_stop_terminates_running_children_and_writes_stopped_file(tmp_path: Path
     assert payload["stopped"] is True
 
 
+def test_stop_terminates_hub_before_access_router(tmp_path: Path) -> None:
+    runtime = SupervisorRuntime(
+        SupervisorConfig(
+            access_port=8331,
+            state_dir=tmp_path / "state",
+            workspace=tmp_path,
+        )
+    )
+    order: list[str] = []
+    runtime.children = {
+        "hub": _Proc(pid=1, name="hub", terminate_order=order),
+        "access_router": _Proc(pid=2, name="access_router", terminate_order=order),
+    }
+
+    runtime.stop()
+
+    assert order == ["hub", "access_router"]
+
+
 def test_stop_kills_child_that_does_not_exit_before_deadline(tmp_path: Path) -> None:
     runtime = SupervisorRuntime(
         SupervisorConfig(
@@ -477,10 +496,14 @@ class _Proc:
         pid: int,
         returncode: int | None = None,
         wait_raises_once: bool = False,
+        name: str | None = None,
+        terminate_order: list[str] | None = None,
     ) -> None:
         self.pid = pid
         self.returncode = returncode
         self.wait_raises_once = wait_raises_once
+        self.name = name
+        self.terminate_order = terminate_order
         self.terminated = False
         self.killed = False
 
@@ -489,6 +512,8 @@ class _Proc:
 
     def terminate(self) -> None:
         self.terminated = True
+        if self.name is not None and self.terminate_order is not None:
+            self.terminate_order.append(self.name)
 
     def kill(self) -> None:
         self.killed = True

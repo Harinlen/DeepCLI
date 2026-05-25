@@ -118,15 +118,16 @@ _BUILTIN_COMMANDS: list[CommandDef] = [
         subcommands=["list", "audit", "rename", "delete"],
     ),
     CommandDef(
-        name="agents",
-        description="Manage durable agents, bindings, lifecycle, and grants",
-        usage="/agents [list | add | delete | set-identity | bindings | bind | unbind | start | stop | restart | health | grants | grant | revoke-grant]",
+        name="agent",
+        description="Manage durable agents, messaging, bindings, lifecycle, and grants",
+        usage="/agent [list | add | delete | set-identity | send | bindings | bind | unbind | start | stop | restart | health | grants | grant | revoke-grant]",
         acp_method=MustangMethod.AGENTS_LIST,
         subcommands=[
             "list",
             "add",
             "delete",
             "set-identity",
+            "send",
             "bindings",
             "bind",
             "unbind",
@@ -138,13 +139,6 @@ _BUILTIN_COMMANDS: list[CommandDef] = [
             "grant",
             "revoke-grant",
         ],
-    ),
-    CommandDef(
-        name="agent",
-        description="Send a message to a routed durable agent",
-        usage="/agent send <agent-id> <message>",
-        acp_method=MustangMethod.AGENT_SEND,
-        subcommands=["send"],
     ),
     CommandDef(
         name="gateways",

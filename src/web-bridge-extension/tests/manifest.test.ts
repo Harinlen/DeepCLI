@@ -12,7 +12,14 @@ describe("Chrome MV3 package", () => {
     expect(manifest.version).toBe(packageJson.version);
     expect(manifest.background.service_worker).toBe("background.js");
     expect(manifest.action.default_popup).toBe("popup.html");
+    expect(manifest.permissions).toContain("alarms");
     expect(manifest.host_permissions).toContain("ws://127.0.0.1/*");
     expect(manifest.host_permissions).toContain("http://*/*");
+  });
+
+  test("uses an alarm-backed reconnect loop", () => {
+    const background = readFileSync(join(root, "dist", "chrome", "background.js"), "utf8");
+    expect(background).toContain("chrome.alarms.onAlarm");
+    expect(background).toContain("recoverPairingAndReconnect");
   });
 });

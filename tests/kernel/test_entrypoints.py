@@ -25,20 +25,23 @@ def test_kernel_main_version_prints_and_returns(
 
 def test_kernel_main_runs_uvicorn_and_sets_dev(monkeypatch: pytest.MonkeyPatch) -> None:
     from kernel import __main__ as kernel_main
-    from kernel.uvicorn_runtime import uvicorn_loop
 
-    run = MagicMock()
+    runtime = MagicMock()
+    runtime_cls = MagicMock(return_value=runtime)
+    install = MagicMock()
+    monkeypatch.setattr(kernel_main, "SupervisorRuntime", runtime_cls)
+    monkeypatch.setattr(kernel_main, "install_signal_handlers", install)
     monkeypatch.setattr(sys, "argv", ["python -m kernel", "--port", "9999", "--dev"])
-    monkeypatch.setitem(sys.modules, "uvicorn", MagicMock(run=run))
-    monkeypatch.delenv("_MUSTANG_DEV", raising=False)
 
     kernel_main.main()
 
-    assert run.call_args.kwargs["port"] == 9999
-    assert run.call_args.kwargs["log_level"] == "info"
-    assert run.call_args.kwargs["loop"] == uvicorn_loop()
-    assert run.call_args.kwargs["factory"] is True
-    assert run.call_args.kwargs["ws_ping_interval"] == 20.0
+    config = runtime_cls.call_args.args[0]
+    assert config.access_port == 9999
+    assert config.dev is True
+    install.assert_called_once_with(runtime)
+    runtime.start.assert_called_once_with()
+    runtime.wait.assert_called_once_with()
+    runtime.stop.assert_called_once_with()
 
 
 def test_access_agent_main_sets_router_or_compat_env(monkeypatch: pytest.MonkeyPatch) -> None:

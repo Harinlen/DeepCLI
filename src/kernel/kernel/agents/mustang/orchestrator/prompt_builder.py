@@ -38,11 +38,15 @@ import logging
 import os
 import platform
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from kernel.agents.mustang.llm.config import ModelRef
 from kernel.agents.mustang.llm.types import PromptSection
 from kernel.agents.mustang.orchestrator.runtime import system_reminder_section
 from kernel.agents.mustang.orchestrator.types import OrchestratorDeps
+
+if TYPE_CHECKING:
+    from kernel.agents.mustang.sessions.context import AgentContext
 
 logger = logging.getLogger(__name__)
 
@@ -80,15 +84,18 @@ class PromptBuilder:
         self,
         session_id: str,
         deps: OrchestratorDeps,
+        agent_context: AgentContext | None = None,
     ) -> None:
         """Create a prompt builder.
 
         Args:
             session_id: Session id used for subsystem context and logging.
             deps: Orchestrator dependency bundle.
+            agent_context: Durable Agent runtime identity and resource scopes.
         """
         self._session_id = session_id
         self._deps = deps
+        self._agent_context = agent_context
 
     async def build(
         self,
@@ -245,7 +252,11 @@ class PromptBuilder:
         #     CC puts ``# Environment`` last for the same reason.
         sections.append(
             PromptSection(
-                text=self._build_env_context(effective_cwd, model=model),
+                text=self._build_env_context(
+                    effective_cwd,
+                    model=model,
+                    agent_context=self._agent_context,
+                ),
                 cache=False,
             )
         )
@@ -259,12 +270,18 @@ class PromptBuilder:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_env_context(cwd: Path, *, model: ModelRef | None = None) -> str:
+    def _build_env_context(
+        cwd: Path,
+        *,
+        model: ModelRef | None = None,
+        agent_context: AgentContext | None = None,
+    ) -> str:
         """Return an environment summary matching CC's ``computeSimpleEnvInfo()``.
 
         Args:
             cwd: Effective working directory for the session.
             model: Optional active model reference for the environment footer.
+            agent_context: Durable Agent runtime identity and resource scopes.
 
         Returns:
             Rendered ``# Environment`` section text.
@@ -309,6 +326,7 @@ class PromptBuilder:
         lines = [
             "# Environment",
             "You have been invoked in the following environment: ",
+            *PromptBuilder._build_agent_runtime_lines(agent_context),
             f" - Primary working directory: {cwd}",
             f"  - Is a git repository: {is_git}",
             f" - Platform: {platform.system().lower()}",
@@ -320,3 +338,60 @@ class PromptBuilder:
             lines.append(f" - You are powered by the model {model.model}.")
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _build_agent_runtime_lines(agent_context: AgentContext | None) -> list[str]:
+        """Return durable-Agent identity lines for the runtime prompt."""
+
+        if agent_context is None:
+            return []
+        lines = [
+            f" - Agent ID: {agent_context.agent_id}",
+            f" - Agent name: {agent_context.name or agent_context.agent_id}",
+            f" - Agent workspace: {agent_context.workspace}",
+            f" - Agent state directory: {agent_context.state_dir}",
+            f" - Agent bus identity: agent:{agent_context.agent_id}",
+            " - Agent resource scopes: "
+            f"memory={','.join(agent_context.memory_scopes)}; "
+            f"skills={','.join(agent_context.skill_scopes)}; "
+            f"mcp={','.join(agent_context.mcp_scopes)}",
+        ]
+        identity = _format_prompt_mapping(agent_context.identity)
+        if identity:
+            lines.append(f" - Agent identity: {identity}")
+        if agent_context.model_profile:
+            lines.append(f" - Agent model profile: {agent_context.model_profile}")
+        if agent_context.prompt_profile:
+            lines.append(f" - Agent prompt profile: {agent_context.prompt_profile}")
+        if agent_context.tool_policy:
+            lines.append(f" - Agent tool policy: {agent_context.tool_policy}")
+        if agent_context.hook_profile:
+            lines.append(f" - Agent hook profile: {agent_context.hook_profile}")
+        return lines
+
+
+_SENSITIVE_IDENTITY_KEYS = ("secret", "token", "password", "key", "credential")
+
+
+def _format_prompt_mapping(values: dict[str, Any]) -> str:
+    """Format non-sensitive scalar identity fields for prompt injection."""
+
+    parts: list[str] = []
+    for key in sorted(values):
+        lowered = key.lower()
+        if any(marker in lowered for marker in _SENSITIVE_IDENTITY_KEYS):
+            continue
+        value = values[key]
+        if isinstance(value, str):
+            text = value.strip()
+        elif isinstance(value, (int, float, bool)):
+            text = str(value)
+        else:
+            continue
+        if not text:
+            continue
+        text = text.replace("\n", " ").replace("\r", " ")
+        if len(text) > 160:
+            text = f"{text[:157]}..."
+        parts.append(f"{key}={text}")
+    return "; ".join(parts)

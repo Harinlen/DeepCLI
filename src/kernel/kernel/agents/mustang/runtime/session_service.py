@@ -12,8 +12,10 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from kernel.access_router.schemas import DeliverTurnRequest
 from kernel.agents.mustang.runtime.websocket_runtime import RuntimeClientPeer
 from kernel.agents.mustang.commands import CommandManager
+from kernel.agents.mustang.orchestrator.permissions import PermissionResponse
 from kernel.core.config import ConfigManager
 from kernel.agents.access.security import AuthContext
 from kernel.core.flags import FlagManager, KernelFlags
@@ -44,6 +46,7 @@ from kernel.core.protocol.acp.schemas.session import (
 )
 from kernel.core.protocol.interfaces.contracts.connection_context import ConnectionContext
 from kernel.core.protocol.interfaces.contracts.handler_context import HandlerContext
+from kernel.core.protocol.interfaces.errors import ResourceNotFoundError
 from kernel.core.protocol.flags import ProtocolFlags
 from kernel.agents.access.routes.flags import TransportFlags
 from kernel.core.secrets import SecretManager
@@ -124,11 +127,15 @@ class AgentSessionRuntimeService:
         self,
         *,
         agent_id: str,
+        agent_name: str | None = None,
+        agent_identity: dict[str, Any] | None = None,
         state_dir: Path,
         workspace: Path,
         resource_home: Path | None = None,
     ) -> None:
         self.agent_id = agent_id
+        self.agent_name = agent_name
+        self.agent_identity = dict(agent_identity or {})
         self.state_dir = state_dir
         self.workspace = workspace
         self.resource_home = resource_home if resource_home is not None else user_home()
@@ -178,6 +185,8 @@ class AgentSessionRuntimeService:
             workspace=self.workspace,
             state_dir=self.state_dir,
             session_store_path=self.state_dir / "sessions" / "sessions.db",
+            name=self.agent_name,
+            identity=self.agent_identity,
         )
         session = SessionManager(module_table, agent_context=context)  # type: ignore[abstract]
         session._lifecycle_name = "session"
@@ -258,6 +267,32 @@ class AgentSessionRuntimeService:
                 if method == "session/update"
             ],
         }
+
+    async def deliver_turn(self, params: DeliverTurnRequest) -> dict[str, Any]:
+        manager = self._manager()
+
+        async def _reject_permission(_request: Any) -> PermissionResponse:
+            return PermissionResponse(decision="reject")
+
+        try:
+            text = await manager.run_turn_for_gateway(
+                params.session_id,
+                params.prompt,
+                _reject_permission,
+            )
+        except ResourceNotFoundError:
+            await manager._create_session(  # noqa: SLF001 - runtime bridge owns session bootstrap.
+                session_id=params.session_id,
+                cwd=self.workspace,
+                git_branch=None,
+                mcp_servers=[],
+            )
+            text = await manager.run_turn_for_gateway(
+                params.session_id,
+                params.prompt,
+                _reject_permission,
+            )
+        return {"ok": True, "text": text, "stopReason": "end_turn"}
 
     async def activate_skill(
         self,
@@ -349,13 +384,14 @@ class AgentSessionRuntimeService:
         self._connections[params.session_id] = (ctx.conn, sender)
         return result.model_dump(by_alias=True)
 
-    async def cancel(self, params: CancelNotification) -> None:
+    async def cancel(self, params: CancelNotification) -> dict[str, Any]:
         manager = self._manager()
         conn, sender = self._connection_for(params.session_id)
         await manager.cancel(
             HandlerContext(conn=conn, sender=sender, request_id=None),
             _to_contract_cancel(params),
         )
+        return {"ok": True}
 
     async def execute_shell(self, params: ExecuteShellRequest) -> dict[str, Any]:
         manager = self._manager()

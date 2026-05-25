@@ -37,6 +37,7 @@ def test_agent_commands_mutate_definitions_identity_bindings_and_grants(tmp_path
         revoked = commands.revoke_grant(str(grant["grant_id"]))
 
         assert created["agent_id"] == "worker"
+        assert created["runtime"]["autostart"] is True
         assert any(row["agent_id"] == "worker" for row in listed["agents"])
         assert identity["name"] == "Worker 2"
         identity_payload = cast(dict[str, object], identity["identity"])

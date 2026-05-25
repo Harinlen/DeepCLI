@@ -83,12 +83,16 @@ const SECRETS_ACTIONS: Item[] = [
 	{ value: "delete", label: "delete", description: "Delete a secret with confirmation" },
 ];
 
-const AGENTS_ACTIONS: Item[] = [
+const AGENT_ACTIONS: Item[] = [
 	{ value: "list", label: "list", description: "List durable agents" },
 	{ value: "read", label: "read", description: "Read one durable agent" },
 	{ value: "create", label: "create", description: "Create a durable agent" },
 	{ value: "add", label: "add", description: "Create a durable agent" },
 	{ value: "set-identity", label: "set-identity", description: "Update an agent identity" },
+	{ value: "use", label: "use", description: "Route this CLI session to an agent" },
+	{ value: "current", label: "current", description: "Show this CLI session's agent target" },
+	{ value: "clear-use", label: "clear-use", description: "Restore this CLI session to main" },
+	{ value: "send", label: "send", description: "Send a message through Access Router" },
 	{ value: "delete", label: "delete", description: "Delete a durable agent" },
 	{ value: "bindings", label: "bindings", description: "List agent bindings" },
 	{ value: "bind", label: "bind", description: "Bind an agent to a gateway channel" },
@@ -100,10 +104,6 @@ const AGENTS_ACTIONS: Item[] = [
 	{ value: "grants", label: "grants", description: "List management grants" },
 	{ value: "grant", label: "grant", description: "Grant a capability" },
 	{ value: "revoke-grant", label: "revoke-grant", description: "Revoke a grant" },
-];
-
-const AGENT_ACTIONS: Item[] = [
-	{ value: "send", label: "send", description: "Send a message through Access Router" },
 ];
 
 const GATEWAYS_ACTIONS: Item[] = [
@@ -158,8 +158,7 @@ export const BUILTIN_SLASH_COMMANDS: SlashCommand[] = [
 	{ name: "cost", description: "Show usage and cost" },
 	{ name: "cron", description: "Manage scheduled cron jobs", getArgumentCompletions: completeCronArguments },
 	{ name: "exit", description: "Exit DeepCLI" },
-	{ name: "agent", description: "Send a message to a durable agent", getArgumentCompletions: completeAgentArguments },
-	{ name: "agents", description: "Manage durable agents", getArgumentCompletions: completeAgentsArguments },
+	{ name: "agent", description: "Manage durable agents", getArgumentCompletions: completeAgentArguments },
 	{ name: "help", description: "Show available commands" },
 	{ name: "flag", description: "Read or stage startup flags", getArgumentCompletions: completeFlagArguments },
 	{ name: "gateways", description: "Manage Access Router gateways", getArgumentCompletions: completeGatewaysArguments },
@@ -248,12 +247,6 @@ function completeSecretsArguments(argumentPrefix: string): Item[] | null {
 	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
 	if (argumentPrefix.includes(" ")) return null;
 	return filterCompletions(subcommand, SECRETS_ACTIONS);
-}
-
-function completeAgentsArguments(argumentPrefix: string): Item[] | null {
-	const [subcommand = ""] = argumentPrefix.split(/\s+/, 1);
-	if (argumentPrefix.includes(" ")) return null;
-	return filterCompletions(subcommand, AGENTS_ACTIONS);
 }
 
 function completeAgentArguments(argumentPrefix: string): Item[] | null {

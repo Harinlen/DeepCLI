@@ -10,6 +10,7 @@ from __future__ import annotations
 import orjson
 import sqlalchemy as sa
 import shutil
+import time
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -123,6 +124,26 @@ class AgentManager:
             for row in rows
         )
 
+    def list_active_definitions(self) -> tuple[AgentDefinitionRecord, ...]:
+        """Return active durable Agent definitions."""
+        rows = self._require_store().read_tx(
+            lambda conn: conn.execute(
+                sa.select(tables.agent_definitions)
+                .where(tables.agent_definitions.c.deleted_at.is_(None))
+                .order_by(tables.agent_definitions.c.agent_id)
+            ).fetchall()
+        )
+        return tuple(_definition_from_row(row) for row in rows)
+
+    def bootstrap_runtime_agent_ids(self) -> tuple[str, ...]:
+        """Return agents that should be restarted during Agent Hub startup."""
+        desired_running = self._desired_running_agent_ids()
+        return tuple(
+            definition.agent_id
+            for definition in self.list_active_definitions()
+            if definition.runtime.autostart or definition.agent_id in desired_running
+        )
+
     def get(self, agent_id: str) -> AgentDefinitionRecord | None:
         """Return one Agent definition, including deleted rows."""
         row = self._require_store().read_tx(
@@ -154,13 +175,32 @@ class AgentManager:
 
         def _write(conn: Any) -> AgentDefinitionRecord:
             existing = conn.execute(
-                sa.select(tables.agent_definitions.c.agent_id).where(
+                sa.select(
+                    tables.agent_definitions.c.agent_id,
+                    tables.agent_definitions.c.deleted_at,
+                    tables.agent_definitions.c.revision,
+                ).where(
                     tables.agent_definitions.c.agent_id == spec.agent_id
                 )
             ).fetchone()
-            if existing is not None:
+            if existing is not None and existing["deleted_at"] is None:
                 raise ValueError(f"AgentDefinition already exists: {spec.agent_id}")
-            conn.execute(tables.agent_definitions.insert().values(**payload))
+            state_dir_conflict = conn.execute(
+                sa.select(tables.agent_definitions.c.agent_id).where(
+                    tables.agent_definitions.c.state_dir == str(spec.state_dir),
+                    tables.agent_definitions.c.deleted_at.is_(None),
+                )
+            ).fetchone()
+            if state_dir_conflict is not None:
+                raise ValueError(f"Agent state_dir already in use: {spec.state_dir}")
+            if existing is None:
+                conn.execute(tables.agent_definitions.insert().values(**payload))
+            else:
+                conn.execute(
+                    tables.agent_definitions.update()
+                    .where(tables.agent_definitions.c.agent_id == spec.agent_id)
+                    .values(**{**payload, "revision": int(existing["revision"]) + 1})
+                )
             _bump_directory_revision(conn)
             row = conn.execute(
                 sa.select(tables.agent_definitions).where(
@@ -169,7 +209,9 @@ class AgentManager:
             ).fetchone()
             return _definition_from_row(row)
 
-        return self._require_store().write_tx(_write)
+        record = self._require_store().write_tx(_write)
+        self._bootstrap_agent_resources(record)
+        return record
 
     def update(
         self,
@@ -342,6 +384,7 @@ class AgentManager:
         actor_agent_id: str,
         router_endpoint: str,
         router_token: str,
+        wait_for_route: bool = True,
     ) -> RuntimeStatus:
         """Spawn one Agent Runtime from its durable definition."""
         definition = self._require_active(agent_id)
@@ -354,7 +397,11 @@ class AgentManager:
             )
             process = spawn_runtime(launch)
             self._processes[agent_id] = process
-        route_health = self._route_health(agent_id)
+        route_health = (
+            self._wait_for_route_health(agent_id, process)
+            if wait_for_route
+            else self._route_health(agent_id)
+        )
         route_status = route_health["status"]
         self._write_runtime_status(
             agent_id,
@@ -377,6 +424,29 @@ class AgentManager:
             and route_status == "registered"
             and route_health["fresh"] is not False,
         )
+
+    def _desired_running_agent_ids(self) -> set[str]:
+        rows = self._require_store().read_tx(
+            lambda conn: conn.execute(
+                sa.select(tables.agent_runtime_status.c.agent_id).where(
+                    tables.agent_runtime_status.c.desired_state == "running"
+                )
+            ).fetchall()
+        )
+        return {str(row["agent_id"]) for row in rows}
+
+    def _wait_for_route_health(self, agent_id: str, process: Any) -> dict[str, Any]:
+        """Wait briefly for a freshly spawned Agent Runtime to register."""
+        deadline = time.monotonic() + 25.0
+        route_health = self._route_health(agent_id)
+        while (
+            route_health["status"] != "registered"
+            and process.poll() is None
+            and time.monotonic() < deadline
+        ):
+            time.sleep(0.1)
+            route_health = self._route_health(agent_id)
+        return route_health
 
     def stop(
         self,
@@ -646,6 +716,40 @@ class AgentManager:
         if self._store is None:
             raise RuntimeError("AgentManager has not started")
         return self._store
+
+    def _bootstrap_agent_resources(self, record: AgentDefinitionRecord) -> None:
+        """Create per-agent resource roots and non-destructive prompt templates."""
+        workspace = Path(record.workspace)
+        state_dir = Path(record.state_dir)
+        sessions_dir = state_dir / "sessions"
+        for path in (workspace, state_dir, sessions_dir):
+            path.mkdir(parents=True, exist_ok=True)
+        if record.agent_id == "primary":
+            return
+        template_values = {
+            "AGENTS.md": (
+                "# Agent Workspace\n\n"
+                f"Agent: {record.name} (`{record.agent_id}`)\n\n"
+                "This workspace belongs to one DeepCLI/Mustang agent. Read "
+                "`SOUL.md`, `USER.md`, `TOOLS.md`, and `MEMORY.md` when they "
+                "exist before taking long-running action.\n"
+            ),
+            "SOUL.md": f"# {record.name} Soul\n\nDescribe this agent's persona and boundaries here.\n",
+            "IDENTITY.md": f"# {record.name}\n\nagentId: {record.agent_id}\n",
+            "USER.md": "# User\n\nUser preferences and stable notes for this agent.\n",
+            "TOOLS.md": "# Tools\n\nLocal tool and platform notes for this agent.\n",
+            "HEARTBEAT.md": "# Heartbeat\n\nProactive recurring tasks for this agent.\n",
+            "BOOTSTRAP.md": (
+                "# Bootstrap\n\n"
+                "On first meaningful run, confirm this agent's identity, user context, "
+                "and tool notes, then update the workspace files.\n"
+            ),
+            "MEMORY.md": "# Memory\n\nCurated long-term memory for direct sessions.\n",
+        }
+        for name, content in template_values.items():
+            path = workspace / name
+            if not path.exists():
+                path.write_text(content, encoding="utf-8")
 
     def _directory_revision(self) -> int:
         row = self._require_store().read_tx(

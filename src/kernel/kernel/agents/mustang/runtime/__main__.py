@@ -14,7 +14,11 @@ from kernel.agent_hub import request_hub
 from kernel.agents.mustang.runtime import MinimalAgentRuntimeServer
 from kernel.agents.mustang.runtime.websocket_runtime import RuntimeClientPeer
 from kernel.agents.mustang.runtime.session_service import AgentSessionRuntimeService
-from kernel.access_router.schemas import RuntimeAcpRequest, RuntimeRegisterRequest
+from kernel.access_router.schemas import (
+    DeliverTurnRequest,
+    RuntimeAcpRequest,
+    RuntimeRegisterRequest,
+)
 from kernel.agent_hub.contracts import (
     AgentRegistrationRequest,
     AgentRuntimeKind,
@@ -42,6 +46,8 @@ from kernel.core.protocol.acp.schemas.session import (
 async def _amain() -> None:
     parser = argparse.ArgumentParser(description="Mustang Agent Runtime")
     parser.add_argument("--agent-id", default="primary")
+    parser.add_argument("--agent-name")
+    parser.add_argument("--agent-identity-json")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--hub-endpoint")
@@ -61,9 +67,15 @@ async def _amain() -> None:
     if args.supervisor_control_token:
         os.environ["MUSTANG_SUPERVISOR_CONTROL_TOKEN"] = args.supervisor_control_token
     os.environ["MUSTANG_AGENT_ID"] = args.agent_id
+    if args.hub_endpoint:
+        os.environ["MUSTANG_AGENT_HUB_ENDPOINT"] = args.hub_endpoint
+    if args.access_router_endpoint:
+        os.environ["MUSTANG_ACCESS_ROUTER_ENDPOINT"] = args.access_router_endpoint
 
     session_service = AgentSessionRuntimeService(
         agent_id=args.agent_id,
+        agent_name=args.agent_name,
+        agent_identity=_parse_agent_identity(args.agent_identity_json),
         state_dir=Path(args.state_dir),
         workspace=Path(args.workspace),
         resource_home=Path(args.resource_home) if args.resource_home else None,
@@ -305,7 +317,10 @@ async def _run_access_router_client(
                 async def _dispatch_one(request: dict[str, Any]) -> None:
                     request_id = request.get("id")
                     try:
-                        if request.get("method") == "_mustang.runtime/request":
+                        if request.get("method") == "_mustang.runtime/deliver_turn":
+                            turn = DeliverTurnRequest.model_validate(request.get("params", {}))
+                            result = await session_service.deliver_turn(turn)
+                        elif request.get("method") == "_mustang.runtime/request":
                             acp = RuntimeAcpRequest.model_validate(request.get("params", {}))
                             result = await _deliver_router_acp(acp, session_service, peer)
                         else:
@@ -426,6 +441,8 @@ async def _deliver_router_acp(
         )
     if method == "session/close":
         return await session_service.close_session(CloseSessionRequest.model_validate(params))
+    if method == "session/cancel":
+        return await session_service.cancel(CancelNotification.model_validate(params))
     if method == "session/prompt":
         if peer is None:
             raise RuntimeError("runtime peer is required for session/prompt")
@@ -657,6 +674,16 @@ def _prompt_text(prompt: object) -> str:
         if isinstance(block, dict) and block.get("type") == "text":
             parts.append(str(block.get("text", "")))
     return "".join(parts)
+
+
+def _parse_agent_identity(raw: str | None) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def main() -> None:

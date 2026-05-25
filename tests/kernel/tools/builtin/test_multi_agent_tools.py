@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 
-from kernel.agent_hub import AgentHub, AgentHubManager
-from kernel.agent_hub.contracts import default_primary_agent_definition
 from kernel.agents.mustang.tasks.registry import TaskRegistry
 from kernel.agents.mustang.tasks.types import AgentTaskState, TaskStatus
 from kernel.agents.mustang.tools.builtin.multi_agent import (
+    AgentDirectoryTool,
+    AgentMessageTool,
+    AgentSessionTool,
     AgentsListTool,
     SessionsSendTool,
     SubagentsTool,
@@ -33,6 +32,7 @@ def _ctx(tmp_path: Path, **overrides: object) -> ToolContext:
         module_table=overrides.get("module_table"),
         route_agent_message=overrides.get("route_agent_message"),  # type: ignore[arg-type]
         deliver_cross_session=overrides.get("deliver_cross_session"),  # type: ignore[arg-type]
+        agent_network_request=overrides.get("agent_network_request"),  # type: ignore[arg-type]
     )
 
 
@@ -47,47 +47,86 @@ async def _collect(tool: object, input: dict[str, object], ctx: ToolContext) -> 
 
 @pytest.mark.asyncio
 async def test_agents_list_reads_agent_hub_manager(tmp_path: Path) -> None:
-    hub = AgentHub(
-        manager=AgentHubManager(
-            [default_primary_agent_definition(home=tmp_path, workspace=str(tmp_path))]
-        )
-    )
-    ctx = _ctx(tmp_path, module_table=SimpleNamespace(agent_hub=hub))
+    async def request(action: str, payload: dict[str, object]) -> dict[str, object]:
+        assert action == "directory"
+        return {"available": True, "agents": [{"agentId": "primary", "name": "Primary", "canSend": True}]}
 
-    result = await _collect(AgentsListTool(), {}, ctx)
+    ctx = _ctx(tmp_path, agent_network_request=request)
+
+    result = await _collect(AgentDirectoryTool(), {}, ctx)
 
     assert result.data["available"] is True
-    assert result.data["agents"][0]["id"] == "primary"
+    assert result.data["agents"][0]["agentId"] == "primary"
 
 
 @pytest.mark.asyncio
 async def test_sessions_send_routes_durable_agent(tmp_path: Path) -> None:
-    route = MagicMock(return_value=True)
-    ctx = _ctx(tmp_path, route_agent_message=route)
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    async def request(action: str, payload: dict[str, object]) -> dict[str, object]:
+        calls.append((action, payload))
+        return {"success": True, "route": "access_router"}
+
+    ctx = _ctx(tmp_path, agent_network_request=request)
 
     result = await _collect(
-        SessionsSendTool(),
-        {"target_agent_id": "research", "message": "hello"},
+        AgentMessageTool(),
+        {"agentId": "research", "message": "hello"},
         ctx,
     )
 
     assert result.data["success"] is True
-    route.assert_called_once_with("research", "hello")
+    assert calls == [
+        (
+            "message",
+            {
+                "agentId": "research",
+                "message": "hello",
+                "wait": False,
+                "timeoutSeconds": None,
+                "announce": False,
+                "replyBack": False,
+            },
+        )
+    ]
 
 
 @pytest.mark.asyncio
-async def test_sessions_send_delivers_cross_session(tmp_path: Path) -> None:
-    deliver = MagicMock(return_value=True)
-    ctx = _ctx(tmp_path, deliver_cross_session=deliver)
+async def test_agent_session_runtime_acp_is_typed_unsupported(tmp_path: Path) -> None:
+    async def request(action: str, payload: dict[str, object]) -> dict[str, object]:
+        assert action == "session"
+        return {"success": False, "runtime": payload["runtime"], "unsupported": True, "error": "unsupported"}
+
+    ctx = _ctx(tmp_path, agent_network_request=request)
 
     result = await _collect(
-        SessionsSendTool(),
-        {"target_session_id": "session-1", "message": "hello"},
+        AgentSessionTool(),
+        {"runtime": "acp", "action": "spawn", "task": "go"},
         ctx,
     )
 
-    assert result.data["success"] is True
-    deliver.assert_called_once_with("session-1", "hello")
+    assert result.data["success"] is False
+    assert result.data["unsupported"] is True
+
+
+@pytest.mark.asyncio
+async def test_deprecated_alias_classes_use_agent_network(tmp_path: Path) -> None:
+    async def request(action: str, payload: dict[str, object]) -> dict[str, object]:
+        if action == "directory":
+            return {"available": True, "agents": [{"agentId": "primary"}]}
+        return {"success": True, "route": "access_router"}
+
+    ctx = _ctx(tmp_path, agent_network_request=request)
+
+    listed = await _collect(AgentsListTool(), {}, ctx)
+    sent = await _collect(
+        SessionsSendTool(),
+        {"target_agent_id": "primary", "message": "hello"},
+        ctx,
+    )
+
+    assert listed.data["agents"][0]["agentId"] == "primary"
+    assert sent.data["success"] is True
 
 
 @pytest.mark.asyncio

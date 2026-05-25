@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import builtins
+import os
 from pathlib import Path
 from typing import Any
 
 from kernel.access_router.repository import AccessRouterRepository
 from kernel.agent_hub.manager.manager import AgentManager
 from kernel.agent_hub.manager.schemas import (
+    AgentRuntimeSpec,
     CreateAgentSpec,
     GrantCapability,
     ResourceScope,
@@ -18,7 +20,7 @@ from kernel.access_router.schemas import DeliverTurnRequest
 
 
 class AgentCommandService:
-    """Implements `/agents` and `/agent send` command semantics."""
+    """Implements `/agent` command semantics, including routed sends."""
 
     def __init__(
         self,
@@ -52,6 +54,7 @@ class AgentCommandService:
                 name=name or agent_id,
                 workspace=workspace,
                 state_dir=state_dir or self._manager.home / "agents" / agent_id,
+                runtime=AgentRuntimeSpec(autostart=True),
             ),
             actor_agent_id=actor_agent_id,
         )
@@ -151,6 +154,10 @@ class AgentCommandService:
         return self._manager.health(agent_id).model_dump()
 
     def start(self, agent_id: str, *, router_endpoint: str, router_token: str) -> dict[str, object]:
+        router_endpoint = router_endpoint or os.environ.get("MUSTANG_ACCESS_ROUTER_ENDPOINT", "")
+        router_token = router_token or getattr(self._router, "auth_token", "")
+        if not router_endpoint or not router_token:
+            raise RuntimeError("access router endpoint/token is unavailable")
         return self._manager.start(
             agent_id,
             actor_agent_id="primary",

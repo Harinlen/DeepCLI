@@ -10,7 +10,7 @@
 
 常用入口：
 
-- [architecture.md](architecture.md) — 当前 Supervisor / Hub / Access / Primary Runtime 拓扑和 Primary 内部 subsystem 启动顺序
+- [architecture.md](architecture.md) — 当前 Supervisor / AgentRuntimeHost / AccessAgent / KernelBus migration slice / GlobalResourceHost slice / durable Agent Runtime 拓扑和 Mustang runtime subsystem 启动顺序
 - [history.md](history.md) — 已落地 kernel milestone 摘要
 - [history/plans/](history/plans/) — 已完成 Kernel 计划索引；计划本体按 owner 归到 architecture / interfaces / subsystems / testing
 - [subsystems/](subsystems/) — 各子系统当前设计事实

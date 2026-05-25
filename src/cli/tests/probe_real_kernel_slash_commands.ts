@@ -41,6 +41,7 @@ try {
 	const rendered: string[] = [];
 	const statuses: string[] = [];
 	const returnedPrompts: string[] = [];
+	const managementCommands: string[] = [];
 	const ctx = {
 		session: sessionFacade,
 		showError: (message: string) => errors.push(message),
@@ -91,6 +92,9 @@ try {
 	for (const command of commands) {
 		const result = await executeBuiltinSlashCommand(command, { ctx });
 		if (typeof result === "string") returnedPrompts.push(result);
+		if (command.startsWith("/agent ") || command.startsWith("/gateways ")) {
+			managementCommands.push(command);
+		}
 	}
 
 	assert(errors.length === 0, `real slash commands should not render errors: ${errors.join("\n")}`);
@@ -116,6 +120,11 @@ try {
 	console.log("skills_management_via_real_acp=true");
 	console.log(`skill_commands_via_real_cli_print=${skillCommands.length}`);
 	console.log("top_level_slash_commands_smoked=true");
+	for (const command of managementCommands) {
+		console.log(`command=${command} result=PASS`);
+	}
+	console.log(`commands_total=${managementCommands.length}`);
+	console.log(`commands_passed=${managementCommands.length}`);
 	console.log(`warnings=${warnings.length}`);
 	for (const warning of warnings) console.log(`warning=${warning}`);
 	console.log("result=PASS");
@@ -258,20 +267,20 @@ async function smokeCommands(
 		"/secrets audit",
 		`/secrets rename ${secret.secretId} probe-renamed ${secret.revision}`,
 		`/secrets delete ${secret.secretId} ${secret.revision + 1} --confirm`,
-		`/agents create worker ${workspace} Worker`,
-		"/agents list",
-		"/agents read worker",
-		"/agents add worker2 /tmp Worker2",
-		"/agents set-identity worker WorkerRenamed",
-		"/agents bindings",
-		"/agents health worker",
-		"/agents grants",
-		"/agents grants worker",
-		"/agents grant worker agent_control global",
-		`/agents revoke-grant ${grant.grantId}`,
-		"/agents start worker",
-		"/agents stop worker",
-		"/agents restart worker",
+		`/agent create worker ${workspace} Worker`,
+		"/agent list",
+		"/agent read worker",
+		"/agent add worker2 /tmp Worker2",
+		"/agent set-identity worker WorkerRenamed",
+		"/agent bindings",
+		"/agent health worker",
+		"/agent grants",
+		"/agent grants worker",
+		"/agent grant worker agent_control global",
+		`/agent revoke-grant ${grant.grantId}`,
+		"/agent start worker",
+		"/agent stop worker",
+		"/agent restart worker",
 		"/gateways create testgw test {}",
 		"/gateways list",
 		"/gateways read testgw",
@@ -282,8 +291,8 @@ async function smokeCommands(
 		"/gateways bind testgw chan1 worker",
 		"/gateways bindings testgw",
 		"/gateways unbind testgw:chan1",
-		"/agents bind worker testgw:chan2",
-		"/agents unbind worker testgw:chan2",
+		"/agent bind worker testgw:chan2",
+		"/agent unbind worker testgw:chan2",
 		"/gateways disable testgw",
 		"/agent send primary hello",
 		"/mcp create remote {\"type\":\"http\",\"url\":\"https://mcp.example.test\",\"headers\":{\"Authorization\":\"secret:abc\"}}",
@@ -301,9 +310,9 @@ async function smokeCommands(
 		"/skills update skill-installer",
 		"/skills audit",
 		"/skills uninstall skill-installer",
-		"/agents delete worker --confirm",
-		"/agents delete worker2 --confirm",
-		`/agents delete ${grant.agentId} --confirm`,
+		"/agent delete worker --confirm",
+		"/agent delete worker2 --confirm",
+		`/agent delete ${grant.agentId} --confirm`,
 		"/gateways delete testgw --confirm",
 		"/session delete confirm",
 		"/kernel restart",
@@ -458,6 +467,8 @@ function makeSessionFacade(client: AcpClient, session: MustangSession): any {
 		setWebFetchConfig: async (path: string, value: unknown) => (
 			await client.request(MustangMethod.webFetchSetConfig, { path, value })
 		),
+		runtimeStatus: async () => ({ status: { status: "ready" } }),
+		runtimeRestart: async () => ({ status: { status: "restarting" } }),
 		webBridgeStatus: async (includePairingToken = false) => (
 			await client.request(MustangMethod.webBridgeStatus, { includePairingToken })
 		),

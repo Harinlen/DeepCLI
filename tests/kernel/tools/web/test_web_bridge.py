@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 from pathlib import Path
 from typing import Any
 
 import websockets
+from websockets.exceptions import ConnectionClosedOK
 
 from kernel.agents.mustang.tools.builtin.web_fetch import WebFetchTool
 from kernel.agents.mustang.tools.context import ToolContext
@@ -21,6 +23,11 @@ from kernel.agents.mustang.tools.web.web_bridge.install_assets import (
 )
 from kernel.agents.mustang.tools.web.web_bridge.manager import WebBridgeManager
 from kernel.agents.mustang.tools.web.web_bridge.protocol import PROTOCOL_VERSION
+
+
+class _ClosingBeforeHelloWebSocket:
+    async def recv(self) -> str:
+        raise ConnectionClosedOK(None, None)
 
 
 async def test_web_bridge_pairs_and_fetches_through_fake_extension() -> None:
@@ -93,6 +100,42 @@ async def test_web_bridge_pairs_and_fetches_through_fake_extension() -> None:
             assert result.signals.text_length == 12
     finally:
         await manager.shutdown()
+
+
+async def test_web_bridge_treats_normal_extension_close_as_disconnect() -> None:
+    manager = WebBridgeManager(access_port=8765)
+
+    await manager._handle_ws(_ClosingBeforeHelloWebSocket())
+
+    status = manager.status()
+    assert status["connected"] is False
+    assert status["browser"] is None
+
+
+async def test_web_bridge_prefers_stable_neighbor_port() -> None:
+    access_port = _free_tcp_port()
+    manager = WebBridgeManager(access_port=access_port)
+    await manager.startup()
+    try:
+        assert manager.bridge_ws_url == f"ws://127.0.0.1:{access_port + 1}/web-bridge"
+    finally:
+        await manager.shutdown()
+
+
+async def test_web_bridge_falls_back_when_stable_neighbor_port_is_busy() -> None:
+    access_port = _free_tcp_port()
+    blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    blocker.bind(("127.0.0.1", access_port + 1))
+    blocker.listen(1)
+    manager = WebBridgeManager(access_port=access_port)
+    try:
+        await manager.startup()
+        assert manager.bridge_ws_url != f"ws://127.0.0.1:{access_port + 1}/web-bridge"
+        assert manager.bridge_ws_url.startswith("ws://127.0.0.1:")
+    finally:
+        await manager.shutdown()
+        blocker.close()
 
 
 async def test_browser_backend_returns_browser_signals(monkeypatch: Any) -> None:
@@ -222,3 +265,9 @@ async def test_web_fetch_tool_uses_browser_backend_over_web_bridge(tmp_path: Pat
     finally:
         set_web_bridge_manager(None)
         await manager.shutdown()
+
+
+def _free_tcp_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])

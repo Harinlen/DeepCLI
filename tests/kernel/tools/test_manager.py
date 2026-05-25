@@ -73,6 +73,9 @@ async def test_snapshot_for_session_emits_schemas(
     names = [s.name for s in snap.schemas]
     assert sorted(names) == [
         "Agent",
+        "AgentDirectory",
+        "AgentMessage",
+        "AgentSession",
         "Bash",
         "Edit",
         "Glob",

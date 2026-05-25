@@ -30,8 +30,39 @@ Status: **landed** — 全部实装。Phase 1–6 已完成（含 ToolSearchTool
 - tool 执行的并发调度（`Orchestrator.ToolExecutor` 负责）
 - tool_result 的落盘与 budget（Session `BlobStore` + Orchestrator compression layer 负责）
 - Hook 触发（`HookManager` 负责）
+- 全局 WebBridge / browser extension lifecycle（AccessAgent 的
+  GlobalResourceHost slice 负责；ToolManager 只持有客户端 facade）
 
 **设计原则**：Tools 是"目录 + 接口"，所有横切关注点由上下文（`ToolContext`）注入，工具本体只写业务逻辑。
+
+### 1.1 WebFetch Browser Backend Ownership
+
+当前 supervised 路径里，`WebFetch(backend="browser")` 不在 Agent Runtime
+里启动 Chrome extension WebSocket server。所有 Agent runtime 都通过
+`AccessAgentWebBridgeClient` 调 AccessAgent HTTP edge：
+
+```text
+WebFetchTool
+  -> BrowserFetchBackend
+  -> AccessAgentWebBridgeClient
+  -> AccessAgent /web-bridge/fetch
+  -> resource:web_bridge projection
+  -> WebBridgeManager
+  -> Chrome extension WS
+```
+
+因此：
+
+- `ToolManager` 负责注册 WebFetch backend 和读取 WebFetch config。
+- `ToolManager.attach_web_bridge_from_env()` 从
+  `MUSTANG_ACCESS_ROUTER_ENDPOINT` 绑定 AccessAgent client。
+- `resource:web_bridge` 的 pairing secret、connected status、fetch pending
+  task 和 extension socket 都属于 AccessAgent 的 GlobalResourceHost slice。
+- Browser backend availability 取决于 `/web-bridge/status.json` 的
+  `connected=true`，不是当前 Agent 是否自己启动过 browser service。
+- 只有 unsupervised/dev fixture 可以直接创建 process-local
+  `WebBridgeManager`；产品路径不能把 WebBridge 重新塞回 `agent:primary`
+  或任意 session agent。
 
 ---
 
@@ -2903,9 +2934,10 @@ Status: **landed** — 全部实装。
 > 2026-04-30 architecture note: the landed in-session / sub-agent resume behavior
 > remains current, but the older ACP cross-session route described in this appendix
 > is superseded for future work by
-> [`agent-control-plane.md`](../architecture/history/agent-control-plane.md). New durable
-> Agent-to-Agent communication must go through Agent Hub.Router; do not extend
-> `SessionManager.deliver_message()` as the primary multi-agent transport.
+> [`architecture.md`](../architecture.md). New durable Agent-to-Agent
+> communication must go through addressed KernelBus routes (`agent:<id>`);
+> do not extend `SessionManager.deliver_message()` as the primary multi-agent
+> transport.
 
 > 蓝图来源：
 > - Claude Code `src/tools/SendMessageTool/SendMessageTool.ts`
@@ -3004,8 +3036,8 @@ Sub-agent 的 Orchestrator 在每轮 query loop 开头（STEP 0），检查自�
 
 > Superseded: do not extend this path for future durable Agent-to-Agent
 > messaging. The landed compatibility behavior may remain as a session reminder
-> bridge, but new routing must use Agent Hub.Router from
-> [`agent-control-plane.md`](../architecture/history/agent-control-plane.md).
+> bridge, but new routing must use addressed KernelBus routes from
+> [`architecture.md`](../architecture.md).
 
 Claude Code 用 UDS 做同机跨 session 通信。DeepCLI 的 kernel 已经管理
 所有 session（SessionManager._sessions），天然支持内部路由：
@@ -3080,7 +3112,7 @@ Parent LLM
 ### 3.3 Cross-session — ACP path
 
 > Superseded for future work: keep only as compatibility documentation. New
-> durable Agent messaging goes through Agent Hub.Router, not direct
+> durable Agent messaging goes through addressed KernelBus routes, not direct
 > `SessionManager.deliver_message()`.
 
 ```

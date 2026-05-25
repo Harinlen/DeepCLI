@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from kernel.access_router.app import create_app
 from kernel.access_router.router import AccessRouter
 from kernel.access_router.schemas import DeliverTurnRequest, RuntimeAcpRequest, RuntimeRegisterRequest
+from kernel.core.secrets import SecretManager
 
 
 async def _turn_handler(
@@ -52,6 +55,100 @@ def test_health_reports_version_metadata() -> None:
     assert payload["name"] == "deepcli-access-router"
     assert isinstance(payload["version"], str)
     assert isinstance(payload["boot_time"], float)
+
+
+def test_web_bridge_status_is_served_without_primary_registration() -> None:
+    app = create_app(AccessRouter(auth_token="token"))
+
+    with TestClient(app) as client:
+        response = client.get("/web-bridge/status.json")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "setup_needed"
+    assert payload["paired"] is False
+    assert payload["connected"] is False
+    assert payload["bridgeWsUrl"].startswith("ws://127.0.0.1:")
+    assert payload["installUrl"].endswith("/web-bridge/install")
+    assert payload["pairingToken"] is None
+
+
+def test_web_bridge_pairing_secret_survives_access_router_restart(tmp_path) -> None:
+    secrets = SecretManager(home=tmp_path)
+    asyncio.run(secrets.startup())
+    try:
+        secrets.set(
+            "web_bridge.extension.secret",
+            "persisted-secret",
+            kind="web_bridge",
+            metadata={"scope": "web_bridge", "extension_id": "ext-1"},
+        )
+    finally:
+        secrets.close()
+
+    first_app = create_app(AccessRouter(auth_token="token"), resource_home=str(tmp_path))
+    with TestClient(first_app) as client:
+        first_status = client.get("/web-bridge/status.json").json()
+
+    second_app = create_app(AccessRouter(auth_token="token"), resource_home=str(tmp_path))
+    with TestClient(second_app) as client:
+        second_status = client.get("/web-bridge/status.json").json()
+
+    assert first_status["status"] == "configured"
+    assert first_status["paired"] is True
+    assert first_status["connected"] is False
+    assert second_status["status"] == "configured"
+    assert second_status["paired"] is True
+    assert second_status["connected"] is False
+
+
+def test_bus_topology_reports_global_resources_without_primary_registration() -> None:
+    app = create_app(AccessRouter(auth_token="token"))
+
+    with TestClient(app) as client:
+        response = client.get("/bus/topology")
+
+    assert response.status_code == 200
+    payload = response.json()
+    services = {service["serviceId"]: service for service in payload["services"]}
+    assert services["resource:web_bridge"]["owner"] == "GlobalResourceHost"
+    assert services["resource:web_bridge"]["routeReady"] is True
+    assert services["resource:web_search"]["owner"] == "GlobalResourceHost"
+    assert all("contract" not in service for service in services.values())
+
+
+def test_session_bus_topology_snapshot_is_handled_locally() -> None:
+    app = create_app(AccessRouter(auth_token="token"))
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/session") as websocket:
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "init",
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": 1,
+                        "clientCapabilities": {},
+                        "clientInfo": {"name": "probe", "version": "1.0.0"},
+                    },
+                }
+            )
+            assert websocket.receive_json()["id"] == "init"
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "topology",
+                    "method": "_mustang.bus/topology.snapshot",
+                    "params": {},
+                }
+            )
+            response = websocket.receive_json()
+
+    assert response["id"] == "topology"
+    services = {service["serviceId"]: service for service in response["result"]["services"]}
+    assert "resource:web_bridge" in services
+    assert "resource:web_search" in services
 
 
 def test_access_readiness_reports_primary_ready_after_registration() -> None:
@@ -109,6 +206,74 @@ def test_runtime_websocket_unregisters_route_on_disconnect() -> None:
             assert client.get("/access/readiness").json()["primary_registered"] is True
 
         assert client.get("/access/readiness").json()["primary_registered"] is False
+
+
+def test_runtime_websocket_rejects_invalid_auth_without_server_exception() -> None:
+    router = AccessRouter(auth_token="token")
+    app = create_app(router)
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/runtime") as websocket:
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "register",
+                    "method": "_mustang.router/register_runtime",
+                    "params": RuntimeRegisterRequest(
+                        process_id="primary-runtime",
+                        agent_id="primary",
+                        auth_token="wrong-token",
+                        pid=123,
+                        protocol_version=1,
+                        role="agent_runtime",
+                    ).model_dump(),
+                }
+            )
+            error = websocket.receive_json()
+            assert error == {
+                "ok": False,
+                "error": "unauthorized",
+                "message": "invalid runtime auth token",
+            }
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                websocket.receive_json()
+
+    assert exc_info.value.code == 1008
+    assert router.route_status("primary").status == "unavailable"
+
+
+def test_runtime_websocket_rejects_invalid_registration_without_server_exception() -> None:
+    router = AccessRouter(auth_token="token")
+    app = create_app(router)
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/runtime") as websocket:
+            websocket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "register",
+                    "method": "_mustang.router/register_runtime",
+                    "params": {
+                        "process_id": "primary-runtime",
+                        "agent_id": "primary",
+                        "auth_token": "token",
+                        "pid": 123,
+                        "protocol_version": 999,
+                        "role": "agent_runtime",
+                    },
+                }
+            )
+            error = websocket.receive_json()
+            assert error == {
+                "ok": False,
+                "error": "invalid_runtime_registration",
+                "message": "unsupported runtime protocol version",
+            }
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                websocket.receive_json()
+
+    assert exc_info.value.code == 1002
+    assert router.route_status("primary").status == "unavailable"
 
 
 def test_runtime_websocket_ping_refreshes_idle_stale_route() -> None:

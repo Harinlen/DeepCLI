@@ -27,6 +27,18 @@ async def test_runtime_websocket_wait_closed_observes_disconnect() -> None:
     await connection.wait_closed()
 
 
+async def test_runtime_websocket_close_cancels_reader_task() -> None:
+    websocket = _BlockingWebSocket()
+    connection = _RuntimeWebSocketClient(websocket)
+    wait_task = asyncio.create_task(connection.wait_closed())
+    await asyncio.sleep(0)
+
+    await connection.close()
+
+    await asyncio.wait_for(wait_task, timeout=1)
+    assert websocket.closed is True
+
+
 async def test_runtime_websocket_consumes_router_ping_during_delivery() -> None:
     websocket = _QueuedWebSocket(
         [
@@ -87,6 +99,18 @@ class _ClosedWebSocket:
 class _DisconnectingWebSocket:
     async def receive_json(self) -> dict[str, Any]:
         raise WebSocketDisconnect(code=1001)
+
+
+class _BlockingWebSocket:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def receive_json(self) -> dict[str, Any]:
+        await asyncio.Event().wait()
+        return {}
+
+    async def close(self) -> None:
+        self.closed = True
 
 
 class _QueuedWebSocket:

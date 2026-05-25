@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "name": "DeepCLI WebBridge",
   "description": "Connect DeepCLI WebFetch to this browser profile when explicitly paired.",
-  "version": "1.0.6",
+  "version": "1.0.8",
   "minimum_chrome_version": "114",
-  "permissions": ["scripting", "storage", "tabs"],
+  "permissions": ["alarms", "scripting", "storage", "tabs"],
   "host_permissions": ["http://*/*", "https://*/*", "ws://127.0.0.1/*"],
   "background": {
     "service_worker": "background.js",

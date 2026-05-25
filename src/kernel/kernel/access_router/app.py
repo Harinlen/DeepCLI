@@ -8,11 +8,13 @@ import os
 import secrets
 import time
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
+from pydantic import ValidationError
 
 import kernel
 from kernel.access_router.router import AccessRouter, ClientRequestProxy, RouteUnavailable
@@ -29,6 +31,13 @@ from kernel.core.protocol.acp.schemas.runtime import (
     RuntimeStatusRequest,
     RuntimeStatusResponse,
 )
+from kernel.core.protocol.acp.schemas.initialize import (
+    AcpAgentCapabilities,
+    AcpImplementation,
+    AcpSessionCapabilities,
+    InitializeRequest,
+    InitializeResponse,
+)
 
 _BOOT_TIME = time.time()
 _LOCAL_MANAGEMENT_TARGETS = {"agents", "gateways", "mcp", "global", "flags", "secrets"}
@@ -42,6 +51,7 @@ def create_app(router: AccessRouter | None = None, *, resource_home: str | None 
     """Create a minimal local Access Router app."""
     app = FastAPI(title="DeepCLI Access Router")
     token = os.environ.get("MUSTANG_ACCESS_ROUTER_TOKEN") or secrets.token_urlsafe(32)
+    os.environ.setdefault("MUSTANG_ACCESS_ROUTER_TOKEN", token)
     session_token = os.environ.get("MUSTANG_ACCESS_ROUTER_SESSION_TOKEN")
     resource_home_path = Path(resource_home) if resource_home else None
     app.state.router = router or AccessRouter(
@@ -49,7 +59,105 @@ def create_app(router: AccessRouter | None = None, *, resource_home: str | None 
         resource_home=resource_home_path,
     )
     app.state.resource_home = resource_home_path
+    app.state.local_access_repo = None
+    app.state.local_agent_manager = None
+    app.state.web_bridge_manager = None
+    app.state.web_bridge_secret = None
+    app.state.web_bridge_secret_manager = None
+    app.state.web_bridge_extension_id = None
 
+    @app.on_event("startup")
+    async def startup_global_resource_host() -> None:
+        """Start AccessAgent-owned edges and register global resource projections."""
+
+        from kernel.agents.mustang.tools.web.web_bridge import WebBridgeManager
+
+        secrets_manager = None
+        if resource_home_path is not None:
+            from kernel.core.secrets import SecretManager
+
+            secrets_manager = SecretManager(home=resource_home_path)
+            await secrets_manager.startup()
+            app.state.web_bridge_secret_manager = secrets_manager
+
+        async def _persist_pairing(extension_id: str, secret: str) -> None:
+            app.state.web_bridge_extension_id = extension_id
+            if secrets_manager is not None:
+                secrets_manager.set(
+                    "web_bridge.extension.secret",
+                    secret,
+                    kind="web_bridge",
+                    metadata={"scope": "web_bridge", "extension_id": extension_id},
+                )
+            else:
+                app.state.web_bridge_secret = secret
+
+        async def _reset_pairing() -> None:
+            app.state.web_bridge_extension_id = None
+            if secrets_manager is not None:
+                secrets_manager.delete("web_bridge.extension.secret")
+            else:
+                app.state.web_bridge_secret = None
+
+        def _read_secret() -> str | None:
+            if secrets_manager is not None:
+                return secrets_manager.get("web_bridge.extension.secret")
+            return app.state.web_bridge_secret
+
+        endpoint = os.environ.get("MUSTANG_ACCESS_ROUTER_ENDPOINT", "")
+        try:
+            access_port = int(endpoint.rsplit(":", 1)[1]) if endpoint else 8200
+        except (IndexError, ValueError):
+            access_port = 8200
+        manager = WebBridgeManager(
+            access_port=access_port,
+            persist_pairing=_persist_pairing,
+            reset_pairing=_reset_pairing,
+            read_secret=_read_secret,
+        )
+        await manager.startup()
+        app.state.web_bridge_manager = manager
+        app.state.router.web_bridge_manager = manager
+        app.state.router.register_resource(
+            "resource:web_bridge",
+            capabilities=(
+                "_mustang.resource/web_bridge.status",
+                "_mustang.resource/web_bridge.pair_start",
+                "_mustang.resource/web_bridge.pair_reset",
+                "_mustang.resource/web_bridge.fetch_tab",
+            ),
+        )
+        app.state.router.register_resource(
+            "resource:web_search",
+            capabilities=(
+                "_mustang.resource/web_search.backends",
+                "_mustang.resource/web_search.get_config",
+                "_mustang.resource/web_search.set_config",
+                "_mustang.resource/web_search.test_backend",
+                "_mustang.resource/web_search.search",
+            ),
+        )
+
+    @app.on_event("shutdown")
+    async def shutdown_local_management_services() -> None:
+        manager = getattr(app.state, "local_agent_manager", None)
+        repo = getattr(app.state, "local_access_repo", None)
+        web_bridge = getattr(app.state, "web_bridge_manager", None)
+        web_bridge_secrets = getattr(app.state, "web_bridge_secret_manager", None)
+        if web_bridge is not None:
+            await web_bridge.shutdown()
+            app.state.web_bridge_manager = None
+        if web_bridge_secrets is not None:
+            web_bridge_secrets.close()
+            app.state.web_bridge_secret_manager = None
+        if manager is not None:
+            manager.close()
+            app.state.local_agent_manager = None
+        if repo is not None:
+            repo.close()
+            app.state.local_access_repo = None
+
+    @app.get("/")
     @app.get("/health")
     async def health() -> dict[str, object]:
         return {
@@ -87,6 +195,10 @@ def create_app(router: AccessRouter | None = None, *, resource_home: str | None 
     async def route_status(agent_id: str) -> dict[str, object]:
         return app.state.router.route_status(agent_id).model_dump()
 
+    @app.get("/bus/topology")
+    async def bus_topology() -> dict[str, object]:
+        return app.state.router.bus_topology_snapshot().model_dump(by_alias=True)
+
     @app.get("/web-bridge/status.json")
     async def web_bridge_status() -> dict[str, object]:
         return await _route_web_bridge_request(
@@ -102,6 +214,17 @@ def create_app(router: AccessRouter | None = None, *, resource_home: str | None 
     @app.post("/web-bridge/reset")
     async def web_bridge_reset() -> dict[str, object]:
         return await _route_web_bridge_request(app.state.router, "_mustang.agent/web_bridge/pair_reset", {})
+
+    @app.post("/web-bridge/fetch")
+    async def web_bridge_fetch(payload: dict[str, Any]) -> dict[str, object]:
+        return await _route_web_bridge_request(
+            app.state.router,
+            "_mustang.agent/web_bridge/fetch_tab",
+            {
+                "url": str(payload.get("url", "")),
+                "maxChars": int(payload.get("maxChars", payload.get("max_chars", 50_000))),
+            },
+        )
 
     @app.get("/web-bridge/install")
     async def web_bridge_install() -> HTMLResponse:
@@ -152,6 +275,7 @@ def create_app(router: AccessRouter | None = None, *, resource_home: str | None 
                     payload,
                     broker.proxy,
                     getattr(ws.app.state, "resource_home", None),
+                    ws.app.state,
                 )
                 if method == "initialize":
                     initialized = True
@@ -189,6 +313,13 @@ def create_app(router: AccessRouter | None = None, *, resource_home: str | None 
                     }
                 )
 
+        async def _cleanup_dispatch_tasks() -> None:
+            broker.cancel_all()
+            for task in dispatch_tasks:
+                task.cancel()
+            if dispatch_tasks:
+                await asyncio.gather(*dispatch_tasks, return_exceptions=True)
+
         try:
             while True:
                 payload = await ws.receive_json()
@@ -196,28 +327,52 @@ def create_app(router: AccessRouter | None = None, *, resource_home: str | None 
                 dispatch_tasks.add(task)
                 task.add_done_callback(dispatch_tasks.discard)
         except WebSocketDisconnect:
-            broker.cancel_all()
-            for task in dispatch_tasks:
-                task.cancel()
-            if dispatch_tasks:
-                await asyncio.gather(*dispatch_tasks, return_exceptions=True)
             return
+        finally:
+            await _cleanup_dispatch_tasks()
 
     @app.websocket("/runtime")
     async def runtime(ws: WebSocket) -> None:
         await ws.accept()
+        connection: _RuntimeWebSocketClient | None = None
+        result: Any | None = None
         try:
             payload = await ws.receive_json()
+            if not isinstance(payload, dict):
+                await _reject_runtime_registration(
+                    ws,
+                    error="invalid_runtime_registration",
+                    message="runtime registration payload must be an object",
+                    close_code=1002,
+                )
+                return
             if payload.get("method") != "_mustang.router/register_runtime":
                 await ws.send_json({"ok": False, "error": "expected register_runtime"})
                 return
-            request = RuntimeRegisterRequest.model_validate(payload.get("params", {}))
-            connection = _RuntimeWebSocketClient(ws)
-            result = app.state.router.register_runtime(
-                request,
-                connection.deliver_turn,
-                connection.deliver_acp,
-            )
+            try:
+                request = RuntimeRegisterRequest.model_validate(payload.get("params", {}))
+                connection = _RuntimeWebSocketClient(ws)
+                result = app.state.router.register_runtime(
+                    request,
+                    connection.deliver_turn,
+                    connection.deliver_acp,
+                )
+            except PermissionError as exc:
+                await _reject_runtime_registration(
+                    ws,
+                    error="unauthorized",
+                    message=str(exc),
+                    close_code=1008,
+                )
+                return
+            except (ValidationError, ValueError) as exc:
+                await _reject_runtime_registration(
+                    ws,
+                    error="invalid_runtime_registration",
+                    message=_runtime_registration_error_message(exc),
+                    close_code=1002,
+                )
+                return
             connection.set_activity_callback(
                 lambda: app.state.router.touch_runtime(result.connection_id)
             )
@@ -228,6 +383,9 @@ def create_app(router: AccessRouter | None = None, *, resource_home: str | None 
                 app.state.router.unregister_runtime(result.connection_id)
         except WebSocketDisconnect:
             return
+        finally:
+            if connection is not None:
+                await connection.close()
 
     return app
 
@@ -237,6 +395,37 @@ async def _route_web_bridge_request(
     method: str,
     params: dict[str, Any],
 ) -> dict[str, object]:
+    manager = _web_bridge_manager_for_router(router)
+    if manager is not None:
+        if method in {
+            "_mustang.agent/web_bridge/status",
+            "_mustang.resource/web_bridge.status",
+        }:
+            return manager.status(
+                include_pairing_token=bool(params.get("includePairingToken", False))
+            )
+        if method in {
+            "_mustang.agent/web_bridge/pair_start",
+            "_mustang.resource/web_bridge.pair_start",
+        }:
+            return manager.pair_start()
+        if method in {
+            "_mustang.agent/web_bridge/pair_reset",
+            "_mustang.resource/web_bridge.pair_reset",
+        }:
+            return await manager.pair_reset()
+        if method in {
+            "_mustang.agent/web_bridge/fetch_tab",
+            "_mustang.resource/web_bridge.fetch_tab",
+        }:
+            try:
+                result = await manager.fetch_tab(
+                    str(params.get("url", "")),
+                    max_chars=int(params.get("maxChars", params.get("max_chars", 50_000))),
+                )
+            except RuntimeError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
+            return result.model_dump(by_alias=True)
     request = RuntimeAcpRequest(
         agent_id="primary",
         method=method,
@@ -245,28 +434,85 @@ async def _route_web_bridge_request(
         request_id=None,
         idempotency_key=None,
     )
-    return await router.deliver_acp(request, None)
+    try:
+        return await router.deliver_acp(request, None)
+    except RouteUnavailable as exc:
+        if method == "_mustang.agent/web_bridge/status":
+            return {
+                "status": "unavailable",
+                "paired": False,
+                "connected": False,
+                "installUrl": "",
+                "bridgeWsUrl": "",
+                "protocolVersion": "web-bridge.v1",
+                "message": str(exc),
+            }
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _web_bridge_manager_for_router(router: AccessRouter) -> Any | None:
+    """Return the AccessAgent-owned WebBridge manager for a router instance."""
+
+    # The current AccessRouter API deliberately does not know about FastAPI app
+    # state.  Attachments on the router keep this compatibility slice local to
+    # the AccessAgent edge without adding a global singleton.
+    return getattr(router, "web_bridge_manager", None)
 
 
 async def _route_session_payload(
     router: AccessRouter,
     payload: dict[str, Any],
     client_request_proxy: ClientRequestProxy,
-    resource_home: str | None = None,
+    resource_home: Path | None = None,
+    state: Any | None = None,
 ) -> dict[str, object]:
     method = payload.get("method")
     params = payload.get("params", payload)
     if not isinstance(params, dict):
         params = {}
+    if method == "initialize":
+        InitializeRequest.model_validate(params)
+        return InitializeResponse(
+            protocol_version=1,
+            agent_capabilities=AcpAgentCapabilities(
+                session_capabilities=AcpSessionCapabilities(list={}),
+                meta={"busTopology": True},
+            ),
+            agent_info=AcpImplementation(
+                name="deepcli-access-router",
+                title="DeepCLI Access Router",
+                version=kernel.__version__,
+            ),
+        ).model_dump(by_alias=True)
     if method in {None, "_mustang.client/turn"}:
         request = DeliverTurnRequest.model_validate(params)
         return await router.deliver_turn(request, client_request_proxy)
     if isinstance(method, str) and method in _RUNTIME_CONTROL_METHODS:
         return await _route_runtime_control_payload(method, params)
+    if isinstance(method, str) and method.startswith("_mustang.agent/web_bridge/"):
+        return await _route_web_bridge_request(router, method, params)
+    if method == "_mustang.bus/topology.snapshot":
+        return router.bus_topology_snapshot().model_dump(by_alias=True)
+    if method == "_mustang.bus/route.status":
+        service_id = str(params.get("serviceId") or params.get("service_id") or "")
+        snapshot = router.bus_topology_snapshot()
+        for service in snapshot.services:
+            if service.service_id == service_id:
+                return service.model_dump(by_alias=True)
+        return {
+            "serviceId": service_id,
+            "kind": service_id.partition(":")[0] or "resource",
+            "status": "unavailable",
+            "connected": False,
+            "routeReady": False,
+        }
+    if method == "_mustang.bus/topology.subscribe":
+        return router.bus_topology_snapshot().model_dump(by_alias=True)
     if isinstance(method, str) and resource_home is not None:
         local_result = await _route_local_management_payload(
             router=router,
             resource_home=resource_home,
+            state=state,
             method=method,
             params=params,
         )
@@ -316,6 +562,7 @@ async def _route_local_management_payload(
     *,
     router: AccessRouter,
     resource_home: Path,
+    state: Any | None = None,
     method: str,
     params: dict[str, Any],
 ) -> dict[str, object] | None:
@@ -353,15 +600,23 @@ async def _route_local_management_payload(
         elif spec.target == "mcp":
             handler = MCPCommandService(resource_home)
         else:
-            repo = AccessRouterRepository.open(resource_home)
+            repo = getattr(state, "local_access_repo", None) if state is not None else None
+            if repo is None:
+                repo = AccessRouterRepository.open(resource_home)
+                if state is not None:
+                    state.local_access_repo = repo
             if spec.target == "gateways":
                 handler = GatewayCommandService(repo)
             else:
-                manager = AgentManager(
-                    home=resource_home,
-                    route_status_reader=router.route_status,
-                )
-                manager.startup()
+                manager = getattr(state, "local_agent_manager", None) if state is not None else None
+                if manager is None:
+                    manager = AgentManager(
+                        home=resource_home,
+                        route_status_reader=router.route_status,
+                    )
+                    manager.startup()
+                    if state is not None:
+                        state.local_agent_manager = manager
                 handler = AgentCommandService(
                     manager=manager,
                     gateway_repository=repo,
@@ -375,9 +630,9 @@ async def _route_local_management_payload(
             secrets_manager.close()
         if flags is not None:
             flags.close()
-        if manager is not None:
+        if manager is not None and state is None:
             manager.close()
-        if repo is not None:
+        if repo is not None and state is None:
             repo.close()
 
 
@@ -464,6 +719,24 @@ async def _send_json_or_closed(ws: WebSocket, payload: dict[str, Any]) -> bool:
         if "close message has been sent" in str(exc):
             return False
         raise
+
+
+async def _reject_runtime_registration(
+    ws: WebSocket,
+    *,
+    error: str,
+    message: str,
+    close_code: int,
+) -> None:
+    await _send_json_or_closed(ws, {"ok": False, "error": error, "message": message})
+    with suppress(WebSocketDisconnect, RuntimeError):
+        await ws.close(code=close_code)
+
+
+def _runtime_registration_error_message(exc: ValidationError | ValueError) -> str:
+    if isinstance(exc, ValidationError):
+        return "invalid runtime registration payload"
+    return str(exc)
 
 
 def _session_token_matches(ws: WebSocket, token: str) -> bool:
@@ -654,6 +927,14 @@ class _RuntimeWebSocketClient:
     async def wait_closed(self) -> None:
         self._ensure_reader()
         await self._closed.wait()
+
+    async def close(self) -> None:
+        self.mark_closed()
+        if self._reader_task is not None and not self._reader_task.done():
+            self._reader_task.cancel()
+            await asyncio.gather(self._reader_task, return_exceptions=True)
+        with suppress(WebSocketDisconnect, RuntimeError):
+            await self._ws.close()
 
     def mark_closed(self) -> None:
         self._closed.set()

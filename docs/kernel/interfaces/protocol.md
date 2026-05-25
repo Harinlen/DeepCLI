@@ -2,7 +2,7 @@
 
 > **Quick header**
 > - **Role**: Kernel ACP/JSON-RPC implementation contract.
-> - **Current code**: `kernel.core.protocol.*`, `kernel.agents.access.routes.session`, `kernel.agents.mustang.sessions.*`, `kernel.agent_hub.*`.
+> - **Current code**: `kernel.core.protocol.*`, `kernel.access_router.app`, `kernel.access_router.router`, `kernel.agents.mustang.sessions.*`, `kernel.agent_hub.*`.
 > - **Owns**: dispatch boundaries, DeepCLI `_mustang.agent/*` extensions, event mapping, cancellation, `_meta`.
 > - **Does not own**: ACP upstream schema truth; use `docs/kernel/references/acp/` for that.
 
@@ -881,7 +881,8 @@ kernel/core/protocol/
 
 **不**在协议层的代码：
 
-- WebSocket IO → `kernel.agents.access.routes.session`
+- WebSocket IO → supervised edge: `kernel.access_router.app`; legacy/dev
+  compatibility edge: `kernel.agents.access.routes.session`
 - Session 业务逻辑 → `kernel/agents/mustang/sessions/` (SessionManager 实现 SessionHandler Protocol)
 - Tool 执行 → `kernel/agents/mustang/tools/` (通过 ProtocolAPI.request 发 permission request)
 

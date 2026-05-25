@@ -13,9 +13,9 @@ Adapter model.
 
 > 2026-04-30 architecture note: this standalone GatewayManager design is
 > superseded for future implementation by
-> [`agent-control-plane.md`](../architecture/history/agent-control-plane.md). Platform
-> integrations should become Access Agent Platform Adapters with ingress/reply
-> sinks owned by Access Agent and target routing handled by Agent Hub.Router.
+> [`architecture.md`](../architecture.md). Platform integrations should become
+> AccessAgent Platform Adapters with ingress/reply sinks owned by AccessAgent
+> and target routing handled by addressed KernelBus routes (`agent:<id>`).
 > Do not implement new platform entrypoints that deliver directly to
 > `SessionManager`.
 

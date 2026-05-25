@@ -86,6 +86,9 @@ const RESUME_RETRY_ATTEMPTS = 24;
 const RESUME_RETRY_DELAY_MS = 250;
 
 export class MustangSession {
+  targetAgentId?: string;
+  targetAgentSessionId?: string;
+
   constructor(
     private client: MustangSessionClient,
     public readonly sessionId: string,
@@ -123,16 +126,24 @@ export class MustangSession {
   ): Promise<PromptResult> {
     const unsub = this.client.onUpdate(onUpdate);
     const clientTurnId = randomUUID();
+    const agentId = this.targetAgentId;
+    const sessionId = agentId && this.targetAgentSessionId ? this.targetAgentSessionId : this.sessionId;
     try {
-      let resumeState = await this.resumeWithRetry();
-      await this.syncModeAfterResume(options.mode, resumeState);
+      let resumeState = await this.resumeWithRetry(sessionId, agentId);
+      await this.syncModeAfterResume(options.mode, resumeState, sessionId, agentId);
       try {
-        return await this.client.promptRequest(this.sessionId, text, { clientTurnId });
+        return await this.client.promptRequest(sessionId, text, {
+          clientTurnId,
+          ...(agentId ? { agentId } : {}),
+        });
       } catch (error) {
         if (!(error instanceof KernelDisconnected)) throw error;
-        resumeState = await this.resumeWithRetry();
-        await this.syncModeAfterResume(options.mode, resumeState);
-        return await this.client.promptRequest(this.sessionId, text, { clientTurnId });
+        resumeState = await this.resumeWithRetry(sessionId, agentId);
+        await this.syncModeAfterResume(options.mode, resumeState, sessionId, agentId);
+        return await this.client.promptRequest(sessionId, text, {
+          clientTurnId,
+          ...(agentId ? { agentId } : {}),
+        });
       }
     } finally {
       unsub();
@@ -147,16 +158,24 @@ export class MustangSession {
   ): Promise<PromptResult> {
     const unsub = this.client.onUpdate(onUpdate);
     const clientTurnId = randomUUID();
+    const agentId = this.targetAgentId;
+    const sessionId = agentId && this.targetAgentSessionId ? this.targetAgentSessionId : this.sessionId;
     try {
-      let resumeState = await this.resumeWithRetry();
-      await this.syncModeAfterResume(options.mode, resumeState);
+      let resumeState = await this.resumeWithRetry(sessionId, agentId);
+      await this.syncModeAfterResume(options.mode, resumeState, sessionId, agentId);
       try {
-        return await this.client.activateSkillRequest(this.sessionId, skill, args, { clientTurnId });
+        return await this.client.activateSkillRequest(sessionId, skill, args, {
+          clientTurnId,
+          ...(agentId ? { agentId } : {}),
+        });
       } catch (error) {
         if (!(error instanceof KernelDisconnected)) throw error;
-        resumeState = await this.resumeWithRetry();
-        await this.syncModeAfterResume(options.mode, resumeState);
-        return await this.client.activateSkillRequest(this.sessionId, skill, args, { clientTurnId });
+        resumeState = await this.resumeWithRetry(sessionId, agentId);
+        await this.syncModeAfterResume(options.mode, resumeState, sessionId, agentId);
+        return await this.client.activateSkillRequest(sessionId, skill, args, {
+          clientTurnId,
+          ...(agentId ? { agentId } : {}),
+        });
       }
     } finally {
       unsub();
@@ -210,17 +229,29 @@ export class MustangSession {
   }
 
   cancel(): void {
-    this.client.notify(AcpMethod.sessionCancel, { sessionId: this.sessionId });
+    const agentId = this.targetAgentId;
+    const sessionId = agentId && this.targetAgentSessionId ? this.targetAgentSessionId : this.sessionId;
+    this.client.notify(AcpMethod.sessionCancel, {
+      sessionId,
+      ...(agentId ? { agentId } : {}),
+    });
   }
 
   cancelExecution(kind: "shell" | "python" | "any" = "any"): void {
-    this.client.notify(MustangMethod.sessionCancelExecution, { sessionId: this.sessionId, kind });
+    const agentId = this.targetAgentId;
+    const sessionId = agentId && this.targetAgentSessionId ? this.targetAgentSessionId : this.sessionId;
+    this.client.notify(MustangMethod.sessionCancelExecution, {
+      sessionId,
+      kind,
+      ...(agentId ? { agentId } : {}),
+    });
   }
 
-  async setMode(mode: PermissionMode): Promise<void> {
+  async setMode(mode: PermissionMode, sessionId = this.sessionId, agentId?: string): Promise<void> {
     await this.client.request(AcpMethod.sessionSetMode, {
-      sessionId: this.sessionId,
+      sessionId,
       modeId: mode,
+      ...(agentId ? { agentId } : {}),
     }, { timeoutMs: 0 });
   }
 
@@ -248,11 +279,11 @@ export class MustangSession {
     return await this.client.request<R>(method, params);
   }
 
-  private async resumeWithRetry(): Promise<SessionModeState> {
+  private async resumeWithRetry(sessionId = this.sessionId, agentId?: string): Promise<SessionModeState> {
     let lastError: unknown;
     for (let attempt = 1; attempt <= RESUME_RETRY_ATTEMPTS; attempt++) {
       try {
-        return await this.resume();
+        return await this.resume(sessionId, agentId);
       } catch (error) {
         lastError = error;
         if (!isTransientResumeError(error) || attempt === RESUME_RETRY_ATTEMPTS) break;
@@ -262,20 +293,23 @@ export class MustangSession {
     throw lastError;
   }
 
-  private async resume(): Promise<SessionModeState> {
+  private async resume(sessionId = this.sessionId, agentId?: string): Promise<SessionModeState> {
     return await this.client.request<SessionModeState>(AcpMethod.sessionResume, {
-      sessionId: this.sessionId,
+      sessionId,
       cwd: cwd(),
+      ...(agentId ? { agentId } : {}),
     });
   }
 
   private async syncModeAfterResume(
     desiredMode: PermissionMode | undefined,
     resumeState: SessionModeState,
+    sessionId = this.sessionId,
+    agentId?: string,
   ): Promise<void> {
     if (!desiredMode) return;
     if (extractPermissionMode(resumeState) === desiredMode) return;
-    await this.setMode(desiredMode);
+    await this.setMode(desiredMode, sessionId, agentId);
   }
 }
 

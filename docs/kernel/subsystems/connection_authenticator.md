@@ -137,8 +137,9 @@ ConnectionAuthenticator **不** bind 任何 ConfigManager section —— 目前�
 任何用户可调的 auth 选项，所以 `~/.deepcli/config/config.yaml`
 里也没有 `auth` 段。
 
-为什么不放 `port`？监听端口属于**进程启动**参数（`python -m kernel
---port N`），不属于"谁能连进来"这一层。auth 子系统和端口的唯一
+为什么不放 `port`？监听端口属于 **Supervisor 进程启动**参数
+（`python -m kernel --port N` / `python -m kernel.supervisor --access-port N`），
+不属于"谁能连进来"这一层。auth 子系统和端口的唯一
 关系就是"连上来之后验证身份"，端口本身决定不了身份，塞进 `auth`
 section 只是把两个不相关的 concern 混在一起。以后如果 `--port`
 要支持"CLI 没给就读 config"，那是 `__main__.py` 加一个独立的

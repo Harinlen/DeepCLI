@@ -19,11 +19,12 @@ from kernel.agents.mustang.tools.types import TextDisplay, ToolCallProgress, Too
 from kernel.core.protocol.interfaces.contracts.text_block import TextBlock
 
 
-class AgentsListTool(Tool[dict[str, Any], dict[str, Any]]):
-    """List durable Agents known to Agent Hub.Manager."""
+class AgentDirectoryTool(Tool[dict[str, Any], dict[str, Any]]):
+    """Discover durable Agents visible to the current session."""
 
-    name = "agents_list"
-    description = "List durable Agents registered in Agent Hub."
+    name = "AgentDirectory"
+    aliases = ("agents_list",)
+    description = "List durable Agents this session is allowed to contact or spawn."
     kind = ToolKind.read
     input_schema = {"type": "object", "properties": {}}
 
@@ -32,41 +33,39 @@ class AgentsListTool(Tool[dict[str, Any], dict[str, Any]]):
         input: dict[str, Any],
         ctx: ToolContext,
     ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
-        hub = _agent_hub_from_context(ctx)
-        if hub is None:
+        if ctx.agent_network_request is None:
             yield _result(
                 {"agents": [], "available": False},
-                "Agent Hub is not available in this session.",
+                "Agent Network is not available in this session.",
             )
             return
 
-        agents = [
-            {
-                "id": definition.id,
-                "name": definition.name,
-                "role": definition.role.value,
-                "runtime": definition.runtime.kind.value,
-                "workspace": definition.workspace,
-                "nativeDefault": definition.bindings.native_default,
-                "platformBindings": len(definition.bindings.platforms),
-            }
-            for definition in hub.manager.list_definitions()
-        ]
+        result = await ctx.agent_network_request("directory", {})
+        agents = list(result.get("agents") or [])
         if not agents:
-            yield _result({"agents": [], "available": True}, "No durable Agents are defined.")
+            yield _result({"agents": [], "available": result.get("available", True)}, "No visible Agents.")
             return
 
         lines = ["Durable Agents:"]
         for agent in agents:
-            default = " (native default)" if agent["nativeDefault"] else ""
-            lines.append(f"- {agent['id']}: {agent['name']} [{agent['runtime']}]{default}")
-        yield _result({"agents": agents, "available": True}, "\n".join(lines))
+            flags = []
+            if agent.get("canSend"):
+                flags.append("send")
+            if agent.get("canSpawn"):
+                flags.append("spawn")
+            suffix = f" ({', '.join(flags)})" if flags else ""
+            lines.append(
+                f"- {agent.get('agentId')}: {agent.get('name')} "
+                f"[{agent.get('runtimeKind', 'agent')}]{suffix}"
+            )
+        yield _result({"agents": agents, "available": result.get("available", True)}, "\n".join(lines))
 
 
-class SessionsSendTool(Tool[dict[str, Any], dict[str, Any]]):
+class AgentMessageTool(Tool[dict[str, Any], dict[str, Any]]):
     """Send a message to a durable Agent or an existing session."""
 
-    name = "sessions_send"
+    name = "AgentMessage"
+    aliases = ("sessions_send",)
     description = "Send a message to a durable Agent or an existing session."
     kind = ToolKind.execute
     is_concurrency_safe = True
@@ -74,8 +73,15 @@ class SessionsSendTool(Tool[dict[str, Any], dict[str, Any]]):
         "type": "object",
         "properties": {
             "message": {"type": "string"},
-            "target_agent_id": {"type": "string"},
-            "target_session_id": {"type": "string"},
+            "agentId": {"type": "string"},
+            "sessionId": {"type": "string"},
+            "runId": {"type": "string"},
+            "target_agent_id": {"type": "string", "deprecated": True},
+            "target_session_id": {"type": "string", "deprecated": True},
+            "wait": {"type": "boolean", "default": False},
+            "timeoutSeconds": {"type": "integer"},
+            "announce": {"type": "boolean", "default": False},
+            "replyBack": {"type": "boolean", "default": False},
         },
         "required": ["message"],
     }
@@ -89,87 +95,144 @@ class SessionsSendTool(Tool[dict[str, Any], dict[str, Any]]):
         ctx: ToolContext,
     ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
         message = str(input["message"])
-        target_agent_id = input.get("target_agent_id")
-        target_session_id = input.get("target_session_id")
+        target_agent_id = input.get("agentId") or input.get("target_agent_id")
+        target_session_id = input.get("sessionId") or input.get("target_session_id")
+        target_run_id = input.get("runId")
+        options = {
+            "wait": bool(input.get("wait", False)),
+            "timeoutSeconds": input.get("timeoutSeconds"),
+            "announce": bool(input.get("announce", False)),
+            "replyBack": bool(input.get("replyBack", False)),
+        }
 
-        if bool(target_agent_id) == bool(target_session_id):
+        target_count = sum(bool(value) for value in (target_agent_id, target_session_id, target_run_id))
+        if target_count != 1:
             yield _result(
                 {"success": False},
-                "Provide exactly one of target_agent_id or target_session_id.",
+                "Provide exactly one of agentId, sessionId, or runId.",
             )
             return
 
+        if ctx.agent_network_request is None:
+            yield _result({"success": False}, "Agent Network is not available.")
+            return
+
         if target_agent_id:
-            if ctx.route_agent_message is None:
-                yield _result(
-                    {"success": False, "target_agent_id": target_agent_id},
-                    "Durable-agent routing is not available.",
-                )
-                return
-            success = ctx.route_agent_message(str(target_agent_id), message)
-            text = (
-                f"Message routed to agent {target_agent_id}."
-                if success
-                else f"Agent {target_agent_id} was not routable."
+            result = await ctx.agent_network_request(
+                "message",
+                {"agentId": str(target_agent_id), "message": message, **options},
             )
+            success = bool(result.get("success"))
+            text = f"Message routed to agent {target_agent_id}." if success else _error_text(result)
             yield _result(
-                {"success": success, "target_agent_id": target_agent_id},
+                {**result, "success": success, "agentId": str(target_agent_id)},
                 text,
             )
             return
 
-        if ctx.deliver_cross_session is None:
-            yield _result(
-                {"success": False, "target_session_id": target_session_id},
-                "Cross-session delivery is not available.",
-            )
-            return
-        success = ctx.deliver_cross_session(str(target_session_id), message)
-        text = (
-            f"Message delivered to session {target_session_id}."
-            if success
-            else f"Session {target_session_id} is not active."
+        result = await ctx.agent_network_request(
+            "message",
+            {
+                "sessionId": str(target_session_id) if target_session_id else None,
+                "runId": str(target_run_id) if target_run_id else None,
+                "message": message,
+                **options,
+            },
         )
-        yield _result({"success": success, "target_session_id": target_session_id}, text)
+        success = bool(result.get("success"))
+        target = target_session_id or target_run_id
+        text = (
+            f"Message delivered to {target}."
+            if success
+            else _error_text(result)
+        )
+        yield _result({**result, "success": success}, text)
 
 
-class SessionsSpawnTool(Tool[dict[str, Any], dict[str, Any]]):
-    """Spawn an in-session Agent task using the OpenClaw session verb."""
+class AgentSessionTool(Tool[dict[str, Any], dict[str, Any]]):
+    """Create or control durable Agent Network sessions."""
 
-    name = "sessions_spawn"
-    description = "Spawn a background Agent session for a task."
+    name = "AgentSession"
+    aliases = ("sessions_spawn", "subagents")
+    description = "Spawn, list, stop, or steer durable Agent Network sessions."
     kind = ToolKind.orchestrate
     input_schema = {
         "type": "object",
         "properties": {
-            "description": {"type": "string"},
-            "prompt": {"type": "string"},
-            "name": {"type": "string"},
-            "subagent_type": {"type": "string"},
-            "model": {"type": "string"},
-            "background": {"type": "boolean"},
+            "action": {
+                "type": "string",
+                "enum": ["spawn", "list", "status", "stop", "steer", "close"],
+                "default": "spawn",
+            },
+            "runtime": {"type": "string", "enum": ["agent", "acp", "local"], "default": "agent"},
+            "agentId": {"type": "string"},
+            "task": {"type": "string"},
+            "mode": {"type": "string", "enum": ["run", "session"], "default": "run"},
+            "runId": {"type": "string"},
+            "sessionId": {"type": "string"},
+            "cwd": {"type": "string"},
+            "message": {"type": "string"},
+            "wait": {"type": "boolean", "default": False},
+            "timeoutSeconds": {"type": "integer"},
+            "announce": {"type": "boolean", "default": False},
+            "replyBack": {"type": "boolean", "default": False},
+            "bindingId": {"type": "string"},
         },
-        "required": ["description", "prompt"],
     }
+
+    def is_read_only_call(self, input: dict[str, Any], ctx: Any) -> bool:
+        return input.get("action", "spawn") in {"list", "status"}
 
     async def call(
         self,
         input: dict[str, Any],
         ctx: ToolContext,
     ) -> AsyncGenerator[ToolCallProgress | ToolCallResult, None]:
-        from kernel.agents.mustang.tools.builtin.agent import AgentTool
+        runtime = str(input.get("runtime") or "agent")
+        if runtime == "local":
+            result = {
+                "success": False,
+                "runtime": "local",
+                "compatibility": True,
+                "error": "local_compatibility_requires_agent_tool",
+            }
+            yield _result(
+                result,
+                "Local compatibility is provided by the Agent tool, not durable AgentSession.",
+            )
+            return
+        if ctx.agent_network_request is None:
+            yield _result({"success": False, "error": "agent_network_unavailable"}, "Agent Network is not available.")
+            return
+        result = await ctx.agent_network_request("session", dict(input))
+        if result.get("unsupported"):
+            text = "AgentSession is not implemented for this runtime yet."
+        elif result.get("success") and result.get("runId"):
+            text = f"AgentSession spawned run {result['runId']}."
+        else:
+            text = str(result)
+        yield _result(result, text)
 
-        agent_input = {
-            "description": input["description"],
-            "prompt": input["prompt"],
-            "run_in_background": input.get("background", True),
-        }
-        for key in ("name", "subagent_type", "model"):
-            if key in input:
-                agent_input[key] = input[key]
 
-        async for event in AgentTool().call(agent_input, ctx):
-            yield event
+class AgentsListTool(AgentDirectoryTool):
+    """Deprecated compatibility wrapper for ``AgentDirectory``."""
+
+    name = "agents_list"
+    aliases = ()
+
+
+class SessionsSendTool(AgentMessageTool):
+    """Deprecated compatibility wrapper for ``AgentMessage``."""
+
+    name = "sessions_send"
+    aliases = ()
+
+
+class SessionsSpawnTool(AgentSessionTool):
+    """Deprecated compatibility wrapper for ``AgentSession(action='spawn')``."""
+
+    name = "sessions_spawn"
+    aliases = ()
 
 
 class SubagentsTool(Tool[dict[str, Any], dict[str, Any]]):
@@ -252,13 +315,6 @@ class SubagentsTool(Tool[dict[str, Any], dict[str, Any]]):
         yield _result({"success": False}, f"Unknown subagents action: {action}")
 
 
-def _agent_hub_from_context(ctx: ToolContext) -> Any | None:
-    module_table = ctx.module_table
-    if module_table is None:
-        return None
-    return getattr(module_table, "agent_hub", None)
-
-
 def _resolve_agent_task(registry: Any, ref: str) -> AgentTaskState | None:
     task_id = registry.resolve_name(ref) or ref
     task = registry.get(task_id)
@@ -293,3 +349,12 @@ def _result(data: dict[str, Any], text: str) -> ToolCallResult:
         llm_content=[TextBlock(type="text", text=text)],
         display=TextDisplay(text=text),
     )
+
+
+def _error_text(result: dict[str, Any]) -> str:
+    error = result.get("error")
+    if error:
+        return str(error).replace("_", " ")
+    if result.get("denied"):
+        return "Agent Network policy denied the request."
+    return "Agent Network request failed."

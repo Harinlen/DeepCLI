@@ -184,6 +184,15 @@ assert(
 	"Tab should accept only the current slash argument token and preserve the subcommand",
 );
 
+const escapeAutocompleteEditor = new Editor(editorTheme);
+escapeAutocompleteEditor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands));
+await type(escapeAutocompleteEditor, "/model a");
+assert(escapeAutocompleteEditor.isShowingAutocomplete(), "autocomplete should be visible before Escape");
+escapeAutocompleteEditor.handleInput("\x1b");
+await tick();
+assert(!escapeAutocompleteEditor.isShowingAutocomplete(), "Escape should close autocomplete");
+assert(escapeAutocompleteEditor.getText() === "/model a", "Escape should not mutate editor text when closing autocomplete");
+
 let newlineSubmitted = "";
 const newlineEditor = new Editor(editorTheme);
 newlineEditor.onSubmit = text => {

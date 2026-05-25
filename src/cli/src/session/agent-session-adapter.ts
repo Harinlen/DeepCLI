@@ -79,6 +79,8 @@ export class MustangAgentSessionAdapter {
 	retryAttempt = 0;
 	queuedMessageCount = 0;
 	currentPermissionMode: PermissionMode = "default";
+	targetAgentId?: string;
+	targetAgentSessionId?: string;
 
 	#listeners = new Set<Listener>();
 	#activeAssistant: AssistantMessage | undefined;
@@ -133,6 +135,8 @@ export class MustangAgentSessionAdapter {
 
 	async prompt(text: string, _options: Record<string, unknown> = {}): Promise<unknown> {
 		const session = await this.#ensureSessionForPrompt();
+		session.targetAgentId = this.targetAgentId;
+		session.targetAgentSessionId = this.targetAgentSessionId;
 		const skillInvocation = this.#parseSkillInvocation(text);
 		const userMessage = {
 			role: "user",
@@ -335,6 +339,8 @@ export class MustangAgentSessionAdapter {
 			result.sessionId,
 			createdSessionSummary(result.sessionId, cwd),
 		);
+		this.options.session.targetAgentId = this.targetAgentId;
+		this.options.session.targetAgentSessionId = this.targetAgentSessionId;
 		this.sessionManager.replaceSession(this.options.session);
 		this.#resetTranscript();
 		return true;
@@ -586,6 +592,8 @@ export class MustangAgentSessionAdapter {
 			result.sessionId,
 			createdSessionSummary(result.sessionId, cwd),
 		);
+		session.targetAgentId = this.targetAgentId;
+		session.targetAgentSessionId = this.targetAgentSessionId;
 		this.options.session = session;
 		this.sessionManager.replaceSession(session);
 		this.#resetTranscript();

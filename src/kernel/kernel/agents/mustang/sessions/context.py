@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,8 @@ class AgentContext:
     workspace: Path
     state_dir: Path
     session_store_path: Path
+    name: str | None = None
+    identity: dict[str, Any] = field(default_factory=dict)
     model_profile: str | None = None
     prompt_profile: str | None = None
     tool_policy: str | None = None
@@ -34,6 +37,7 @@ class AgentContext:
         sessions_dir = state_dir.parent / "sessions"
         return cls(
             agent_id="primary",
+            name="Primary",
             workspace=workspace or Path.cwd(),
             state_dir=state_dir,
             session_store_path=sessions_dir / "sessions.db",

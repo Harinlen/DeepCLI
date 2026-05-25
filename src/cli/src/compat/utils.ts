@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 
 export const APP_NAME = "DeepCLI";
 export const CONFIG_DIR_NAME = ".mustang";
-export const VERSION = "1.0.0";
+export const VERSION = "1.0.8a1";
 export const TUI_VERSION = "1.0.8";
 
 export const $env = new Proxy({}, { get: (_target, prop) => process.env[String(prop)] }) as Record<string, string | undefined>;
